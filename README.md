@@ -1,4 +1,4 @@
-# MTGA
+# LinkedOut
 
 Read public X (Twitter) posts on Android, with no account, no tracking and no ads.
 
