@@ -6,31 +6,88 @@ on:
   pull_request:
   workflow_dispatch:
 
+# "write" is required so the workflow can create a Release.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: 9.5.1
+          # AGP 9.4 refuses anything below 9.6.0. Keep this in step with
+          # gradle/wrapper/gradle-wrapper.properties.
+          gradle-version: 9.6.0
 
+      # Pull requests never receive secrets, so they only get a debug build.
       - name: Build debug APK
+        if: github.event_name == 'pull_request'
         run: gradle :app:assembleDebug --stacktrace
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      # Writes the keystore to disk and feeds the four linkedout.* properties
+      # that app/build.gradle.kts already reads. Nothing in the Gradle files
+      # changes.
+      - name: Configure signing
+        if: github.event_name != 'pull_request'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 secret is missing. See the setup steps."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/linkedout-release.jks"
+          mkdir -p ~/.gradle
+          cat >> ~/.gradle/gradle.properties <<EOF
+          linkedout.storeFile=$RUNNER_TEMP/linkedout-release.jks
+          linkedout.storePassword=$KEYSTORE_PASSWORD
+          linkedout.keyAlias=$KEY_ALIAS
+          linkedout.keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Build release APK
+        if: github.event_name != 'pull_request'
+        run: gradle :app:assembleRelease --stacktrace
+
+      # Reads versionName straight out of app/build.gradle.kts so the tag and
+      # the filename always match what shipped.
+      - name: Read version
+        if: github.event_name != 'pull_request'
+        id: version
+        run: |
+          v=$(grep -m1 'versionName *=' app/build.gradle.kts | cut -d'"' -f2)
+          if [ -z "$v" ]; then
+            echo "::error::Could not read versionName from app/build.gradle.kts"
+            exit 1
+          fi
+          echo "name=$v" >> "$GITHUB_OUTPUT"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/linkedout-$v.apk"
+
+      - name: Publish release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.name }}
+          name: LinkedOut ${{ steps.version.outputs.name }}
+          files: ${{ runner.temp }}/linkedout-${{ steps.version.outputs.name }}.apk
+          fail_on_unmatched_files: true
+
+      # Kept so a build is still downloadable if the release step is skipped.
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
         with:
           name: linkedout-apk
           path: app/build/outputs/apk/**/*.apk
