@@ -2,8 +2,9 @@
 # 2.0.0 moved the build to AGP 9 (built-in Kotlin, new DSL) and compileSdk 37.
 # Library versions are kept up to date by Dependabot, see .github/dependabot.yml.
 [versions]
-# AGP 9.3 needs Gradle 9.5.0 or later, so the pinned 9.5.1 still fits.
-agp = "9.3.2"
+# AGP 9.4 refuses any Gradle below 9.6.0, which is also its default. The
+# wrapper and the CI workflow are both pinned to 9.6.0 to match.
+agp = "9.4.0"
 kotlin = "2.4.0"
 coreKtx = "1.17.0"
 lifecycle = "2.9.4"
