@@ -5,16 +5,16 @@
 # AGP 9.4 refuses any Gradle below 9.6.0, which is also its default. The
 # wrapper and the CI workflow are both pinned to 9.6.0 to match.
 agp = "9.4.0"
-kotlin = "2.4.0"
-coreKtx = "1.17.0"
+kotlin = "2.4.20"
+coreKtx = "1.19.0"
 lifecycle = "2.9.4"
 activityCompose = "1.11.0"
 # 2026.08.00 is Compose 1.12, which compiles against API 37 and needs AGP 9.1.1 or later.
-composeBom = "2026.08.00"
-navigation = "2.9.5"
-koin = "4.1.0"
-ktor = "3.3.0"
-coil = "3.4.0"
+composeBom = "2026.09.00"
+navigation = "2.10.1"
+koin = "4.2.2"
+ktor = "3.5.2"
+coil = "3.6.2"
 media3 = "1.10.1"
 junit = "4.13.2"
 
@@ -32,7 +32,7 @@ androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
-kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.9.0" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.11.0" }
 koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
 koin-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
 ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
