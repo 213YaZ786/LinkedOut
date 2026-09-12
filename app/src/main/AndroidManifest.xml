@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!--
+        Third and last permission. Only used when the reader turns on
+        notifications for new posts, and only asked for at that moment.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".LinkedOutApplication"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LinkedOut"
+        android:enableOnBackInvokedCallback="true"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.LinkedOut">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                X links. Not autoVerify: only X can prove it owns x.com, so
+                Android lists these as unverified. They open in LinkedOut once the
+                reader enables them under Open by default, which Settings
+                links to. Paths are not filtered here, LinkRouter decides and
+                hands anything it cannot show to the browser.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:scheme="http" />
+                <data android:host="x.com" />
+                <data android:host="www.x.com" />
+                <data android:host="mobile.x.com" />
+                <data android:host="twitter.com" />
+                <data android:host="www.twitter.com" />
+                <data android:host="mobile.twitter.com" />
+                <data android:host="m.twitter.com" />
+            </intent-filter>
+
+            <!-- Share a link to LinkedOut from any app, no setup needed. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
