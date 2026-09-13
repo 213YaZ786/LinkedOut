@@ -145,7 +145,13 @@ class PostPageParser {
      * step stays inside the braces of the one before.
      */
     private fun String.authorImage(post: Int): String? {
-        val author = ownKey("author", post).takeIf { it >= 0 } ?: return null
+        // Two spellings, and which one appears depends on the record type. A
+        // SocialMediaPosting names its writer "author", a VideoObject names it
+        // "creator". Reading only one silently loses the picture on every
+        // video post, which is where it is most visible.
+        val author = listOf("creator", "author")
+            .map { key -> ownKey(key, post) }
+            .firstOrNull { it >= 0 } ?: return null
         val authorBody = indexOf('{', author).takeIf { it >= 0 } ?: return null
         val image = ownKey("image", authorBody + 1).takeIf { it >= 0 } ?: return null
         val imageBody = indexOf('{', image).takeIf { it >= 0 } ?: return null
@@ -217,8 +223,18 @@ class PostPageParser {
                 ?.removePrefix("View organization page for ")
                 ?.takeIf { it.isNotBlank() }
 
+    /**
+     * The author's picture.
+     *
+     * Bound to the actor image marker, not to the first hue-web-entity__image
+     * in the card. That class is worn by every entity picture on the page, the
+     * signed out silhouette in the navigation bar among them, so an unbounded
+     * read returns whichever one happens to come first in the slice. The
+     * marker sits in the anchor's own href, just before the img it wraps.
+     */
     private fun String.avatar(): String? =
-        attributeAfter("hue-web-entity__image", "data-delayed-url")?.let(Markup::decodeEntities)
+        attributeAfter("public_post_feed-actor-image", "data-delayed-url", window = 900)
+            ?.let(Markup::decodeEntities)
 
     private fun String.commentaryHtml(): String? {
         val at = indexOf("data-test-id=\"$COMMENTARY\"").takeIf { it >= 0 } ?: return null

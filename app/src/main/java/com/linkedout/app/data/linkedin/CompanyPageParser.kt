@@ -34,8 +34,8 @@ import com.linkedout.app.data.linkedin.Markup.textAfter
  *
  * It offers paging. `feedUpdatesBaseUrl` at the end of the list is a real
  * continuation token, unlike a profile, which serves one fixed slice and stops.
- * It is read and carried in [Feed.nextCursor] so the screen can ask for more
- * later. Nothing calls it yet.
+ * It is read here but not published, because following it is a second request
+ * shape this parser cannot read yet. See [nextCursor].
  */
 class CompanyPageParser {
 
@@ -54,8 +54,7 @@ class CompanyPageParser {
         private const val CARD = "main-feed-activity-card\n"
         private const val COMMENTARY = "data-test-id=\"main-feed-activity-card__commentary\""
         private const val IMAGES = "data-test-id=\"feed-images-content\""
-        private const val VIDEO = "data-test-id=\"feed-native-video-content\""
-        private const val DOCUMENT = "data-id=\"feed-paginated-document-content\""
+            private const val DOCUMENT = "data-id=\"feed-paginated-document-content\""
         private const val REACTIONS = "data-test-id=\"social-actions__reactions\""
         private const val COMMENTS = "data-test-id=\"social-actions__comments\""
 
@@ -100,7 +99,13 @@ class CompanyPageParser {
                 ?.let(Markup::decodeEntities)
                 ?: org?.logo(graph),
             bio = org?.let { graph.ownString("description", it) },
-            nextCursor = page.nextCursor(),
+            // Read below but deliberately not published. Publishing a cursor
+            // the app cannot follow makes every screen believe there is more,
+            // so scrolling to the end spends a request that returns the same
+            // ten posts and is then marked as a failed page. A wasted request
+            // against a host that answers 999 when it has had enough is worse
+            // than no paging at all.
+            nextCursor = null,
             bannerUrl = page.attributeAfter("cover-img__image", "src")?.let(Markup::decodeEntities),
             location = page.textAfter("top-card-layout__first-subline", "</h3>")?.location(),
             // An organisation has no employer and no school. The industry line
@@ -242,35 +247,7 @@ class CompanyPageParser {
      * signing in. Anything else is the image grid.
      */
     private fun String.media(): List<MediaItem> =
-        video()?.let(::listOf) ?: document()?.let(::listOf) ?: images()
-
-    private fun String.video(): MediaItem? {
-        val at = indexOf(VIDEO).takeIf { it >= 0 } ?: return null
-        val sources = attributeAfter(at, "data-sources", window = 2_000) ?: return null
-        val poster = attributeAfter(at, "data-poster-url", window = 8_000)?.let(Markup::decodeEntities)
-        // The attribute is JSON with its quotes escaped as entities, so it is
-        // decoded before being read. LinkedIn lists the renditions out of
-        // order, 360p then 720p then 640p in the page this was written from, so
-        // the choice is made on the stated bitrate and not on position.
-        val decoded = Markup.decodeEntities(sources)
-        val best = Markup.run {
-            decoded.indices
-                .filter { decoded.startsWith("\"src\":", it) }
-                .mapNotNull { at ->
-                    val src = decoded.jsonStringAt(at + "\"src\":".length + 1) ?: return@mapNotNull null
-                    val rate = decoded.indexOf("\"data-bitrate\":", at)
-                        .takeIf { it >= 0 }
-                        ?.let { decoded.jsonNumber("data-bitrate", it) }
-                        ?: 0L
-                    src to rate
-                }
-        }.maxByOrNull { it.second }?.first ?: return null
-        return MediaItem(
-            previewUrl = poster ?: best,
-            downloadUrl = best,
-            type = MediaType.VIDEO
-        )
-    }
+        NativeVideo.read(this)?.let(::listOf) ?: document()?.let(::listOf) ?: images()
 
     private fun String.document(): MediaItem? {
         val at = indexOf(DOCUMENT).takeIf { it >= 0 } ?: return null
@@ -322,7 +299,14 @@ class CompanyPageParser {
      * The continuation the page hands out for its own list, inside an HTML
      * comment in a hidden `<code>`. Kept whole, path and query, because it is
      * an app route and not a public address.
+     *
+     * Not wired to anything yet. It is kept because it is the one thing an
+     * organisation page has that a profile does not, and because reading it
+     * costs nothing: the page is already in memory. Following it needs a
+     * capture of what that route answers, which is an HTML fragment and not
+     * a page this parser could read as it stands.
      */
+    @Suppress("unused")
     private fun String.nextCursor(): String? {
         val at = indexOf("id=\"feedUpdatesBaseUrl\"").takeIf { it >= 0 } ?: return null
         val open = indexOf("<!--", at).takeIf { it >= 0 } ?: return null

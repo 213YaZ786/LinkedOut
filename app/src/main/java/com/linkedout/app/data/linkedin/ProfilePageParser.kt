@@ -348,7 +348,20 @@ class ProfilePageParser {
      * page, so a video is carried as its cover with the type set, and the post
      * page is where a stream can be found.
      */
+    /**
+     * The card's media.
+     *
+     * The player is looked for first. Until now a video card yielded its poster
+     * image, marked VIDEO, with the same address for preview and download: the
+     * player was handed a JPEG and could not play it. The real addresses are on
+     * the `<video>` element, which the profile card embeds exactly as the
+     * organisation card does, so one reader serves both.
+     *
+     * The poster path stays underneath for a card whose player is absent, and
+     * for every picture.
+     */
     private fun String.parseMedia(): List<MediaItem> {
+        NativeVideo.read(this)?.let { return listOf(it) }
         val at = indexOf("profile-activity-content-card")
         if (at < 0) return emptyList()
         val section = substring(at, indexOfFirstMarker(at))
