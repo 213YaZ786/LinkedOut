@@ -148,16 +148,17 @@ class LinkedInSource(
     private fun Feed.census(suffix: String): String = posts.census(suffix)
 
     private fun List<Post>.census(suffix: String): String {
+        // Counted outside any builder on purpose. Inside buildString the
+        // receiver is a StringBuilder, so count { } resolves against its
+        // characters rather than against these posts, and the compiler is
+        // right to refuse it.
         val media = flatMap { it.media }
-        return buildString {
-            append("$size posts")
-            append(", ${count { !it.avatarUrl.isNullOrBlank() }} avatars")
-            append(", ${count { it.text.isNotBlank() }} texts")
-            append(", ${media.size} media")
-            append(" (${media.count { it.type == MediaType.VIDEO }} video)")
-            append(", ${count { it.stats != null }} counts")
-            append(", $suffix")
-        }
+        val avatars = count { !it.avatarUrl.isNullOrBlank() }
+        val texts = count { it.text.isNotBlank() }
+        val counts = count { it.stats != null }
+        val videos = media.count { it.type == MediaType.VIDEO }
+        return "$size posts, $avatars avatars, $texts texts, " +
+            "${media.size} media ($videos video), $counts counts, $suffix"
     }
 
     // ---- the guest gateway -------------------------------------------------
