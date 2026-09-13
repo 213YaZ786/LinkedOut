@@ -90,12 +90,12 @@ class SettingsViewModel(
                 _message.value = "Could not read that file"
                 return@launch
             }
-            val handles = SubscriptionCodec.import(text)
-            _message.value = if (handles.isEmpty()) {
+            val entries = SubscriptionCodec.import(text)
+            _message.value = if (entries.isEmpty()) {
                 "No accounts found in that file"
             } else {
-                val added = accounts.addAll(handles)
-                val already = handles.size - added
+                val added = accounts.addAll(entries)
+                val already = entries.size - added
                 "Followed $added new accounts" + if (already > 0) ", $already already followed" else ""
             }
         }

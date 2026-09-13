@@ -1,6 +1,5 @@
 package com.linkedout.app.data.accounts
 
-import com.linkedout.app.core.link.LinkedInLink
 import com.linkedout.app.core.model.FollowedAccount
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -30,6 +29,13 @@ import java.time.format.DateTimeFormatter
  *
  * Import is forgiving: that JSON, from any of the three apps, or plain text
  * with handles, @handles or x.com links, one per line or separated by commas.
+ *
+ * The kind now rides along. Fritter's format has one column and no room for
+ * it, so LinkedOut writes its own `linkedout_kind` beside the shared fields:
+ * an unknown key is ignored by both other apps, and a file exported here and
+ * imported here keeps its organisations. Before this, an organisation was
+ * dropped on import rather than followed as a person, which was the honest
+ * half measure and is no longer needed.
  */
 object SubscriptionCodec {
 
@@ -51,6 +57,13 @@ object SubscriptionCodec {
                                 put("profile_image_url_https", null as String?)
                                 put("verified", 0)
                                 put("in_feed", 1)
+                                // LinkedOut's own field. Fritter and Squawker
+                                // ignore what they do not know, so the file
+                                // stays readable by both.
+                                put("linkedout_kind", account.kind.segment)
+                                // The same fact as an address, for anything
+                                // that reads links rather than our field.
+                                put("url", SubscriptionFormat.addressOf(account.handle, account.kind))
                                 put("created_at", DATE.format(Instant.ofEpochMilli(account.addedAtMillis.coerceAtLeast(0))))
                             }
                         )
@@ -64,16 +77,20 @@ object SubscriptionCodec {
         return json.encodeToString(JsonObject.serializer(), root)
     }
 
-    /** Handles found in [text], valid, deduplicated ignoring case, in file order. */
-    fun import(text: String): List<String> {
+    /** Accounts found in [text], valid, deduplicated ignoring case, in file order. */
+    fun import(text: String): List<SubscriptionFormat.Entry> {
         val trimmed = text.trim()
-        val found = if (trimmed.startsWith("{") || trimmed.startsWith("[")) fromJson(trimmed) else fromText(trimmed)
-        return found.mapNotNull(FollowedAccount::normalise)
-            .distinctBy { it.lowercase() }
+        val found = if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            fromJson(trimmed)
+        } else {
+            SubscriptionFormat.fromText(trimmed)
+        }
+        return SubscriptionFormat.clean(found)
     }
 
-    private fun fromJson(text: String): List<String> {
-        val root = runCatching { json.parseToJsonElement(text) }.getOrNull() ?: return fromText(text)
+    private fun fromJson(text: String): List<SubscriptionFormat.Entry> {
+        val root = runCatching { json.parseToJsonElement(text) }.getOrNull()
+            ?: return SubscriptionFormat.fromText(text)
         val list = when (root) {
             is JsonObject -> root["subscriptions"] as? JsonArray
             is JsonArray -> root
@@ -82,29 +99,21 @@ object SubscriptionCodec {
 
         return list.mapNotNull { element ->
             when (element) {
-                is JsonObject -> (element["screen_name"] ?: element["screenName"] ?: element["handle"])
-                    .let { (it as? JsonPrimitive)?.contentOrNull }
-                is JsonPrimitive -> element.contentOrNull
+                // Which key means what is decided in SubscriptionFormat, which
+                // has no JSON library and can therefore be run against real
+                // files outside a build. This function only pulls the fields
+                // out of the tree.
+                is JsonObject -> SubscriptionFormat.entryOf(
+                    handle = element.text("screen_name") ?: element.text("screenName") ?: element.text("handle"),
+                    kindField = element.text("linkedout_kind"),
+                    url = element.text("url")
+                )
+                is JsonPrimitive -> element.contentOrNull?.let { SubscriptionFormat.entryOf(it) }
                 else -> null
             }
         }
     }
 
-    private fun fromText(text: String): List<String> =
-        text.split('\n', ',', ';', ' ', '\t')
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .mapNotNull { token ->
-                when (val link = LinkedInLink.parse(token)) {
-                    is LinkedInLink.Profile -> link.handle
-                    // Dropped. Company pages are readable now, but this file
-                    // format has one column and no room for the kind, so an
-                    // imported slug would be followed as a person and fail on
-                    // every refresh. Dropping it is the honest half measure
-                    // until the format carries the kind.
-                    is LinkedInLink.Company -> null
-                    is LinkedInLink.Post -> link.handle
-                    null -> if (token.contains("://")) null else token
-                }
-            }
+    private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
+
 }

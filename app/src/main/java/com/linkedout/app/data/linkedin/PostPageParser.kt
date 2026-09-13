@@ -197,12 +197,10 @@ class PostPageParser {
         return attributeAfter(open, "href", window = 400)
     }
 
-    private fun handleIn(href: String): String? {
-        val clean = Markup.decodeEntities(href).substringBefore('?')
-        return clean.substringAfter("/in/", "").takeIf { it.isNotEmpty() }
-            ?: clean.substringAfter("/company/", "").takeIf { it.isNotEmpty() }
-            ?: clean.substringAfter("/showcase/", "").trimEnd('/').takeIf { it.isNotEmpty() }
-    }
+    // Shared with the other two parsers. It used to live here and kept the
+    // whole tail of the path, so a French comment author arrived as
+    // "someone/fr" and could neither be opened nor followed.
+    private fun handleIn(href: String): String? = Markup.handleIn(href)
 
     /**
      * The author's display name.

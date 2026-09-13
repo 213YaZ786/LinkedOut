@@ -91,6 +91,31 @@ internal object Markup {
     }
 
     /** Every http(s) link inside [html], in order, deduplicated. */
+    /**
+     * The vanity name a profile or organisation link points at, whatever host
+     * and whatever locale suffix LinkedIn wrote it with.
+     *
+     * One place rather than three, because the three parsers each read handles
+     * out of hrefs and each got it slightly wrong in its own way. The rules
+     * that matter, learned from a French profile: the host varies, so it is
+     * never matched; the path can carry a locale segment,
+     * `/in/aya-terro-a9607b348/fr`, so the handle is the one segment after the
+     * marker and nothing more; and the href may still carry entities, so it is
+     * decoded first.
+     */
+    fun handleIn(href: String): String? {
+        val clean = decodeEntities(href).substringBefore('?').substringBefore('#')
+        for (marker in HANDLE_MARKERS) {
+            val after = clean.substringAfter(marker, "")
+            if (after.isEmpty()) continue
+            val segment = after.substringBefore('/')
+            if (segment.isNotEmpty()) return segment
+        }
+        return null
+    }
+
+    private val HANDLE_MARKERS = listOf("/in/", "/company/", "/school/", "/showcase/")
+
     fun links(html: String): List<String> =
         HREF.findAll(html).map { decodeEntities(it.groupValues[1]) }
             .filter { it.startsWith("http") }

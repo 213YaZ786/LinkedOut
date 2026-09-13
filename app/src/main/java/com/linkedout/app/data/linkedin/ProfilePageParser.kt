@@ -1,5 +1,6 @@
 package com.linkedout.app.data.linkedin
 
+import com.linkedout.app.core.link.LinkedInLink
 import com.linkedout.app.core.model.Feed
 import com.linkedout.app.core.model.LinkCard
 import com.linkedout.app.core.model.MediaItem
@@ -56,6 +57,12 @@ class ProfilePageParser {
         const val PAGE_MARKER = "public_profile_v3"
 
         private const val ACTIVITY_CARD = "slide-list__item"
+
+        /** Shared by every host LinkedIn serves a post address on. */
+        private const val POSTS_PATH = "linkedin.com/posts/"
+
+        /** "https://" plus a country subdomain, never more than this. */
+        private const val MAX_HOST = 16
         private const val POSTS_PANEL = "tab__panel  w-full pt-1 posts"
         private const val REACTIONS_PANEL = "tab__panel  w-full pt-1 reactions"
         private const val COMMENTS_PANEL = "tab__panel  pt-1"
@@ -222,15 +229,19 @@ class ProfilePageParser {
         val id = PostId.normalize(permalink)
         if (id == permalink) return null
 
-        // The card announces what the person did with it in its own header.
-        val kind = when {
-            "reposted this" in chunk -> PostKind.REPOST
-            "liked this" in chunk || "reacted on this" in chunk -> PostKind.REPLY
-            "shared this" in chunk || "posted this" in chunk -> PostKind.ORIGINAL
-            else -> fallbackKind
-        }
-
         val reshared = chunk.parseReshare()
+
+        // The tab the card came from, then its shape. It used to be the words
+        // in the card's own header, "reposted this" and "liked this", which is
+        // a Nitter rule in a new place: LinkedIn writes that line in the
+        // reader's language, so on a French profile none of the five phrases
+        // ever matched and every card fell through to the fallback. The tab is
+        // a structure and says the same thing in every language.
+        val kind = when {
+            fallbackKind == PostKind.REPLY -> PostKind.REPLY
+            reshared != null -> PostKind.REPOST
+            else -> PostKind.ORIGINAL
+        }
         // A reshare card shows the original author's words in the nested card
         // and the resharer's own comment, if any, in the outer one. Taking the
         // first see-more-text would put the original's text on the wrong author.
@@ -259,15 +270,37 @@ class ProfilePageParser {
         )
     }
 
+    /**
+     * The card's own post address, whatever host LinkedIn wrote it on.
+     *
+     * It used to require `https://www.linkedin.com/posts/` exactly, and that
+     * is why a French profile showed three cards out of nine. LinkedIn writes
+     * each card's link on the country subdomain of the person it belongs to,
+     * so `fr.linkedin.com/posts/` for a French author and `www` only for the
+     * rest. Six cards were skipped for having the wrong host in a string
+     * comparison, which reads exactly like a profile with little activity.
+     *
+     * The host is normalised to www on the way out, because everything
+     * downstream, the throttle, the cache and the request, is keyed on the one
+     * host this app talks to.
+     */
     private fun String.postPermalink(): String? {
         var from = 0
         while (true) {
-            val at = indexOf("https://www.linkedin.com/posts/", from)
-            if (at < 0) return null
+            val marker = indexOf(POSTS_PATH, from)
+            if (marker < 0) return null
+            val at = lastIndexOf("https://", marker).takeIf { it >= 0 && marker - it <= MAX_HOST }
+            if (at == null) {
+                from = marker + 1
+                continue
+            }
             val end = indexOfFirst(at, '"', '&')
             val candidate = substring(at, end)
-            if (PostId.normalize(candidate) != candidate) return candidate.substringBefore('?')
-            from = at + 1
+            if (PostId.normalize(candidate) != candidate) {
+                return LinkedInLink.canonical(candidate.substringAfter(POSTS_PATH).let { "posts/$it" })
+                    .substringBefore('?')
+            }
+            from = marker + 1
         }
     }
 
@@ -309,7 +342,11 @@ class ProfilePageParser {
         val at = indexOf("publisher-author-card")
         if (at < 0) return null
         val href = attributeAfter(at, "href", window = 600) ?: return null
-        return href.substringAfter("/in/", "").substringBefore('?').takeIf { it.isNotEmpty() }
+        // Markup.handleIn, not a local rule. A card's author link can carry a
+        // locale segment, "/in/aya-terro-a9607b348/fr", and the handle then
+        // becomes "aya-terro-a9607b348/fr", which is not a name that can be
+        // followed or fetched.
+        return Markup.handleIn(href)
     }
 
     /**
@@ -339,8 +376,7 @@ class ProfilePageParser {
         val inner = substring(at)
         val href = inner.attributeAfter("base-card__full-link", "href").orEmpty()
         return QuotedPost(
-            handle = href.substringAfter("/in/", "").substringBefore('?')
-                .ifEmpty { href.substringAfter("/company/", "").substringBefore('?') },
+            handle = Markup.handleIn(href).orEmpty(),
             name = inner.cardAuthorName().orEmpty(),
             text = inner.commentaryText(outerOnly = false).orEmpty(),
             permalink = inner.postPermalink() ?: postPermalink().orEmpty()

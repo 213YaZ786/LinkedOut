@@ -60,6 +60,15 @@ class CompanyPageParser {
         private const val UPDATES = "data-test-id=\"updates\""
         private const val CARD = "main-feed-activity-card\n"
         private const val COMMENTARY = "data-test-id=\"main-feed-activity-card__commentary\""
+        private const val LOCKUP = "main-feed-activity-card__entity-lockup"
+
+        /**
+         * The line above a card that says the page did something to someone
+         * else's post, "a republié ceci" on the capture. Matched on the class
+         * and not on the words, because the words are in the reader's language
+         * and the class is not.
+         */
+        private const val HEADER = "main-feed-activity-card__header"
         private const val IMAGES = "data-test-id=\"feed-images-content\""
             private const val DOCUMENT = "data-id=\"feed-paginated-document-content\""
         private const val REACTIONS = "data-test-id=\"social-actions__reactions\""
@@ -208,7 +217,11 @@ class CompanyPageParser {
 
         return Post(
             id = PostId.normalize(permalink).takeIf { it != permalink } ?: id,
-            authorHandle = slug,
+            // The page's own slug only when the card carries no actor of its
+            // own. A reposted card names the original organisation in its
+            // lockup, and calling it the page being read attributes someone
+            // else's post to them.
+            authorHandle = actorHandle() ?: slug,
             authorName = textAfter("feed-actor-name", "</a>").orEmpty(),
             avatarUrl = attributeAfter("hue-web-entity__image", "data-delayed-url")
                 ?.let(Markup::decodeEntities),
@@ -216,13 +229,29 @@ class CompanyPageParser {
             links = Markup.links(commentaryHtml().orEmpty()),
             publishedAtMillis = Timestamps.fromRelative(age()),
             permalink = permalink,
-            kind = PostKind.ORIGINAL,
+            // Every card used to be ORIGINAL. A card with the header above it
+            // is the page passing on someone else's post, which is a repost
+            // and not something it wrote.
+            kind = if (HEADER in this) PostKind.REPOST else PostKind.ORIGINAL,
             media = media(),
             stats = PostStats(
                 likes = number("data-num-reactions"),
                 replies = number("data-num-comments")
             )
         )
+    }
+
+    /**
+     * Who the card is by, read from its lockup rather than from the page.
+     *
+     * Forward from the lockup marker, because the lockup is a div and the
+     * actor's link is the first one inside it. Reading backwards would find
+     * the card's own overlay link, which points at the post.
+     */
+    private fun String.actorHandle(): String? {
+        val at = indexOf(LOCKUP).takeIf { it >= 0 } ?: return null
+        val href = attributeAfter(at, "href", window = 600) ?: return null
+        return Markup.handleIn(href)
     }
 
     /**
@@ -329,8 +358,19 @@ class CompanyPageParser {
         return substring(open + 4, close).trim().trim('"').takeIf { it.isNotBlank() }
     }
 
+    /**
+     * Everything after the posts is cut, and the search starts at the posts.
+     *
+     * It used to start at the top of the document, and that is why a showcase
+     * page parsed to zero posts while a company page parsed to ten. The sign
+     * in modal is not always below the list: on the showcase capture it sits
+     * in the guest upsells near the top of the body, before the header, so the
+     * cut landed above everything and the parser was handed the first few
+     * hundred bytes of the page.
+     */
     private fun String.beforeTail(): String {
-        val cut = TAIL.mapNotNull { marker -> indexOf(marker).takeIf { it > 0 } }.minOrNull()
+        val from = indexOf(UPDATES).takeIf { it >= 0 } ?: 0
+        val cut = TAIL.mapNotNull { marker -> indexOf(marker, from).takeIf { it > 0 } }.minOrNull()
         return if (cut == null) this else substring(0, cut)
     }
 }

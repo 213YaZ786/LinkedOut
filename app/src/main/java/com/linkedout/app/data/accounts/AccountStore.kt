@@ -54,12 +54,14 @@ class AccountStore(context: Context) {
      * how many were new. Used by import, where fifty separate writes would
      * also mean fifty separate list updates for Home to react to.
      */
-    fun addAll(rawHandles: List<String>, kind: AccountKind = AccountKind.PERSON): Int {
+    fun addAll(entries: List<SubscriptionFormat.Entry>): Int {
         val known = _accounts.value.map { it.handle.lowercase() }.toMutableSet()
         val now = System.currentTimeMillis()
-        val fresh = rawHandles.mapNotNull(FollowedAccount::normalise)
-            .filter { known.add(it.lowercase()) }
-            .map { FollowedAccount(handle = it, kind = kind, addedAtMillis = now) }
+        val fresh = entries.mapNotNull { entry ->
+            FollowedAccount.normalise(entry.handle)?.let { entry.copy(handle = it) }
+        }
+            .filter { known.add(it.handle.lowercase()) }
+            .map { FollowedAccount(handle = it.handle, kind = it.kind, addedAtMillis = now) }
         if (fresh.isNotEmpty()) persist(_accounts.value + fresh)
         return fresh.size
     }
