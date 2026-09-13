@@ -148,9 +148,24 @@ class ChallengeGateway(
                     bodyBytes = result.html.length,
                     durationMillis = elapsed,
                     detail = when {
-                        read != null ->
-                            "the native client was refused, this is the engine's own read" +
-                                ", ${result.refusedNavigations} navigation away from the page refused"
+                        read != null -> buildString {
+                            append("the engine's own read")
+                            if (result.wallVisited) {
+                                append(", the wall was visited once and the page asked again")
+                            }
+                            if (result.refusedNavigations > 0) {
+                                append(", ${result.refusedNavigations} wall after the retry refused")
+                            }
+                            // Names only, never values. The presence of fid or
+                            // __cf_bm is the whole proof the detour earned its
+                            // keep, and this line is where a failed account
+                            // gets read against what was actually held.
+                            val held = BrowserData.cookieNames(url)
+                            append(
+                                if (held.isEmpty()) ", engine holds no cookies"
+                                else ", engine cookies " + held.joinToString(",")
+                            )
+                        }
                         session.prefersWebView(host) ->
                             "$host checks every request, staying on the browser path"
                         else -> "cookie now shared with the native client for $host"

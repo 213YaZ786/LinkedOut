@@ -4,34 +4,61 @@ package com.linkedout.app.core.web
  * How the offscreen browser should load a page when it is used as a reader
  * rather than as a way past a bot check.
  *
- * The distinction matters in three places.
+ * The wall changed what this class means between 0.6.13 and now. It used to
+ * refuse the wall's navigation outright, and that protected a document when
+ * there was one while preventing the only thing that unblocks the account
+ * when there was not. The evidence came from a phone browser: the first click
+ * on a refused profile lands on the wall, going back and clicking again lands
+ * on the page. The visit to the wall is itself what earns the cookies the
+ * second ask carries, `fid` from the wall and `__cf_bm` from the Cloudflare
+ * tier in front of the country hosts. So the engine now takes the detour once,
+ * lets it settle, and asks for the page a second time. [blockedPaths] only
+ * refuses the second wall in a row, which is where a loop would start.
  *
- * [blockedPaths] are main frame addresses the engine must not be allowed to
- * follow. LinkedIn's sign in wall is not a status code and not a check: it is
- * a script on the page that navigates to /authwall. A browser obeys it, which
- * is why the engine was kept off the reading path until now. Refusing exactly
- * that navigation leaves the document that was already served in place, and
- * that document is the page.
+ * [hostSuffix] widens the main frame beyond the exact task host. LinkedIn
+ * serves a profile from the country subdomain of its owner, and a read that
+ * dies on a redirect to fr.linkedin.com is a page lost to a formality.
  *
- * [userAgent] overrides the engine's own string. The WebView says it is Chrome
- * on Android, and LinkedIn answers a phone with a stripped page that has no
- * activity section at all, which is the one thing this app exists to read.
- * Stated plainly: overriding the string does not change the client hints the
- * engine sends beside it, so a server that compares the two can still tell.
+ * [looksBlocked] is the caller's own test for a wall served directly as the
+ * document, which never navigates and so never touches [blockedPaths]. The
+ * engine cannot know one host's wall from another's page, the caller can.
  *
- * [headers] ride on the main request. The Referer is the one that matters,
- * since it is what decides between the page and the wall in the first place.
+ * [userAgent] overrides the engine's own string. The WebView says it is
+ * Chrome on Android, and LinkedIn answers a phone with a stripped page that
+ * has no activity section at all. Stated plainly: the client hints beside the
+ * string still describe the real device, and a server comparing the two can
+ * tell.
+ *
+ * [headers] ride on the main request, the Referer above all, since it is what
+ * decides between the page and the wall in the first place.
  */
 class BrowserRead(
     val blockedPaths: List<String> = emptyList(),
+    val hostSuffix: String? = null,
     val userAgent: String? = null,
-    val headers: Map<String, String> = emptyMap()
+    val headers: Map<String, String> = emptyMap(),
+    val looksBlocked: (String) -> Boolean = { false }
 ) {
 
-    /** True when this main frame path must not be allowed to load. */
+    /** True when this main frame path is one of the wall's own addresses. */
     fun refuses(path: String): Boolean {
         if (blockedPaths.isEmpty()) return false
         val lower = path.lowercase()
         return blockedPaths.any { lower == it || lower.startsWith("$it/") }
     }
+
+    /** True when a main frame on [host] may load at all. */
+    fun allowsHost(host: String): Boolean {
+        val suffix = hostSuffix?.lowercase() ?: return false
+        val lower = host.lowercase()
+        return lower == suffix || lower.endsWith(".$suffix")
+    }
+
+    /**
+     * True when what the engine is looking at is the wall rather than the
+     * page, whether it navigated there or was served it in place. This is the
+     * condition under which the detour and the second ask are worth spending.
+     */
+    fun isDetour(path: String, html: String): Boolean =
+        refuses(path) || looksBlocked(html)
 }

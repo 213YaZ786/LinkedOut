@@ -24,17 +24,19 @@ class ChallengeSolver(private val session: WebSession) {
 
     sealed interface Result {
         /**
-         * Through. [html] is the real page, [status] its main frame status,
-         * and [refusedNavigations] how many times the page tried to send the
-         * engine somewhere it was not allowed to go. On LinkedIn that number
-         * is the wall's own script being turned down, and a zero next to a
-         * page that parsed says the wall was never in the way at all.
+         * Through. [html] is the real page and [status] its main frame
+         * status. [wallVisited] says the engine met the wall, let it load and
+         * asked again, which is how a refused account is recovered, and
+         * [refusedNavigations] counts walls turned down after that one retry.
+         * Both zero next to a page that parsed means the wall was never in
+         * the way at all.
          */
         data class Cleared(
             val html: String,
             val finalUrl: String,
             val status: Int,
-            val refusedNavigations: Int = 0
+            val refusedNavigations: Int = 0,
+            val wallVisited: Boolean = false
         ) : Result
 
         /** Still a check when time ran out. A person may be able to pass it. */
@@ -91,7 +93,11 @@ class ChallengeSolver(private val session: WebSession) {
                 if (interactive) {
                     task.result.await()
                 } else {
-                    withTimeoutOrNull(OFFSCREEN_TIMEOUT_MS) { task.result.await() }
+                    // A read that meets the wall pays for two page loads and
+                    // the pause between them, so it gets more rope than a
+                    // check does.
+                    val patience = if (read != null) READ_TIMEOUT_MS else OFFSCREEN_TIMEOUT_MS
+                    withTimeoutOrNull(patience) { task.result.await() }
                         ?: Result.NeedsInteraction
                 }
             } finally {
@@ -127,5 +133,8 @@ class ChallengeSolver(private val session: WebSession) {
     private companion object {
         /** Anubis at typical difficulty takes a few seconds on a phone. */
         const val OFFSCREEN_TIMEOUT_MS = 20_000L
+
+        /** Two loads and a settle, on a phone network. */
+        const val READ_TIMEOUT_MS = 35_000L
     }
 }

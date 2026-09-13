@@ -44,13 +44,15 @@ import kotlinx.coroutines.sync.withLock
  * is named in the log so a failure says which ones were refused.
  *
  * The offscreen browser used to be deliberately off that ladder, because it
- * runs the wall's own script and would turn a readable body into a redirect.
- * That reason no longer holds: the engine is told which addresses it may not
- * navigate to, so the script is refused and the document it was trying to
- * leave stays where it is. The browser is now the last rung, spent only when
- * every arrival was refused, and it is the one rung the native client cannot
- * imitate. What differs is under the headers, in the TLS handshake and the
- * HTTP/2 settings, and no header rewrites those.
+ * runs the wall's own script. 0.6.13 put it on as the last rung with that
+ * script refused, and the phone browsers proved that wrong too: the first
+ * click on a refused profile lands on the wall, and going back and clicking
+ * again lands on the page, because the wall visit itself sets the cookies the
+ * second ask carries, `fid` from LinkedIn and `__cf_bm` from the Cloudflare
+ * tier on the country hosts. So the engine now takes the wall once, lets it
+ * settle, and asks for the page a second time. It remains the one rung the
+ * native client cannot imitate: what differs is under the headers, in the TLS
+ * handshake and the HTTP/2 settings, and no header rewrites those.
  *
  * It is not free and it is not silent. It runs LinkedIn's own scripts, so
  * LinkedIn gets the measurements a browser gives it, and it keeps its cookies
@@ -330,13 +332,22 @@ class LinkedInSource(
     }
 
     /**
-     * How the engine reads a LinkedIn page. The arrival is the one the native
-     * ladder puts first, since it is the one LinkedIn answers pages to.
+     * How the engine reads a LinkedIn page.
+     *
+     * The wall paths are a loop guard now, not a fence: the engine visits the
+     * wall once, because that visit is what sets `fid` and the Cloudflare
+     * `__cf_bm` a second ask rides on, and only refuses a wall that comes
+     * back after the retry. The host suffix lets a read follow LinkedIn's
+     * redirect onto the country subdomain a profile actually lives on. The
+     * arrival is the one the native ladder puts first, since it is the one
+     * LinkedIn answers pages to.
      */
     private fun browserRead(): BrowserRead = BrowserRead(
         blockedPaths = LinkedInHost.WALL_PATHS,
+        hostSuffix = LinkedInHost.COOKIE_DOMAIN,
         userAgent = LinkedInHost.USER_AGENT,
-        headers = mapOf("Referer" to LinkedInHost.REFERER)
+        headers = mapOf("Referer" to LinkedInHost.REFERER),
+        looksBlocked = LinkedInHost::isAuthWall
     )
 
     /**

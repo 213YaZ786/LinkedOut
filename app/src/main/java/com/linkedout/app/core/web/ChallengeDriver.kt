@@ -34,10 +34,13 @@ import java.io.ByteArrayInputStream
  * DOM storage wiped on release. JavaScript exists only while the task runs,
  * because the WebView itself only exists while the task runs.
  *
- * A reading task, [ChallengeSolver.Task.read], adds three things: the paths
- * the page is not allowed to navigate to, which is how the sign in wall's own
- * script is refused, an overridden User-Agent, and the headers the native
- * request would have carried. See [BrowserRead].
+ * A reading task, [ChallengeSolver.Task.read], changes what a wall means.
+ * The first time the page turns out to be a wall, by navigating to one of its
+ * addresses or by being one, the engine lets it stand, waits for it to
+ * settle, and asks for the target once more. That is a phone browser's "go
+ * back and click again", automated, and the second ask carries the cookies
+ * the wall visit just set. Only a wall met again after that retry is refused,
+ * which is where a loop would start. See [BrowserRead] for the evidence.
  */
 @SuppressLint("SetJavaScriptEnabled")
 class ChallengeDriver(
@@ -51,9 +54,16 @@ class ChallengeDriver(
     private var lastMainFrameError: Pair<String, Int>? = null
     private var lastFinishedAt = 0L
 
-    /** Navigations the page asked for and did not get. Read by the log line. */
+    /** Navigations refused after the retry was already spent. */
     var refusedNavigations = 0
         private set
+
+    /** True once the engine let the wall load, on purpose, to be given its cookies. */
+    var wallVisited = false
+        private set
+
+    /** True once the target was asked for the second time. One retry, ever. */
+    private var wallRetried = false
 
     val view: WebView = WebView(context).apply {
         settings.javaScriptEnabled = true
@@ -131,6 +141,29 @@ class ChallengeDriver(
         view.evaluateJavascript(READ_DOCUMENT_JS) { raw ->
             if (done) return@evaluateJavascript
             val html = decode(raw) ?: return@evaluateJavascript
+
+            // The wall detour, for reading tasks only. Standing on the wall is
+            // not a result: it is the visit that earns the cookies. Once it
+            // has settled, ask for the target again, once. After that retry
+            // the document is taken for what it is, and a wall that came back
+            // anyway is reported upstream as one.
+            val read = task.read
+            if (read != null && !wallRetried &&
+                read.isDetour(Uri.parse(current).path.orEmpty(), html)
+            ) {
+                wallVisited = true
+                val settled = SystemClock.elapsedRealtime() - lastFinishedAt > WALL_SETTLE_MS
+                if (settled) {
+                    wallRetried = true
+                    if (read.headers.isEmpty()) {
+                        view.loadUrl(task.url)
+                    } else {
+                        view.loadUrl(task.url, read.headers)
+                    }
+                }
+                return@evaluateJavascript
+            }
+
             val recorded = lastMainFrameError?.takeIf { it.first == current }?.second ?: 200
             // A check answers 403 or 503 on the very URL it guards, then
             // reloads that URL with the real page. A success fires no error
@@ -146,7 +179,13 @@ class ChallengeDriver(
 
             when (ChallengeDetector.detect(status, html)) {
                 null -> finish(
-                    ChallengeSolver.Result.Cleared(html, current, status, refusedNavigations)
+                    ChallengeSolver.Result.Cleared(
+                        html = html,
+                        finalUrl = current,
+                        status = status,
+                        refusedNavigations = refusedNavigations,
+                        wallVisited = wallVisited
+                    )
                 )
                 ChallengeKind.WAF_BLOCK -> {
                     // A plain refusal with no script to run. Give it a moment
@@ -181,14 +220,17 @@ class ChallengeDriver(
             // got past a single check. Only the top page is kept on the host.
             if (!request.isForMainFrame) return false
             val url: Uri = request.url
-            val allowed = url.scheme == "https" && onTaskHost(url.host)
+            // A read may roam the wider domain, because LinkedIn serves a
+            // profile from the country subdomain of its owner and a redirect
+            // to fr.linkedin.com is a formality, not an exit.
+            val allowed = url.scheme == "https" &&
+                (onTaskHost(url.host) || task.read?.allowsHost(url.host.orEmpty()) == true)
             if (!allowed) return true
-            // The sign in wall is not a status and not a check. It is a script
-            // on the page that sends the browser to /authwall, and a browser
-            // obeys it. Refusing that one navigation leaves the document that
-            // was already served in place, which is the page that was asked
-            // for. Nothing else about the load changes.
-            if (task.read?.refuses(url.path.orEmpty()) == true) {
+            // The wall's own addresses. Before the retry they are allowed to
+            // load: the visit is what sets the cookies the second ask rides
+            // on. After it, a wall coming back is a refusal to report, not a
+            // page to stand on, and following it again would loop.
+            if (task.read?.refuses(url.path.orEmpty()) == true && wallRetried) {
                 refusedNavigations++
                 return true
             }
@@ -249,6 +291,13 @@ class ChallengeDriver(
     private companion object {
         const val POLL_MS = 1_500L
         const val BLOCK_SETTLE_MS = 4_000L
+
+        /**
+         * How long the wall gets to finish its own work before the target is
+         * asked for again. The cookies it sets are the point of the visit,
+         * and some of them are set by its script rather than by its response.
+         */
+        const val WALL_SETTLE_MS = 2_000L
 
         /** What Cloudflare style and WAF checks answer on the page they guard. */
         val CHECK_STATUSES = setOf(403, 503)

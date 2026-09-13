@@ -17,6 +17,20 @@ import android.webkit.WebStorage
  */
 object BrowserData {
 
+    /**
+     * The names of the cookies the engine currently holds for [url], read
+     * from its own store. Values are never returned: the names are evidence
+     * enough that a wall visit earned something, and the values are exactly
+     * what this app promises not to handle more than it must.
+     */
+    fun cookieNames(url: String): List<String> = runCatching {
+        CookieManager.getInstance().getCookie(url)
+            .orEmpty()
+            .split(';')
+            .mapNotNull { it.substringBefore('=').trim().takeIf(String::isNotEmpty) }
+            .sorted()
+    }.getOrDefault(emptyList())
+
     /** Best effort by design: a phone with no WebView installed throws here. */
     fun clear() {
         runCatching {
