@@ -247,7 +247,10 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
                         contentScale = ContentScale.FillWidth,
                         modifier = Modifier.fillMaxWidth().aspectRatio(ratio)
                     )
-                    if (index == inlineIndex) {
+                    // A video with no source keeps its cover and its badge and
+                    // starts no player. Tapping it opens the post, where the
+                    // address exists.
+                    if (index == inlineIndex && item.playable) {
                         InlineVideo(
                             url = item.downloadUrl,
                             onClick = { onOpen(index) },

@@ -154,7 +154,11 @@ class LinkedInSource(
         // right to refuse it.
         val media = flatMap { it.media }
         val avatars = count { !it.avatarUrl.isNullOrBlank() }
+        // Own words and quoted words counted apart. A card the reader only
+        // reacted to has no words of its own, and counting it as "no text"
+        // reads like a parser failure when it is the truth about the post.
         val texts = count { it.text.isNotBlank() }
+        val quotes = count { !it.quoted?.text.isNullOrBlank() }
         val counts = count { it.stats != null }
         val videos = media.count { it.type == MediaType.VIDEO }
         // The first video's address, shortened. Whether it is an mp4 on
@@ -167,7 +171,7 @@ class LinkedInSource(
                 val bare = url.substringAfter("://").substringBefore('?')
                 bare.split('/').take(4).joinToString("/")
             }
-        return "$size posts, $avatars avatars, $texts texts, " +
+        return "$size posts, $avatars avatars, $texts texts, $quotes quoted, " +
             "${media.size} media ($videos video), $counts counts, $suffix" +
             (firstVideo?.let { ", first video $it" } ?: "")
     }

@@ -68,7 +68,26 @@ data class MediaItem(
     val previewUrl: String,
     val downloadUrl: String,
     val type: MediaType,
-    val durationLabel: String? = null
+    val durationLabel: String? = null,
+    /**
+     * False when this is a video LinkedIn named but gave no source for, which
+     * is every video on a profile page: that page renders a cover picture and
+     * a play badge and nothing else, with no `<video>` element and no address
+     * anywhere in the document. [downloadUrl] is then the cover, and handing it
+     * to a player produced an unreadable container error eight times per
+     * scroll. The post's own page does carry the address, so the way to watch
+     * it is to open the post.
+     *
+     * Defaults to true so everything already cached keeps working.
+     */
+    val playable: Boolean = true,
+    /**
+     * The post this video belongs to, when [playable] is false. Its own page
+     * does carry the address, so the player can go and fetch it on the first
+     * tap rather than asking for seventeen post pages the moment a profile
+     * opens.
+     */
+    val sourcePostId: String? = null
 )
 
 @Serializable

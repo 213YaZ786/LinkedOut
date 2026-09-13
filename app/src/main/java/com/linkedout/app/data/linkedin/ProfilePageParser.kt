@@ -252,7 +252,7 @@ class ProfilePageParser {
             permalink = permalink,
             kind = kind,
             relatedHandle = reshared?.handle,
-            media = chunk.parseMedia(),
+            media = chunk.parseMedia(id),
             quoted = reshared,
             card = chunk.parseCard(),
             stats = chunk.parseStats()
@@ -365,7 +365,7 @@ class ProfilePageParser {
      * The poster path stays underneath for a card whose player is absent, and
      * for every picture.
      */
-    private fun String.parseMedia(): List<MediaItem> {
+    private fun String.parseMedia(postId: String): List<MediaItem> {
         NativeVideo.read(this)?.let { return listOf(it) }
         val at = indexOf("profile-activity-content-card")
         if (at < 0) return emptyList()
@@ -373,7 +373,19 @@ class ProfilePageParser {
         val url = section.url("object-center object-contain", "data-delayed-url")
             ?: return emptyList()
         val type = if ("activity-video-play" in section) MediaType.VIDEO else MediaType.PHOTO
-        return listOf(MediaItem(previewUrl = url, downloadUrl = url, type = type))
+        // Reached only when the card held no player, which on this page is
+        // always: the profile document names its videos with a play badge and
+        // a cover and carries no source at all. Saying so is better than
+        // passing a JPEG off as a film.
+        return listOf(
+            MediaItem(
+                previewUrl = url,
+                downloadUrl = url,
+                type = type,
+                playable = type != MediaType.VIDEO,
+                sourcePostId = postId.takeIf { type == MediaType.VIDEO }
+            )
+        )
     }
 
     private fun String.indexOfFirstMarker(from: Int): Int =

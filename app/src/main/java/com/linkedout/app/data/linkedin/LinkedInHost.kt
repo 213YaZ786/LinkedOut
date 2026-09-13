@@ -38,10 +38,27 @@ object LinkedInHost {
             "Chrome/140.0.0.0 Safari/537.36"
 
     /**
-     * True when the body is the redirect stub rather than a page. Checked on
+     * True when what came back is the wall rather than the page. Checked on
      * the body, never on the status, which is 200 either way.
+     *
+     * The wall comes in two shapes and only one of them is small.
+     *
+     * The stub is a body that is nothing but a script reading document.referrer
+     * and navigating to /authwall. The size guard belongs to that case: a real
+     * page can mention /authwall in a link, so the bare string is only trusted
+     * when there is nothing else in the document.
+     *
+     * The other shape is a full sign up page, sixty thousand characters of
+     * form, footer and language picker, which sailed straight past that guard
+     * and was then handed to a parser that found no profile in it. The reader
+     * saw "this page can't be read" and a retry often worked, because a retry
+     * starts the referrer ladder again. That page names itself twice, in its
+     * pageKey and in its canonical link, and both are exact enough to trust at
+     * any size.
      */
     fun isAuthWall(body: String): Boolean {
+        if ("content=\"auth_wall" in body) return true
+        if ("rel=\"canonical\" href=\"/authwall\"" in body) return true
         if (body.length > 20_000) return false
         return "/authwall" in body || "sessionRedirect=" in body
     }

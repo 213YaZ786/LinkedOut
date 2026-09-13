@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -62,6 +63,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
 import com.linkedout.app.core.debug.RequestLog
+import com.linkedout.app.data.repository.VideoSources
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.ui.icon.LinkedOutIcons
@@ -246,21 +248,67 @@ private fun ZoomableImage(url: String, onZoomChanged: (Boolean) -> Unit) {
 private fun VideoPage(item: MediaItem, active: Boolean) {
     val context = LocalContext.current
     val log: RequestLog = koinInject()
+    val sources: VideoSources = koinInject()
     val uriHandler = LocalUriHandler.current
     val policy = rememberMediaPolicy()
     val isGif = item.type == MediaType.GIF
-    var failed by remember(item.downloadUrl) { mutableStateOf(false) }
+
+    // A video the profile page named without carrying its address. The post's
+    // own page has it, so it is fetched here, once, and only because the reader
+    // opened this video. Everything below then behaves as if the address had
+    // been there all along.
+    var fetched by remember(item.downloadUrl) { mutableStateOf<String?>(null) }
+    var looking by remember(item.downloadUrl) { mutableStateOf(false) }
+    var lost by remember(item.downloadUrl) { mutableStateOf(false) }
+    val source = if (item.playable) item.downloadUrl else fetched
+
+    LaunchedEffect(item.downloadUrl, item.sourcePostId, item.playable) {
+        if (item.playable || item.sourcePostId == null || fetched != null) return@LaunchedEffect
+        looking = true
+        val found = sources.sourceFor(item.sourcePostId)
+        looking = false
+        if (found == null) lost = true else fetched = found
+    }
+
+    if (source == null) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            AsyncImage(
+                model = item.previewUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                when {
+                    looking -> "Fetching the video from its post."
+                    lost || item.sourcePostId == null ->
+                        "LinkedIn did not give this video's address, on the profile page or " +
+                            "on the post's own."
+                    else -> "Fetching the video from its post."
+                },
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+        }
+        return
+    }
+
+    var failed by remember(source) { mutableStateOf(false) }
 
     // On mobile data with Wi-Fi only on, nothing is fetched until the reader
     // taps play. Otherwise the player prepares as soon as the page exists.
-    var started by remember(item.downloadUrl) { mutableStateOf(!policy.hold) }
-    var tappedPlay by remember(item.downloadUrl) { mutableStateOf(false) }
+    var started by remember(source) { mutableStateOf(!policy.hold) }
+    var tappedPlay by remember(source) { mutableStateOf(false) }
     // GIFs have no sound. Videos follow the setting, and the button below.
-    var muted by remember(item.downloadUrl) { mutableStateOf(isGif || policy.startMuted) }
+    var muted by remember(source) { mutableStateOf(isGif || policy.startMuted) }
 
-    val exo = remember(item.downloadUrl) {
+    val exo = remember(source) {
         ExoPlayer.Builder(context).build().apply {
-            setMediaItem(PlayableItem.fromUri(item.downloadUrl))
+            setMediaItem(PlayableItem.fromUri(source))
             if (isGif) repeatMode = Player.REPEAT_MODE_ALL
         }
     }
@@ -275,7 +323,7 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
                 // or a poster image handed to a player. The log now says which.
                 log.record(
                     kind = RequestLog.Kind.MEDIA,
-                    url = item.downloadUrl,
+                    url = source,
                     outcome = "failed",
                     detail = "${error.errorCodeName}: ${error.message ?: "no message"}" +
                         (error.cause?.let { " / ${it::class.java.simpleName}: ${it.message}" } ?: "")
@@ -313,7 +361,7 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("This video could not be played here.", color = Color.White)
-            TextButton(onClick = { uriHandler.openUri(item.downloadUrl) }) {
+            TextButton(onClick = { uriHandler.openUri(source) }) {
                 Text("Open in browser")
             }
         }

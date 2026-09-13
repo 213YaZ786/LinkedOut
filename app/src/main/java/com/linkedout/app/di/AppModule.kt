@@ -18,6 +18,7 @@ import com.linkedout.app.data.linkedin.PostPageParser
 import com.linkedout.app.data.linkedin.CompanyPageParser
 import com.linkedout.app.data.linkedin.ProfilePageParser
 import com.linkedout.app.data.repository.FeedRepository
+import com.linkedout.app.data.repository.VideoSources
 import com.linkedout.app.data.repository.TimelineRepository
 import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.feature.accounts.AccountsViewModel
@@ -64,6 +65,7 @@ val appModule = module {
     single { PostPageParser() }
     single { LinkedInSource(get(), get(), get(), get(), get(), get()) }
     single { FeedRepository(get()) }
+    single { VideoSources(get()) }
 
     single {
         val settings: SettingsStore = get()
