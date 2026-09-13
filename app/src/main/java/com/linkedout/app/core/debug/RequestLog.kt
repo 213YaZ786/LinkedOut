@@ -28,7 +28,8 @@ class RequestLog {
         val detail: String? = null
     )
 
-    enum class Kind { PROBE, PROFILE, PAGE, RSS, PARSE, THREAD, LIST, MEDIA }
+    /** SESSION is the guest cookie warm up, which is not a read of a page. */
+    enum class Kind { PROBE, PROFILE, PAGE, RSS, PARSE, THREAD, LIST, MEDIA, SESSION }
 
     private val _entries = MutableStateFlow<List<Entry>>(emptyList())
     val entries: StateFlow<List<Entry>> = _entries.asStateFlow()

@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.accounts.SubscriptionCodec
+import com.linkedout.app.core.web.GuestCookies
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.settings.Settings
 import com.linkedout.app.data.settings.SettingsStore
@@ -24,6 +25,7 @@ class SettingsViewModel(
     private val store: SettingsStore,
     private val cache: FeedCache,
     private val accounts: AccountStore,
+    private val cookies: GuestCookies,
     private val context: Context
 ) : ViewModel() {
 
@@ -108,6 +110,14 @@ class SettingsViewModel(
     private val _storageBytes = MutableStateFlow<Long?>(null)
     val storageBytes: StateFlow<Long?> = _storageBytes.asStateFlow()
 
+    /**
+     * How many guest cookies LinkedIn has set on this phone. Shown as a
+     * number rather than a switch, because the reader should be able to see
+     * that something is held before deciding to erase it.
+     */
+    private val _guestCookies = MutableStateFlow(0)
+    val guestCookies: StateFlow<Int> = _guestCookies.asStateFlow()
+
     init {
         measureStorage()
     }
@@ -167,8 +177,20 @@ class SettingsViewModel(
         }
     }
 
+    /**
+     * Forgets the guest session. The next read starts as a first time visitor,
+     * which costs one request and may bring back a refusal that cookies were
+     * getting past.
+     */
+    fun clearBrowsingData() {
+        cookies.clear()
+        _guestCookies.value = 0
+        _message.value = "Browsing data cleared"
+    }
+
     fun measureStorage() {
         viewModelScope.launch { _storageBytes.value = cache.sizeBytes() }
+        _guestCookies.value = cookies.count()
     }
 
     private fun applySchedule() {

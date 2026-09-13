@@ -5,9 +5,10 @@ import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.request.header
+import com.linkedout.app.core.web.GuestCookieJar
+import com.linkedout.app.core.web.GuestCookies
 import com.linkedout.app.core.web.WebSession
 import com.linkedout.app.core.web.WebSessionInterceptor
-import com.linkedout.app.core.web.WebViewCookieJar
 
 /**
  * The single HTTP client for the app.
@@ -15,9 +16,11 @@ import com.linkedout.app.core.web.WebViewCookieJar
  * expectSuccess stays false on purpose. A 429 or a 403 is information we want
  * to classify and report, not an exception thrown from deep inside a plugin.
  *
- * Cookies: the client has none of its own. For hosts the challenge WebView has
- * cleared, it reads the WebView's cookie store, and presents the WebView's
- * User-Agent. Every other host sees a cookieless client, as before.
+ * Cookies: one jar, two narrow cases. For hosts the challenge WebView has
+ * cleared, it reads the WebView's cookie store and presents the WebView's
+ * User-Agent. For [cookieDomain] it carries the guest session LinkedIn hands
+ * any anonymous visitor, which is what a browser has and this app did not.
+ * Every other host still sees a cookieless client.
  */
 object HttpClientFactory {
 
@@ -32,11 +35,16 @@ object HttpClientFactory {
      * caller supplies the one string the app speaks with, so the default and
      * the per request header can no longer disagree.
      */
-    fun create(session: WebSession, userAgent: String): HttpClient = HttpClient(OkHttp) {
+    fun create(
+        session: WebSession,
+        guest: GuestCookies,
+        userAgent: String,
+        cookieDomain: String
+    ): HttpClient = HttpClient(OkHttp) {
         expectSuccess = false
 
         engine {
-            config { cookieJar(WebViewCookieJar(session)) }
+            config { cookieJar(GuestCookieJar(session, guest, cookieDomain)) }
             addInterceptor(WebSessionInterceptor(session))
         }
         followRedirects = true

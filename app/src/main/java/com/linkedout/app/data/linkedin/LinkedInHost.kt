@@ -21,6 +21,13 @@ object LinkedInHost {
     const val BASE = "https://$HOST"
 
     /**
+     * The suffix the guest cookies are allowed on, and the only domain this
+     * app keeps a cookie for at all. LinkedIn sets `bcookie` on the bare
+     * domain, so the host alone would refuse its own session.
+     */
+    const val COOKIE_DOMAIN = "linkedin.com"
+
+    /**
      * Sent as Referer. LinkedIn serves the full page to a reader arriving from
      * a search engine and the wall to one arriving from nowhere, which is why
      * the same link opens on the second attempt after going back to the

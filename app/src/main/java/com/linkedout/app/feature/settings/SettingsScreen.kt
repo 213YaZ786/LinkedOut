@@ -59,7 +59,7 @@ import com.linkedout.app.ui.theme.TEXT_SCALES
 import com.linkedout.app.ui.theme.textScaleLabel
 import org.koin.androidx.compose.koinViewModel
 
-private enum class OpenDialog { NONE, THEME, TEXT_SIZE, KEEP, FREQUENCY, CLEAR, START_TAB }
+private enum class OpenDialog { NONE, THEME, TEXT_SIZE, KEEP, FREQUENCY, CLEAR, START_TAB, COOKIES }
 
 private val KEEP_DAYS = listOf(7, 30, 90, 365, 0)
 
@@ -84,6 +84,7 @@ fun SettingsScreen(
 ) {
     val settings by viewModel.settings.collectAsState()
     val storageBytes by viewModel.storageBytes.collectAsState()
+    val guestCookies by viewModel.guestCookies.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
 
@@ -303,6 +304,21 @@ fun SettingsScreen(
                 summary = "Frees space. The accounts you follow are kept.",
                 onClick = { dialog = OpenDialog.CLEAR }
             )
+            SettingRow(
+                title = "Browsing data",
+                summary = if (guestCookies == 0) {
+                    "None held. LinkedIn refuses some pages to a visitor it has never seen."
+                } else {
+                    "$guestCookies cookies LinkedIn set for this phone. No account, " +
+                        "no advertising identifiers, never sent anywhere else."
+                },
+                onClick = null
+            )
+            SettingRow(
+                title = "Clear browsing data",
+                summary = "Start again as a first time visitor. Some pages may stop loading.",
+                onClick = { dialog = OpenDialog.COOKIES }
+            )
         }
 
         Section("Help") {
@@ -384,6 +400,26 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearSavedPosts()
+                    dialog = OpenDialog.NONE
+                }) { Text("Clear") }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialog = OpenDialog.NONE }) { Text("Cancel") }
+            }
+        )
+        OpenDialog.COOKIES -> AlertDialog(
+            onDismissRequest = { dialog = OpenDialog.NONE },
+            title = { Text("Clear browsing data?") },
+            text = {
+                Text(
+                    "LinkedOut will visit LinkedIn as a first time visitor again. " +
+                        "LinkedIn refuses some pages to a visitor it does not recognise, " +
+                        "so an account that loads today may stop loading."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearBrowsingData()
                     dialog = OpenDialog.NONE
                 }) { Text("Clear") }
             },

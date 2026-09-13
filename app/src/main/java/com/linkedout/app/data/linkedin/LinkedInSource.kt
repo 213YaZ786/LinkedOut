@@ -11,6 +11,9 @@ import com.linkedout.app.core.model.Post
 import com.linkedout.app.core.network.ErrorMapper
 import com.linkedout.app.core.network.HostThrottle
 import com.linkedout.app.core.web.ChallengeGateway
+import com.linkedout.app.core.web.GuestCookies
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Reads linkedin.com as a logged out visitor, and gets past the wall.
@@ -24,7 +27,15 @@ import com.linkedout.app.core.web.ChallengeGateway
  * nothing but a redirect script, so the status is useless and the body decides.
  * See [LinkedInHost.isAuthWall].
  *
- * What gets past it is the Referer, and only the Referer. LinkedIn serves the
+ * Before any of that, the visit itself. A browser gets past targets this app
+ * was refused on, and the reason is not the Referer: it is that LinkedIn set
+ * `bcookie` and `lidc` on its first visit and recognises it afterwards. A
+ * client with no cookies at all is a stranger on every request, and a stranger
+ * is what some profiles answer 999 to. So the first request of a run is a warm
+ * up on the home page, and everything after it carries what that returned. See
+ * [GuestCookies] for what is kept and what is refused.
+ *
+ * What gets past the wall is the Referer, and only the Referer. LinkedIn serves the
  * full page to a reader arriving from a search engine and the wall to one
  * arriving from nowhere, which is why the same link opens on the second
  * attempt after a detour through the results. So the retry here is a short
@@ -43,6 +54,7 @@ import com.linkedout.app.core.web.ChallengeGateway
  */
 class LinkedInSource(
     private val gateway: ChallengeGateway,
+    private val cookies: GuestCookies,
     private val throttle: HostThrottle,
     private val profiles: ProfilePageParser,
     private val organisations: CompanyPageParser,
@@ -200,6 +212,7 @@ class LinkedInSource(
      * host that rate limits.
      */
     private suspend fun fetch(url: String, kind: RequestLog.Kind): Attempt {
+        warmUp()
         var wall: Attempt.Failed? = null
         for (arrival in Arrival.entries) {
             val attempt = request(url, kind, arrival) ?: return Attempt.Failed(
@@ -224,6 +237,96 @@ class LinkedInSource(
         return wall ?: Attempt.Failed(AppError.Unknown("No arrival got past the sign in wall"))
     }
 
+    /**
+     * One request on the home page, before the first read of a run, kept for
+     * its cookies.
+     *
+     * Always rather than after a refusal, and the reasoning is in the cost. A
+     * refusal is a 999, a 999 puts the host on cooldown, and the retry that
+     * would use the new cookies is then delayed by the very failure it was
+     * meant to answer. One home page request per launch is cheaper than that,
+     * and it is the order a browser does things in anyway.
+     *
+     * Never fatal. If the home page fails or sets nothing, the ladder runs as
+     * it did before and the log says the warm up was skipped, so a later 999
+     * can be read against what was actually carried.
+     */
+    private suspend fun warmUp() {
+        if (cookies.isWarm(LinkedInHost.HOST)) return
+        warmUpLock.withLock {
+            if (cookies.isWarm(LinkedInHost.HOST)) return
+            // A home page that sets nothing leaves the jar cold, and without
+            // this every read of the run would spend a request learning that
+            // again. Dropping the session resets the stamp, so a deliberate
+            // clear still warms up at once.
+            val sinceLastTry = cookies.warmedMillisAgo()
+            if (sinceLastTry != null && sinceLastTry < WARM_UP_RETRY_AFTER_MS) return
+            cookies.markWarmed()
+            val url = LinkedInHost.BASE + "/"
+            if (!throttle.acquire(LinkedInHost.HOST)) {
+                log.record(
+                    kind = RequestLog.Kind.SESSION,
+                    url = url,
+                    outcome = "warm up skipped",
+                    detail = "the host is on cooldown, reading without a guest session"
+                )
+                return
+            }
+            val started = System.currentTimeMillis()
+            val page = try {
+                // No Referer on purpose: a first visit to the home page is a
+                // typed address, and this request exists to look like one.
+                gateway.getPage(url, LinkedInHost.HOST, RequestLog.Kind.SESSION, headers(Arrival.DIRECT))
+            } catch (failure: Throwable) {
+                log.record(
+                    kind = RequestLog.Kind.SESSION,
+                    url = url,
+                    outcome = "warm up failed",
+                    detail = failure.message ?: failure::class.simpleName ?: "transport failure"
+                )
+                return
+            }
+            if (page.status == 429 || page.status == ErrorMapper.LINKEDIN_DENIED) {
+                throttle.penalise(LinkedInHost.HOST, page.retryAfterSeconds)
+            }
+            val held = cookies.names(LinkedInHost.HOST)
+            log.record(
+                kind = RequestLog.Kind.SESSION,
+                url = url,
+                outcome = if (page.status == 200) "warm up ok" else "warm up http ${page.status}",
+                httpStatus = page.status,
+                bodyBytes = page.body.length,
+                durationMillis = System.currentTimeMillis() - started,
+                detail = if (held.isEmpty()) {
+                    "LinkedIn set no cookie, still reading as a stranger"
+                } else {
+                    "guest session: " + held.joinToString(", ")
+                }
+            )
+        }
+    }
+
+    /**
+     * Drops the guest session after a refusal that came with one, so the next
+     * read starts from a fresh visit rather than repeating a set of cookies
+     * LinkedIn has already turned down.
+     *
+     * Held to once every few minutes. Without that, a target that always
+     * answers 999 would spend a home page request on every attempt, which is
+     * the four requests in four seconds already written down as a mistake.
+     */
+    private fun refuseSession(url: String) {
+        val since = cookies.warmedMillisAgo() ?: return
+        if (since < SESSION_RETRY_AFTER_MS) return
+        cookies.clear()
+        log.record(
+            kind = RequestLog.Kind.SESSION,
+            url = url,
+            outcome = "guest session dropped",
+            detail = "refused while carrying cookies, the next read warms up again"
+        )
+    }
+
     /** Null when the throttle refused to let the request out at all. */
     private suspend fun request(url: String, kind: RequestLog.Kind, arrival: Arrival): Attempt? {
         if (!throttle.acquire(LinkedInHost.HOST)) return null
@@ -242,6 +345,7 @@ class LinkedInSource(
         if (page.status == 429 || page.status == ErrorMapper.LINKEDIN_DENIED) {
             throttle.penalise(LinkedInHost.HOST, page.retryAfterSeconds)
         }
+        if (page.status == ErrorMapper.LINKEDIN_DENIED) refuseSession(url)
 
         val walled = page.status == 200 && LinkedInHost.isAuthWall(page.body)
         log.record(
@@ -255,7 +359,13 @@ class LinkedInSource(
             httpStatus = page.status,
             bodyBytes = page.body.length,
             durationMillis = System.currentTimeMillis() - started,
-            detail = "${arrival.label} | via ${page.via.name.lowercase()}"
+            detail = "${arrival.label} | via ${page.via.name.lowercase()}" +
+                cookies.names(LinkedInHost.HOST).let { held ->
+                    // Which cookies rode along, next to what came back. This
+                    // is the one reading that says whether a 999 survives a
+                    // guest session or was never about cookies at all.
+                    if (held.isEmpty()) " | no cookies" else " | cookies " + held.joinToString(",")
+                }
         )
 
         if (walled) {
@@ -311,7 +421,15 @@ class LinkedInSource(
         )
     }
 
+    private val warmUpLock = Mutex()
+
     private companion object {
+        /** How long a refused guest session is kept before it is thrown away. */
+        const val SESSION_RETRY_AFTER_MS = 3 * 60_000L
+
+        /** How long before a warm up that set no cookie is worth trying again. */
+        const val WARM_UP_RETRY_AFTER_MS = 5 * 60_000L
+
         /** Below this a 200 is the wall stub or an error page, not a page. */
         const val MIN_PAGE_BYTES = 20_000
 

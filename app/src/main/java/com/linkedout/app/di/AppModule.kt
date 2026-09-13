@@ -10,6 +10,8 @@ import com.linkedout.app.core.network.HttpClientFactory
 import com.linkedout.app.data.linkedin.LinkedInHost
 import com.linkedout.app.core.web.ChallengeGateway
 import com.linkedout.app.core.web.ChallengeSolver
+import com.linkedout.app.core.web.FileCookieStorage
+import com.linkedout.app.core.web.GuestCookies
 import com.linkedout.app.core.web.WebSession
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.cache.FeedCache
@@ -51,8 +53,17 @@ val appModule = module {
     single { LogExporter(androidContext()) }
     single { HostThrottle() }
     single { WebSession() }
+    // Created before the client, which holds the jar that writes to it.
+    single { GuestCookies(FileCookieStorage(androidContext())) }
     single { ChallengeSolver(get()) }
-    single { HttpClientFactory.create(get(), LinkedInHost.USER_AGENT) }
+    single {
+        HttpClientFactory.create(
+            session = get(),
+            guest = get(),
+            userAgent = LinkedInHost.USER_AGENT,
+            cookieDomain = LinkedInHost.COOKIE_DOMAIN
+        )
+    }
     single { ChallengeGateway(get(), get(), get(), get(), get()) }
     single { ConnectivityMonitor(androidContext()) }
     single { MediaDownloader(androidContext()) }
@@ -63,7 +74,7 @@ val appModule = module {
     single { ProfilePageParser() }
     single { CompanyPageParser() }
     single { PostPageParser() }
-    single { LinkedInSource(get(), get(), get(), get(), get(), get()) }
+    single { LinkedInSource(get(), get(), get(), get(), get(), get(), get()) }
     single { FeedRepository(get()) }
     single { VideoSources(get()) }
 
@@ -78,5 +89,5 @@ val appModule = module {
     viewModel { SearchViewModel(get()) }
     viewModel { FeedViewModel(get(), get(), get(), get()) }
     viewModel { TimelineViewModel(get(), get(), get()) }
-    viewModel { SettingsViewModel(get(), get(), get(), androidContext()) }
+    viewModel { SettingsViewModel(get(), get(), get(), get(), androidContext()) }
 }
