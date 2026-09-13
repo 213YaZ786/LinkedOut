@@ -66,9 +66,49 @@ object LinkedInHost {
     fun isAuthWall(body: String): Boolean {
         if ("content=\"auth_wall" in body) return true
         if ("rel=\"canonical\" href=\"/authwall\"" in body) return true
+        if (pageKey(body)?.let(::isWallPageKey) == true) return true
         if (body.length > 20_000) return false
         return "/authwall" in body || "sessionRedirect=" in body
     }
+
+    /**
+     * The page's own name for itself. LinkedIn reshuffles class names often
+     * and this meta rarely, which is why the organisation parser keys on it
+     * too.
+     */
+    fun pageKey(body: String): String? {
+        val marker = "name=\"pageKey\" content=\""
+        val start = body.indexOf(marker)
+        if (start < 0) return null
+        val from = start + marker.length
+        val end = body.indexOf('"', from)
+        return if (end < 0) null else body.substring(from, end)
+    }
+
+    /**
+     * The sign up page answers with a pageKey of its own, and it is not
+     * `auth_wall`. The capture that proved it reads `d_registration-cold-join`,
+     * with a canonical link pointing at the home page and sixty eight thousand
+     * characters of form, so every earlier test missed it: too large for the
+     * size guard, wrong canonical, no `auth_wall` anywhere.
+     *
+     * It arrived as a 200 with no PARSE line behind it, twice in one log,
+     * which is the signature of a body the parser was handed and found nothing
+     * in. Matched on the family rather than the exact key, because
+     * `cold-join` is one of several and they all mean the same thing.
+     */
+    private fun isWallPageKey(key: String): Boolean {
+        val lower = key.lowercase()
+        return WALL_PAGE_KEYS.any { it in lower }
+    }
+
+    /**
+     * Kept narrow on purpose. A real profile answers
+     * `d_flagship3_profile_view_base` and an organisation
+     * `d_flagship3_company`, so none of these can appear on a page worth
+     * reading, and a page wrongly called a wall costs the reader the account.
+     */
+    private val WALL_PAGE_KEYS = listOf("registration", "authwall", "auth_wall", "d_checkpoint")
 
     /** True when the body is a page this app knows how to read. */
     fun isProfilePage(body: String): Boolean = ProfilePageParser.PAGE_MARKER in body

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import com.linkedout.app.core.model.CommunityNote
 import com.linkedout.app.core.model.LinkCard
 import com.linkedout.app.core.model.MediaItem
@@ -130,19 +131,21 @@ internal fun Avatar(url: String?, name: String, size: Dp = 44.dp) {
             .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center
     ) {
-        if (url != null) {
+        // An address that is refused looks the same to the reader as an
+        // account with no picture, so both land on the silhouette rather than
+        // on an empty circle. The initial was there before and said nothing
+        // useful on a repost, where the letter belonged to whoever was quoted.
+        var failed by remember(url) { mutableStateOf(false) }
+        if (url != null && !failed) {
             AsyncImage(
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                onState = { state -> if (state is AsyncImagePainter.State.Error) failed = true },
                 modifier = Modifier.size(size)
             )
         } else {
-            Text(
-                name.take(1).uppercase(),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            AvatarGhost(size)
         }
     }
 }

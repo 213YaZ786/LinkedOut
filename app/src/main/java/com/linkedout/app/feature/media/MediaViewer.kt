@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.media
 
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.size
 import com.linkedout.app.ui.component.rememberMediaPolicy
 import androidx.compose.foundation.shape.CircleShape
@@ -106,6 +108,14 @@ fun MediaViewer(
         var zoomed by remember { mutableStateOf(false) }
         val dragY = remember { Animatable(0f) }
         val scope = rememberCoroutineScope()
+        val context = LocalContext.current
+        // The save button needs the same address the player needed, and for a
+        // video opened from a profile that address is not on the item: the
+        // profile page names the video and carries only its cover. Resolving
+        // it here rather than inside the page means the button no longer
+        // depends on whether the player happened to resolve it first.
+        val sources: VideoSources = koinInject()
+        var resolving by remember { mutableStateOf(false) }
         val fade = (1f - abs(dragY.value) / 1200f).coerceIn(0.3f, 1f)
 
         Box(
@@ -161,7 +171,35 @@ fun MediaViewer(
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = { onDownload(media[pager.currentPage]) }) {
+                IconButton(
+                    enabled = !resolving,
+                    onClick = {
+                        val item = media[pager.currentPage]
+                        if (item.playable || item.sourcePostId == null) {
+                            onDownload(item)
+                        } else {
+                            resolving = true
+                            scope.launch {
+                                // Cached for the life of the process, so a
+                                // video already watched costs no request here.
+                                val found = sources.sourceFor(item.sourcePostId)
+                                resolving = false
+                                if (found == null) {
+                                    // Saving the cover under a video's name is
+                                    // worse than saying no: it looks like it
+                                    // worked until the file is opened.
+                                    Toast.makeText(
+                                        context,
+                                        "LinkedIn did not give this video's address",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    onDownload(item.copy(downloadUrl = found, playable = true))
+                                }
+                            }
+                        }
+                    }
+                ) {
                     Icon(LinkedOutIcons.Download, contentDescription = "Save to Downloads", tint = Color.White)
                 }
             }

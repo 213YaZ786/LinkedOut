@@ -45,10 +45,17 @@ class CompanyPageParser {
 
         /**
          * The page's own identity, in a meta tag. Chosen over a class name
-         * because LinkedIn reshuffles classes far more often than page keys,
-         * and because a school and a showcase serve this same key.
+         * because LinkedIn reshuffles classes far more often than page keys.
+         *
+         * Matched as a family and not as one string, which is the correction
+         * here. A company answers `d_org_guest_company_overview`, and the
+         * comment above used to claim a school and a showcase answer the same.
+         * They do not: your showcase page came back 200 with 272 kB and left
+         * no PARSE line at all, which is this test returning null on the very
+         * first line. `org_guest` is the part they share, and it appears on no
+         * profile, post or wall.
          */
-        const val PAGE_MARKER = "d_org_guest_company_overview"
+        const val PAGE_MARKER = "d_org_guest"
 
         private const val UPDATES = "data-test-id=\"updates\""
         private const val CARD = "main-feed-activity-card\n"
@@ -75,7 +82,15 @@ class CompanyPageParser {
     }
 
     fun parse(html: String, slug: String): Feed? {
-        if (PAGE_MARKER !in html) return null
+        // Read from the pageKey meta when it can be read, so a link to an
+        // organisation inside another page cannot pass for one. The plain
+        // search is kept as a fallback rather than a preference: if LinkedIn
+        // ever writes that meta with its attributes the other way round, this
+        // parser degrades to what it did before instead of refusing every
+        // organisation at once.
+        val key = LinkedInHost.pageKey(html)
+        val recognised = if (key != null) key.startsWith(PAGE_MARKER) else PAGE_MARKER in html
+        if (!recognised) return null
         val page = html.beforeTail()
         val graph = jsonLdBlocks(page).firstOrNull().orEmpty()
         val org = graph.organisationObject()
