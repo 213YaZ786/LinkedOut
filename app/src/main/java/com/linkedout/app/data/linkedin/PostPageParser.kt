@@ -12,6 +12,7 @@ import com.linkedout.app.core.model.QuotedPost
 import com.linkedout.app.data.linkedin.Markup.attributeAfter
 import com.linkedout.app.data.linkedin.Markup.jsonLdBlocks
 import com.linkedout.app.data.linkedin.Markup.objectsOfType
+import com.linkedout.app.data.linkedin.Markup.ownKey
 import com.linkedout.app.data.linkedin.Markup.ownNumber
 import com.linkedout.app.data.linkedin.Markup.ownString
 import com.linkedout.app.data.linkedin.Markup.textAfter

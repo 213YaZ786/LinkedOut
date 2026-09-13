@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.ui.component.LocalDockPadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -210,7 +211,12 @@ private fun AccountCard(row: AccountRow, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CandidateCard(handle: String, onOpen: () -> Unit, onFollow: () -> Unit) {
+private fun CandidateCard(
+    handle: String,
+    kind: AccountKind,
+    onOpen: () -> Unit,
+    onFollow: () -> Unit
+) {
     Surface(
         onClick = onOpen,
         shape = RoundedCornerShape(20.dp),
