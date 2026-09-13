@@ -27,7 +27,7 @@ jobs:
         with:
           # AGP 9.4 refuses anything below 9.6.0. Keep this in step with
           # gradle/wrapper/gradle-wrapper.properties.
-          gradle-version: 9.6.0
+          gradle-version: 9.7.1
 
       # Pull requests never receive secrets, so they only get a debug build.
       - name: Build debug APK
