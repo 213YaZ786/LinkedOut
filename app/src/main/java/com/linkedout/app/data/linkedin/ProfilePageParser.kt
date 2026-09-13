@@ -240,7 +240,12 @@ class ProfilePageParser {
             id = id,
             authorHandle = chunk.cardAuthorHandle() ?: handle,
             authorName = chunk.cardAuthorName().orEmpty(),
-            avatarUrl = chunk.attributeAfter("hue-web-entity__image", "data-delayed-url"),
+            // url(), not attributeAfter(). This was the only address in this
+            // file read without decoding, so it kept its &amp; and reached the
+            // CDN as "?e=...&amp;v=beta&amp;t=<signature>", where the query
+            // names become amp;v and amp;t, the signature is lost and the image
+            // is refused. It looked like a missing avatar, not like a bug.
+            avatarUrl = chunk.url("hue-web-entity__image", "data-delayed-url"),
             text = text,
             links = Markup.links(chunk.commentaryHtml().orEmpty()),
             publishedAtMillis = Timestamps.fromRelative(chunk.relativeAge()),

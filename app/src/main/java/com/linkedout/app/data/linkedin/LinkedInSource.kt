@@ -6,6 +6,8 @@ import com.linkedout.app.core.debug.RequestLog
 import com.linkedout.app.core.link.LinkedInLink
 import com.linkedout.app.core.model.Conversation
 import com.linkedout.app.core.model.Feed
+import com.linkedout.app.core.model.MediaType
+import com.linkedout.app.core.model.Post
 import com.linkedout.app.core.network.ErrorMapper
 import com.linkedout.app.core.network.HostThrottle
 import com.linkedout.app.core.web.ChallengeGateway
@@ -64,7 +66,7 @@ class LinkedInSource(
                         url = url,
                         outcome = "ok",
                         bodyBytes = attempt.text.length,
-                        detail = "${feed.posts.size} posts, profile selectors ${ProfilePageParser.SELECTOR_SET_VERSION}"
+                        detail = feed.census("profile selectors ${ProfilePageParser.SELECTOR_SET_VERSION}")
                     )
                     Outcome.Success(feed)
                 }
@@ -91,7 +93,7 @@ class LinkedInSource(
                         url = url,
                         outcome = "ok",
                         bodyBytes = attempt.text.length,
-                        detail = "${feed.posts.size} posts, org selectors ${CompanyPageParser.SELECTOR_SET}"
+                        detail = feed.census("org selectors ${CompanyPageParser.SELECTOR_SET}")
                     )
                     Outcome.Success(feed)
                 }
@@ -125,12 +127,36 @@ class LinkedInSource(
                         outcome = "ok",
                         bodyBytes = attempt.text.length,
                         detail = "${conversation.replies.size} comments shown of " +
-                            "${conversation.main.stats?.replies ?: 0}, post selectors " +
-                            PostPageParser.SELECTOR_SET_VERSION
+                            "${conversation.main.stats?.replies ?: 0}, " +
+                            listOfNotNull(conversation.main).census(
+                                "post selectors ${PostPageParser.SELECTOR_SET_VERSION}"
+                            )
                     )
                     Outcome.Success(conversation)
                 }
             }
+        }
+    }
+
+    /**
+     * What the parser found, not just how much. Counting the fields that go
+     * missing one at a time, avatars and media, turns "the icon is not
+     * showing" into either "the reader found none" or "the reader found it and
+     * the screen did not draw it". Those are different bugs in different
+     * files, and the log could not tell them apart before.
+     */
+    private fun Feed.census(suffix: String): String = posts.census(suffix)
+
+    private fun List<Post>.census(suffix: String): String {
+        val media = flatMap { it.media }
+        return buildString {
+            append("$size posts")
+            append(", ${count { !it.avatarUrl.isNullOrBlank() }} avatars")
+            append(", ${count { it.text.isNotBlank() }} texts")
+            append(", ${media.size} media")
+            append(" (${media.count { it.type == MediaType.VIDEO }} video)")
+            append(", ${count { it.stats != null }} counts")
+            append(", $suffix")
         }
     }
 
@@ -167,7 +193,14 @@ class LinkedInSource(
                 )
             )
             when {
-                attempt is Attempt.Body -> return attempt
+                attempt is Attempt.Body -> {
+                    // Kept so the exact bytes the parser was given can be read
+                    // back from the Activity log. A browser's own save is not
+                    // the same document: it runs the page's script, this does
+                    // not.
+                    log.keepBody(url, attempt.text)
+                    return attempt
+                }
                 attempt is Attempt.Failed && attempt.error is AppError.AccountUnavailable -> wall = attempt
                 else -> return attempt
             }

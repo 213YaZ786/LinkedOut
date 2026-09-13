@@ -33,6 +33,26 @@ class RequestLog {
     private val _entries = MutableStateFlow<List<Entry>>(emptyList())
     val entries: StateFlow<List<Entry>> = _entries.asStateFlow()
 
+    /**
+     * The last page body the app actually received, and the address it came
+     * from. One at a time, replaced on every fetch, never written to disk
+     * unless you press Save.
+     *
+     * It exists because every parser so far was written against a page saved
+     * by a browser, and a browser runs the page's script while this app does
+     * not. When a selector finds nothing, the first question is whether the
+     * markup is absent from what arrived or whether the reader is looking in
+     * the wrong place, and nothing else can answer it.
+     */
+    private val _lastBody = MutableStateFlow<Body?>(null)
+    val lastBody: StateFlow<Body?> = _lastBody.asStateFlow()
+
+    data class Body(val url: String, val text: String)
+
+    fun keepBody(url: String, text: String) {
+        _lastBody.value = Body(url, text)
+    }
+
     fun record(entry: Entry) {
         _entries.value = (_entries.value + entry).takeLast(CAPACITY)
     }
@@ -60,6 +80,7 @@ class RequestLog {
 
     fun clear() {
         _entries.value = emptyList()
+        _lastBody.value = null
     }
 
     /** Plain text, newest last, suitable for pasting anywhere. */

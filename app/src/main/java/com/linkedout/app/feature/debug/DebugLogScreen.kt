@@ -53,6 +53,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
     val log: RequestLog = koinInject()
     val exporter: LogExporter = koinInject()
     val entries by log.entries.collectAsState()
+    val lastBody by log.lastBody.collectAsState()
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -101,6 +102,31 @@ fun DebugLogScreen(onBack: () -> Unit) {
                             .onFailure { snackbar.showSnackbar("Could not save the file") }
                     }
                 }) { Text("Save to Downloads") }
+
+                // Only offered once a page has actually arrived. Saving the
+                // page LinkedIn sent is the only way to tell a reader looking
+                // in the wrong place from markup that never arrived, since the
+                // app runs none of the page's script and a browser runs all of
+                // it.
+                lastBody?.let { body ->
+                    TextButton(onClick = {
+                        scope.launch {
+                            val name = "linkedout-page-${System.currentTimeMillis()}.html"
+                            exporter.exportText(name, body.text)
+                                .onSuccess { snackbar.showSnackbar("Saved to $it") }
+                                .onFailure { snackbar.showSnackbar("Could not save the file") }
+                        }
+                    }) { Text("Save page") }
+                }
+            }
+
+            lastBody?.let { body ->
+                Text(
+                    "Last page received: ${body.url}, ${body.text.length} characters.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
             }
 
             if (entries.isEmpty()) {
