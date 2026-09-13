@@ -70,14 +70,6 @@ class PostDetailViewModel(
         }
     }
 
-    /** Starts over from the lookup, for a link whose author X did not name the first time. */
-    fun reload() {
-        val id = loadedId ?: return
-        loadedId = null
-        _state.value = PostDetailUiState()
-        load(id, hint)
-    }
-
     fun retryThread() {
         if (_state.value.thread is ThreadState.Loading) return
         _state.value = _state.value.copy(thread = ThreadState.Loading)
@@ -93,17 +85,10 @@ class PostDetailViewModel(
 
     private suspend fun fetchThread() {
         val id = loadedId ?: return
-        val handle = _state.value.post?.authorHandle ?: hint?.takeIf { it.isNotBlank() }
-        if (handle == null) {
-            // A /feed/update/ link carries the activity id and nothing else, so
-            // a post reached that way has no author until the post page itself
-            // is read.
-            _state.value = _state.value.copy(
-                thread = ThreadState.Failed(AppError.AuthorUnknown(id, askedX = false))
-            )
-            return
-        }
-        when (val outcome = repository.loadConversation(handle, id)) {
+        // No author needed. MTGA required one because a Nitter address is built
+        // from the handle, and this refused to load every link that carried
+        // only the number. LinkedIn's /feed/update/ form takes the id alone.
+        when (val outcome = repository.loadConversation(id)) {
             is Outcome.Success -> {
                 val conversation = outcome.value
                 RecentPosts.remember(conversation)

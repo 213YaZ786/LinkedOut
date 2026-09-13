@@ -34,11 +34,16 @@
             </intent-filter>
 
             <!--
-                X links. Not autoVerify: only X can prove it owns x.com, so
-                Android lists these as unverified. They open in LinkedOut once the
-                reader enables them under Open by default, which Settings
-                links to. Paths are not filtered here, LinkRouter decides and
-                hands anything it cannot show to the browser.
+                LinkedIn links. Not autoVerify: only LinkedIn can prove it owns
+                linkedin.com, so Android lists these as unverified. They open in
+                LinkedOut once the reader enables them under Open by default,
+                which Settings links to. Paths are not filtered here, LinkRouter
+                decides and hands anything it cannot show to the browser.
+
+                "*.linkedin.com" matches every country subdomain, fr, uk, de and
+                the rest, but not the bare domain, so linkedin.com is listed on
+                its own line. lnkd.in is LinkedIn's own shortener. This is the
+                same host set LinkedInLink.isLinkedInHost accepts.
             -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -46,13 +51,9 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" />
                 <data android:scheme="http" />
-                <data android:host="x.com" />
-                <data android:host="www.x.com" />
-                <data android:host="mobile.x.com" />
-                <data android:host="twitter.com" />
-                <data android:host="www.twitter.com" />
-                <data android:host="mobile.twitter.com" />
-                <data android:host="m.twitter.com" />
+                <data android:host="linkedin.com" />
+                <data android:host="*.linkedin.com" />
+                <data android:host="lnkd.in" />
             </intent-filter>
 
             <!-- Share a link to LinkedOut from any app, no setup needed. -->

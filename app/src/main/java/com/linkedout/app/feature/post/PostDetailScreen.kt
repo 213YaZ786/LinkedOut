@@ -53,7 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.linkedout.app.core.media.MediaDownloader
 import com.linkedout.app.data.settings.SettingsStore
-import com.linkedout.app.core.link.LinkedInLink
 import com.linkedout.app.core.link.LinkRouter
 import com.linkedout.app.core.link.ShareLink
 import com.linkedout.app.core.model.Post
@@ -131,29 +130,17 @@ fun PostDetailScreen(
                 )
                 state.missing -> {
                     val error = (state.thread as? ThreadState.Failed)?.error
-                    val noAuthor = error as? AppError.AuthorUnknown
-                    if (noAuthor != null) {
-                        AuthorUnknownPanel(
-                            error = noAuthor,
-                            onOpenOnX = {
-                                LinkRouter.openOutside(context, LinkedInLink.canonical("feed/update/urn:li:activity:${noAuthor.postId}"))
-                            },
-                            onRetry = viewModel::reload,
-                            modifier = Modifier.align(Alignment.Center)
-                        )
-                    } else {
-                        Text(
-                            // The server's own reason when it gave one, a deletion or
-                            // a suspension, rather than a guess.
-                            (error as? AppError.PostUnavailable)
-                                ?.present()?.let { "${it.headline}. ${it.explanation}" }
-                                ?: "This post can't be shown. It may have been deleted, and it is not saved on this phone.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.align(Alignment.Center).padding(32.dp)
-                        )
-                    }
+                    Text(
+                        // LinkedIn's own reason when the page gave one, a deletion
+                        // or a profile gone private, rather than a guess.
+                        (error as? AppError.PostUnavailable)
+                            ?.present()?.let { "${it.headline}. ${it.explanation}" }
+                            ?: "This post can't be shown. It may have been deleted, and it is not saved on this phone.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.align(Alignment.Center).padding(32.dp)
+                    )
                 }
                 else -> CircularProgressIndicator(Modifier.align(Alignment.Center))
             }
@@ -295,7 +282,7 @@ private fun ConversationView(
                     }
                     item(key = "more") {
                         Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            TextButton(onClick = { LinkRouter.openOutside(context, xUrl(post)) }) {
+                            TextButton(onClick = { LinkRouter.openOutside(context, postUrl(post)) }) {
                                 Text("See all comments on LinkedIn")
                             }
                         }
@@ -425,7 +412,7 @@ private fun PostBody(
             HorizontalDivider()
         }
 
-        val url = xUrl(post)
+        val url = postUrl(post)
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
@@ -461,45 +448,8 @@ private fun StatsLine(stats: PostStats) {
     )
 }
 
-/** The post on x.com, which anyone can open. Falls back to the source permalink. */
-/**
- * A link with only the post number and no author LinkedOut can find. Says why,
- * and offers what actually helps: X itself, or a second try when X was asked
- * and did not answer. The fix in Settings is named in the text.
- */
-@Composable
-private fun AuthorUnknownPanel(
-    error: AppError.AuthorUnknown,
-    onOpenOnX: () -> Unit,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val presentation = error.present()
-    Column(
-        modifier = modifier.fillMaxWidth().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            presentation.headline,
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center
-        )
-        Text(
-            presentation.explanation,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        FilledTonalButton(onClick = onOpenOnX) { Text("Open on LinkedIn") }
-        if (error.retryable) {
-            TextButton(onClick = onRetry) { Text("Try again") }
-        }
-    }
-}
-
 /** The post's own address, for "Open on LinkedIn". */
-private fun xUrl(post: Post): String =
+private fun postUrl(post: Post): String =
     ShareLink.forPost(post.authorHandle, post.id, post.permalink)
 
 private fun fullDate(millis: Long): String? {

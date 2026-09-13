@@ -44,9 +44,13 @@ import org.koin.androidx.compose.koinViewModel
 
 /**
  * Accounts and search merged. One pill search bar on top: it filters the
- * accounts you follow, and when the text is a handle you do not follow yet, a
- * card offers to open that profile or follow it. Typing never follows anyone.
+ * accounts you follow, and when the text names a profile you do not follow
+ * yet, a card offers to open it or follow it. Typing never follows anyone.
  * Unfollowing happens on the profile, which keeps it away from a stray tap.
+ *
+ * LinkedIn has no @handle and no guest search by name, so the field takes the
+ * vanity name out of linkedin.com/in/<vanity> or a whole address pasted in.
+ * A line under the field says so, because nothing else in the app can.
  */
 @Composable
 fun AccountsScreen(
@@ -61,14 +65,19 @@ fun AccountsScreen(
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     val trimmed = query.trim().removePrefix("@")
-    val candidate = AccountsViewModel.asHandle(query)
+    val kind = AccountsViewModel.classify(query)
+    val candidate = (kind as? QueryKind.Profile)?.handle
     val alreadyFollowed = candidate != null &&
         rows.any { it.handle.equals(candidate, ignoreCase = true) }
+    // A pasted address is matched on the vanity it resolves to, otherwise
+    // someone you already follow would vanish from the list the moment you
+    // paste their link.
+    val needle = candidate ?: trimmed
     val visible = if (trimmed.isEmpty()) {
         rows
     } else {
         rows.filter {
-            it.handle.contains(trimmed, ignoreCase = true) ||
+            it.handle.contains(needle, ignoreCase = true) ||
                 it.name?.contains(trimmed, ignoreCase = true) == true
         }
     }
@@ -98,7 +107,7 @@ fun AccountsScreen(
             onValueChange = { query = it },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
-            placeholder = { Text("Search or open a handle") },
+            placeholder = { Text("Name in the address, or paste a profile link") },
             leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -138,9 +147,11 @@ fun AccountsScreen(
                         onFollow = { viewModel.follow(candidate) }
                     )
                 }
-            } else if (trimmed.isNotEmpty() && candidate == null && visible.isEmpty()) {
-                item(key = "invalid") {
-                    Hint("No match. A handle is letters, digits and underscores, 15 at most.")
+            } else if (visible.isEmpty()) {
+                // Each reason gets its own line. "No match" alone would leave
+                // the reader guessing at a field that has no guessable rule.
+                explain(kind)?.let { message ->
+                    item(key = "explain") { Hint(message) }
                 }
             }
 
@@ -171,14 +182,14 @@ private fun AccountCard(row: AccountRow, onClick: () -> Unit) {
             Avatar(url = row.avatarUrl, name = row.name ?: row.handle, size = 44.dp)
             Column(Modifier.weight(1f)) {
                 Text(
-                    row.name ?: "@${row.handle}",
+                    row.name ?: row.handle,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 if (row.name != null) {
                     Text(
-                        "@${row.handle}",
+                        "in/${row.handle}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -211,14 +222,14 @@ private fun CandidateCard(handle: String, onOpen: () -> Unit, onFollow: () -> Un
             Avatar(url = null, name = handle, size = 44.dp)
             Column(Modifier.weight(1f)) {
                 Text(
-                    "@$handle",
+                    handle,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "Tap to read the profile",
+                    "linkedin.com/in/$handle, tap to read",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
@@ -226,6 +237,22 @@ private fun CandidateCard(handle: String, onOpen: () -> Unit, onFollow: () -> Un
             FilledTonalButton(onClick = onFollow) { Text("Follow") }
         }
     }
+}
+
+/**
+ * The line under an empty result. Null when there is nothing useful to say,
+ * which is the case for a filter that simply matched none of the accounts.
+ */
+private fun explain(kind: QueryKind): String? = when (kind) {
+    is QueryKind.Profile -> null
+    QueryKind.Blank -> null
+    QueryKind.Company -> "That is a company page. LinkedOut reads people for now."
+    QueryKind.PostLink -> "That is a link to one post. Tap it outside the app to open it here."
+    QueryKind.ShortLink -> "A lnkd.in link hides where it goes. Open it once in a browser, " +
+        "then paste the address it lands on."
+    QueryKind.Unusable -> "No match, and that is not a profile address. LinkedIn has no " +
+        "searchable handle, so use the part after /in/ in the address, or paste the address " +
+        "itself. A person's name will not work."
 }
 
 @Composable
@@ -254,9 +281,10 @@ private fun EmptyState() {
         )
         Text("No accounts yet", style = MaterialTheme.typography.titleLarge)
         Text(
-            "Type a handle above to read a profile, then follow it to build your timeline. " +
-                "Handles stay on this device and are never sent anywhere except to the server " +
-                "that serves the feed.",
+            "LinkedIn has no @handle. Open a profile in a browser and paste its address " +
+                "above, or type just the part after /in/. Reading it once is enough to " +
+                "follow it and build your timeline. Who you follow stays on this phone and " +
+                "is never sent anywhere but to linkedin.com itself.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center

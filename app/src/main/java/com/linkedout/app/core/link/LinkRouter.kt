@@ -1,8 +1,10 @@
 package com.linkedout.app.core.link
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.linkedout.app.MainActivity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,13 +58,28 @@ class LinkRouter(private val context: Context) {
          * this app has no screen for, a job or a group, and for every link a
          * post points at.
          *
+         * LinkedOut now claims linkedin.com itself, so a plain ACTION_VIEW on a
+         * job link can come straight back to this activity, which hands it out
+         * again, forever. For LinkedIn addresses the chooser is used with this
+         * activity excluded, which breaks the loop and still lets the reader
+         * pick the LinkedIn app if they have it. Other hosts open as before,
+         * with no chooser in the way.
+         *
          * Wrapped because a phone with no browser at all throws, and losing a
          * tap is better than losing the app.
          */
         fun openOutside(context: Context, url: String) {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            runCatching { context.startActivity(intent) }
+            val view = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            val host = runCatching { Uri.parse(url).host }.getOrNull().orEmpty()
+            val intent = if (LinkedInLink.isLinkedInHost(host)) {
+                Intent.createChooser(view, null).putExtra(
+                    Intent.EXTRA_EXCLUDE_COMPONENTS,
+                    arrayOf(ComponentName(context, MainActivity::class.java))
+                )
+            } else {
+                view
+            }
+            runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         }
     }
 }

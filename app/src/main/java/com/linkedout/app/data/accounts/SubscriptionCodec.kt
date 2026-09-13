@@ -97,7 +97,10 @@ object SubscriptionCodec {
             .mapNotNull { token ->
                 when (val link = LinkedInLink.parse(token)) {
                     is LinkedInLink.Profile -> link.handle
-                    is LinkedInLink.Company -> link.slug
+                    // Dropped, not kept as a person. A company slug looks like
+                    // a vanity name, so importing it would add a follow that
+                    // can never load, with no way for the reader to tell why.
+                    is LinkedInLink.Company -> null
                     is LinkedInLink.Post -> link.handle
                     null -> if (token.contains("://")) null else token
                 }

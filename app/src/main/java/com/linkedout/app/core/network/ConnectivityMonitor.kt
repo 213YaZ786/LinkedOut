@@ -11,8 +11,9 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Answers two questions about the device's network.
  *
- * Is there a usable transport at all. Asked before blaming an instance, so
- * "you are offline" and "xcancel is down" never get confused with each other.
+ * Is there a usable transport at all. Asked before blaming the host, so
+ * "you are offline" and "linkedin.com is not answering" never get confused
+ * with each other.
  *
  * Is it metered. Live, for "media on Wi-Fi only". Metered rather than
  * "not Wi-Fi", because that is what the reader means: a phone hotspot is Wi-Fi

@@ -45,8 +45,7 @@ fun ErrorPanel(
             )
             when (presentation.action) {
                 ErrorAction.RETRY -> TextButton(onClick = onRetry) { Text("Try again") }
-                ErrorAction.OPEN_DIAGNOSTICS,
-                ErrorAction.CHANGE_INSTANCE -> TextButton(onClick = onOpenDiagnostics) {
+                ErrorAction.OPEN_CONNECTION -> TextButton(onClick = onOpenDiagnostics) {
                     Text("Check connection")
                 }
                 ErrorAction.OPEN_FALLBACK_VIEWER -> {

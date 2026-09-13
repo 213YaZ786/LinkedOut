@@ -22,8 +22,8 @@ android {
         applicationId = "com.linkedout.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.3.1"
+        versionCode = 12
+        versionName = "0.3.9"
     }
 
     signingConfigs {
@@ -49,6 +49,7 @@ android {
             if (providers.gradleProperty("linkedout.storeFile").isPresent) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            // Both off, and they stay off. R8 broke this app once already.
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(

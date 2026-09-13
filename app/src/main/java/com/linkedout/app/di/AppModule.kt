@@ -7,6 +7,7 @@ import com.linkedout.app.core.media.MediaDownloader
 import com.linkedout.app.core.network.ConnectivityMonitor
 import com.linkedout.app.core.network.HostThrottle
 import com.linkedout.app.core.network.HttpClientFactory
+import com.linkedout.app.data.linkedin.LinkedInHost
 import com.linkedout.app.core.web.ChallengeGateway
 import com.linkedout.app.core.web.ChallengeSolver
 import com.linkedout.app.core.web.WebSession
@@ -49,7 +50,7 @@ val appModule = module {
     single { HostThrottle() }
     single { WebSession() }
     single { ChallengeSolver(get()) }
-    single { HttpClientFactory.create(get()) }
+    single { HttpClientFactory.create(get(), LinkedInHost.USER_AGENT) }
     single { ChallengeGateway(get(), get(), get(), get(), get()) }
     single { ConnectivityMonitor(androidContext()) }
     single { MediaDownloader(androidContext()) }

@@ -29,13 +29,12 @@ class FeedRepository(private val linkedin: LinkedInSource) {
     /**
      * A post and the comments a guest is shown.
      *
-     * [handle] is accepted and unused. Knowing the author is not enough to
-     * rebuild the long /posts/ address, which needs the post's own word slug,
-     * and a handmade one does not resolve. The short /feed/update/ form does,
-     * so that is what is asked for.
+     * The author is not a parameter and must not become one. Knowing it is not
+     * enough to rebuild the long /posts/ address, which needs the post's own
+     * word slug, and a handmade one does not resolve. The short /feed/update/
+     * form does, and it needs only the id.
      */
-    @Suppress("UNUSED_PARAMETER")
-    suspend fun loadConversation(handle: String, id: String): Outcome<Conversation> =
+    suspend fun loadConversation(id: String): Outcome<Conversation> =
         linkedin.fetchPost(id, permalink = null)
 
     /**

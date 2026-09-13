@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    The themed icon layer. Android 13 and later hand this to the launcher,
+    draw their own background from the wallpaper and tint these strokes to
+    match, which is the Material You look. The colour below is therefore
+    replaced at draw time: only the shape and its opacity matter.
+
+    Same glyph and same 0.73 scale as the foreground, deliberately. That scale
+    puts the far edge of the "o" at the very rim of the 66 of 108 safe circle,
+    so a round or a themed mask clips nothing.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"

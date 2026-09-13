@@ -3,6 +3,10 @@ package com.linkedout.app.core.common
 /**
  * Turns an AppError into something a human reads, plus the action that
  * actually helps. Kept out of the UI so it can be unit tested and localised.
+ *
+ * Every text here assumes one host. There is no pool to fall back to and no
+ * volunteer running a server, so nothing promises that LinkedOut will try
+ * somewhere else: it cannot.
  */
 data class ErrorPresentation(
     val headline: String,
@@ -10,7 +14,15 @@ data class ErrorPresentation(
     val action: ErrorAction
 )
 
-enum class ErrorAction { RETRY, OPEN_DIAGNOSTICS, CHANGE_INSTANCE, OPEN_FALLBACK_VIEWER, NONE }
+enum class ErrorAction { RETRY, OPEN_CONNECTION, OPEN_FALLBACK_VIEWER, NONE }
+
+/**
+ * A vanity name fit to print, or null. Blank when a post page hit the wall and
+ * no profile was involved, and a host name when the mapper had nothing better
+ * to pass, which is why the dot is tested.
+ */
+private fun named(handle: String): String? =
+    handle.takeIf { it.isNotBlank() && !it.contains('.') }
 
 fun AppError.present(): ErrorPresentation = when (this) {
     AppError.Offline -> ErrorPresentation(
@@ -21,34 +33,37 @@ fun AppError.present(): ErrorPresentation = when (this) {
 
     is AppError.DnsFailure -> ErrorPresentation(
         headline = "Can't reach $host",
-        explanation = "This server can't be found from your network right now. LinkedOut uses the other servers meanwhile.",
-        action = ErrorAction.CHANGE_INSTANCE
+        explanation = "The name does not resolve from this network. A work or school " +
+            "connection, or a filter on the phone, can do that.",
+        action = ErrorAction.OPEN_CONNECTION
     )
 
     is AppError.TlsFailure -> ErrorPresentation(
         headline = "Connection to $host is not secure",
         explanation = "The connection could not be verified, so LinkedOut stopped rather than take a risk. " +
             "This can happen on public or work Wi-Fi.",
-        action = ErrorAction.OPEN_DIAGNOSTICS
+        action = ErrorAction.OPEN_CONNECTION
     )
 
     is AppError.Timeout -> ErrorPresentation(
         headline = "$host is too slow",
-        explanation = "It did not answer within ${millis / 1000} seconds, probably because it is busy. Try again in a moment.",
+        explanation = "It did not answer within ${millis / 1000} seconds. Try again in a moment.",
         action = ErrorAction.RETRY
     )
 
     is AppError.ClientRefused -> ErrorPresentation(
         headline = "$host turned LinkedOut away",
-        explanation = "This server is refusing requests right now. LinkedOut uses the other servers meanwhile.",
-        action = ErrorAction.CHANGE_INSTANCE
+        explanation = "LinkedIn refused the request, which it does to readers with no account. " +
+            "Waiting a while is the only thing that helps.",
+        action = ErrorAction.OPEN_CONNECTION
     )
 
     is AppError.ChallengeRequired -> when (kind) {
         ChallengeKind.WAF_BLOCK -> ErrorPresentation(
             headline = "$host is blocking LinkedOut",
-            explanation = "There is nothing to do on your side. LinkedOut uses the other servers meanwhile.",
-            action = ErrorAction.CHANGE_INSTANCE
+            explanation = "The request was stopped before the page. There is nothing to do on your " +
+                "side except try later.",
+            action = ErrorAction.OPEN_CONNECTION
         )
         else -> ErrorPresentation(
             headline = "$host asks for a quick check",
@@ -65,63 +80,40 @@ fun AppError.present(): ErrorPresentation = when (this) {
         action = ErrorAction.RETRY
     )
 
-    is AppError.InstanceError -> ErrorPresentation(
+    is AppError.ServerError -> ErrorPresentation(
         headline = "$host has a problem",
-        explanation = "The server itself failed, not your phone or your connection. Try again later.",
+        explanation = "LinkedIn itself failed, not your phone or your connection. Try again later.",
         action = ErrorAction.RETRY
     )
 
-    is AppError.NoHealthyInstance -> ErrorPresentation(
-        headline = "No server available right now",
-        explanation = "LinkedOut tried ${tried.size} server(s) and none answered. They are run by volunteers " +
-            "and sometimes go offline. Saved posts are still readable.",
-        action = ErrorAction.OPEN_DIAGNOSTICS
-    )
-
     is AppError.AccountNotFound -> ErrorPresentation(
-        headline = "@$handle doesn't exist",
-        explanation = "Check the spelling. The account may also have been renamed or deleted.",
+        // The mapper falls back to the host when a 404 arrives with no handle
+        // in hand, and a host has a dot in it, so "No profile at
+        // in/www.linkedin.com" is what a naive template would print.
+        headline = named(handle)?.let { "No profile at in/$it" } ?: "That page does not exist",
+        explanation = "Check the address. The part after /in/ has to match exactly, hyphens and " +
+            "trailing characters included. The profile may also have been renamed or deleted.",
         action = ErrorAction.NONE
     )
 
     is AppError.AccountUnavailable -> ErrorPresentation(
-        headline = "Can't show @$handle",
-        explanation = reason ?: "This account is private or suspended, so its posts are not public.",
+        headline = named(handle)?.let { "Can't show in/$it" } ?: "Can't show this page",
+        explanation = reason ?: "This profile shows nothing to a reader without an account.",
         action = ErrorAction.NONE
     )
 
     is AppError.PostUnavailable -> ErrorPresentation(
         headline = "This post can't be shown",
         explanation = reason?.let { "$host says: $it" }
-            ?: "It may have been deleted, or its account made private or suspended.",
+            ?: "It may have been deleted, or its author may have made the profile private.",
         action = ErrorAction.NONE
-    )
-
-    is AppError.AuthorUnknown -> ErrorPresentation(
-        headline = "This link doesn't name the author",
-        explanation = if (askedX) {
-            "It only carries the post number, and the servers LinkedOut reads need the author's name. " +
-                "X was asked for it but did not answer. Try again later, or open the post on X."
-        } else {
-            "It only carries the post number, and the servers LinkedOut reads need the author's name. " +
-                "Turn on \"Newest posts from X\" in Settings, Reading, so X can name the author, " +
-                "or open the post on X."
-        },
-        action = if (askedX) ErrorAction.RETRY else ErrorAction.NONE
     )
 
     is AppError.ParseFailure -> ErrorPresentation(
         headline = "This page can't be read",
-        explanation = "$host changed its layout and LinkedOut can't read it yet. An app update will fix it. " +
-            "Other servers may still work.",
-        action = ErrorAction.OPEN_DIAGNOSTICS
-    )
-
-    is AppError.FeedGated -> ErrorPresentation(
-        headline = "$host limits access",
-        explanation = "Its fast feed is reserved for approved apps. LinkedOut reads its normal pages instead, " +
-            "so there is nothing to do.",
-        action = ErrorAction.NONE
+        explanation = "$host changed its layout and LinkedOut can't read it yet, with selector " +
+            "set $selectorSetVersion. An app update will fix it.",
+        action = ErrorAction.OPEN_CONNECTION
     )
 
     is AppError.StorageFailure -> ErrorPresentation(
@@ -133,6 +125,6 @@ fun AppError.present(): ErrorPresentation = when (this) {
     is AppError.Unknown -> ErrorPresentation(
         headline = "Something went wrong",
         explanation = "LinkedOut ran into something unexpected. The Activity log in Settings has details you can share.",
-        action = ErrorAction.OPEN_DIAGNOSTICS
+        action = ErrorAction.OPEN_CONNECTION
     )
 }

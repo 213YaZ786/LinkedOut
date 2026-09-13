@@ -17,8 +17,6 @@ enum class StartTab { HOME, ACCOUNTS, LAST }
 
 @Serializable
 data class Settings(
-    /** Read the newest posts straight from x.com. Accurate, but X sees you. */
-    val useXcomDirect: Boolean = true,
     /** Poll followed accounts in the background so history accumulates. */
     val backgroundSync: Boolean = false,
     val syncIntervalMinutes: Int = 60,
@@ -54,20 +52,9 @@ data class Settings(
     val mediaOnWifiOnly: Boolean = false,
     /** Saved posts older than this many days are dropped. 0 keeps everything. */
     val keepPostsDays: Int = 0,
-    /**
-     * twstalker as the last fallback. Off by default: it shows ads and runs
-     * analytics, so it learns which accounts are read. The person decides.
-     */
-    val useTwstalker: Boolean = false,
     val startTab: StartTab = StartTab.HOME,
     /** Index of the tab shown last, for StartTab.LAST. Recorded on every switch. */
     val lastTab: Int = 0,
-    /**
-     * Share and copy post links on the first enabled Nitter server instead of
-     * x.com, so the person receiving it can read without X. "Open on X" still
-     * opens X.
-     */
-    val shareAsNitter: Boolean = false,
     /**
      * The first launch guide was closed. It is only offered when nothing is
      * followed yet, so an update never shows it to someone already set up.
@@ -78,6 +65,10 @@ data class Settings(
 /**
  * Small preference file, same plain JSON approach as the rest of LinkedOut's
  * storage. Nothing here is a secret, and none of it leaves the device.
+ *
+ * Fields removed from [Settings] do not break an existing file: the reader is
+ * built with ignoreUnknownKeys, so a settings.json written by an older build
+ * still loads and the dropped keys are simply forgotten on the next write.
  */
 class SettingsStore(context: Context) {
 

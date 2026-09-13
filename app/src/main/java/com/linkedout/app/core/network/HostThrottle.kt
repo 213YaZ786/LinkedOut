@@ -7,11 +7,11 @@ import kotlinx.coroutines.sync.withLock
 /**
  * Paces every request LinkedOut makes, per host.
  *
- * The instances that survive are small volunteer servers under legal pressure,
- * and they rate limit hard. Evidence from the request log: page one of a
- * profile succeeded, page two three seconds later returned 429, and the retry
- * loop then made it worse. The scarce resource is not bandwidth, it is the
- * host's patience.
+ * LinkedIn rate limits readers with no account hard, and a guest has no way to
+ * ask for more. Evidence from MTGA's request log, where the shape of the
+ * failure was the same: one page succeeded, the next three seconds later
+ * returned 429, and the retry loop then made it worse. The scarce resource is
+ * not bandwidth, it is the host's patience.
  *
  * Two rules. A minimum gap between consecutive requests to the same host, and a
  * hard cooldown whenever that host answers 429, honouring Retry-After when it
@@ -67,7 +67,7 @@ class HostThrottle {
         ((cooldownUntil[host] ?: 0L) - System.currentTimeMillis()).coerceAtLeast(0L)
 
     private companion object {
-        /** Roughly one request per second per host, which no instance objects to. */
+        /** Roughly one request per second, the pace a person reading would set. */
         const val MIN_INTERVAL_MS = 1_100L
         const val DEFAULT_COOLDOWN_MS = 60_000L
         const val MAX_COOLDOWN_MS = 15 * 60_000L

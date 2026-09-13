@@ -20,7 +20,7 @@ object ErrorMapper {
         is SSLException -> AppError.TlsFailure(host, t.message)
         is HttpRequestTimeoutException -> AppError.Timeout(host, HttpClientFactory.REQUEST_TIMEOUT_MS)
         is SocketTimeoutException -> AppError.Timeout(host, HttpClientFactory.REQUEST_TIMEOUT_MS)
-        is ConnectException -> AppError.InstanceError(host, 0)
+        is ConnectException -> AppError.ServerError(host, 0)
         else -> AppError.Unknown("${t::class.java.simpleName}: ${t.message}")
     }
 
@@ -67,7 +67,7 @@ object ErrorMapper {
 
         if (code == 403 || code == 401 || code == 406) return AppError.ClientRefused(host, code)
         if (code == 404 || code == 410) return AppError.AccountNotFound(handle ?: host)
-        if (code >= 500) return AppError.InstanceError(host, code)
+        if (code >= 500) return AppError.ServerError(host, code)
         if (code >= 400) return AppError.ClientRefused(host, code)
         return null
     }

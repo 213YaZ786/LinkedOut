@@ -130,11 +130,7 @@ class SettingsViewModel(
 
     fun setStartMuted(enabled: Boolean) = store.update { it.copy(startMuted = enabled) }
 
-    fun setXcomDirect(enabled: Boolean) = store.update { it.copy(useXcomDirect = enabled) }
-
     fun setStartTab(tab: StartTab) = store.update { it.copy(startTab = tab) }
-
-    fun setShareAsNitter(enabled: Boolean) = store.update { it.copy(shareAsNitter = enabled) }
 
     fun setBackgroundSync(enabled: Boolean) {
         store.update { it.copy(backgroundSync = enabled) }

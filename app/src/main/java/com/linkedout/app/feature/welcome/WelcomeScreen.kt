@@ -44,7 +44,7 @@ private data class WelcomePage(
     val title: String,
     val intro: String,
     val points: List<String>,
-    /** Shows "x.com/nytimes" with the handle picked out. */
+    /** Shows a profile address with the part LinkedOut needs picked out. */
     val showLinkExample: Boolean = false
 )
 
@@ -52,38 +52,40 @@ private val PAGES = listOf(
     WelcomePage(
         icon = LinkedOutIcons.Home,
         title = "Welcome to LinkedOut",
-        intro = "Read public posts from X with no account, no tracking and no ads.",
+        intro = "Read public LinkedIn posts with no account, no tracking and no ads.",
         points = listOf(
-            "You choose the accounts to follow. The list stays on this device.",
+            "You choose who to follow. The list stays on this device.",
             "Home gathers their newest posts in one timeline."
         )
     ),
     WelcomePage(
         icon = LinkedOutIcons.Person,
-        title = "Find a handle",
-        intro = "Every X account has a handle, the name written after the @. For example @nytimes.",
+        title = "Find a profile address",
+        intro = "LinkedIn has no @handle. A person is named by the last part of " +
+            "their profile address, after /in/.",
         points = listOf(
-            "On a profile, it sits right under the display name.",
-            "In a profile link, it comes right after x.com/ as below.",
-            "It is made of letters, digits and underscores, 15 at most."
+            "Open the profile in a browser or in the LinkedIn app. The address is at the top.",
+            "LinkedOut wants the part in colour below. Pasting the whole address works too.",
+            "A person's name will not do: searching LinkedIn by name needs an account."
         ),
         showLinkExample = true
     ),
     WelcomePage(
         icon = LinkedOutIcons.Search,
-        title = "Follow an account",
-        intro = "Three ways to add someone.",
+        title = "Follow someone",
+        intro = "Two ways to add a person.",
         points = listOf(
-            "In Accounts, type the handle or paste the profile link in the search bar, then tap Follow.",
-            "In the X app or a browser, share a profile to LinkedOut. It opens here, then tap Follow.",
-            "Coming from Fritter or Squawker? Import your list in Settings, under Data."
+            "In Accounts, paste the address or type the part after /in/, then tap Follow.",
+            "From the LinkedIn app or a browser, share a profile to LinkedOut, then tap Follow.",
+            "People only for now. Company and school pages are not read yet."
         )
     )
 )
 
 /**
  * A short guide shown on first launch, and again from Settings. Three pages:
- * what LinkedOut is, what a handle is and where to find one, and how to follow.
+ * what LinkedOut is, where a profile address is and which part of it counts,
+ * and how to follow.
  *
  * [onFinish] receives true when the reader asks to go to Accounts.
  */
@@ -174,8 +176,11 @@ private fun LinkExample() {
     ) {
         Text(
             buildAnnotatedString {
-                append("https://x.com/")
-                withStyle(handleStyle) { append("nytimes") }
+                append("linkedin.com/in/")
+                // Invented on purpose. LinkedIn adds a few characters to a name
+                // already taken, so real addresses often end like this, and a
+                // reader who sees only "jane-doe" would think theirs is wrong.
+                withStyle(handleStyle) { append("jane-doe-5b19a2") }
             },
             style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)

@@ -1,17 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Status bar icon for notifications. Android draws it as a white mask, so
-     only the shape matters: the launcher glyph, cropped to its own bounds. -->
+<!--
+    Status bar icon for notifications. Android draws it as a white mask, so
+    only the shape and its opacity matter. Same glyph as the launcher, without
+    the adaptive safe zone scaling: the bounds already sit at 43..468 of 512
+    on both axes about the centre, which is the padding a status bar icon
+    wants.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="60"
-    android:viewportHeight="60">
-    <group
-        android:translateX="-24"
-        android:translateY="-27">
-        <path
-            android:fillColor="#FFFFFFFF"
-            android:fillType="evenOdd"
-            android:pathData="M40,30 H68 A14,14 0 0 1 82,44 V60 A14,14 0 0 1 68,74 H50 L37,84 L39,74 A13,13 0 0 1 26,61 V44 A14,14 0 0 1 40,30 Z M71,35 C62,37 52,45 48.5,57.5 L41.2,66.8 L43.2,68.4 L50.8,60.2 C57,59.5 61.5,56.5 63.5,52.8 L58.5,52.6 L65.2,49.6 C68.5,45 70.5,40 71,35 Z" />
-    </group>
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:pathData="M60,279 a56,56 0 1,0 112,0 a56,56 0 1,0 -112,0"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="34"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M224,223 V286 A49,49 0 0,0 322,286 V223"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="34"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M414,177 V298 A37,37 0 0,0 451,335"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="34"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M378,223 H448"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="34"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
 </vector>

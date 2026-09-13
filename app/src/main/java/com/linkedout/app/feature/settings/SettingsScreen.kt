@@ -89,9 +89,9 @@ fun SettingsScreen(
     val uriHandler = LocalUriHandler.current
 
     // Changed in system settings, so read again each time the screen returns.
-    var xLinksOn by remember { mutableStateOf(xLinksEnabled(context)) }
+    var linkedInLinksOn by remember { mutableStateOf(linkedInLinksEnabled(context)) }
     LifecycleResumeEffect(Unit) {
-        xLinksOn = xLinksEnabled(context)
+        linkedInLinksOn = linkedInLinksEnabled(context)
         onPauseOrDispose { }
     }
     var dialog by remember { mutableStateOf(OpenDialog.NONE) }
@@ -107,7 +107,7 @@ fun SettingsScreen(
     ) { uri -> uri?.let(viewModel::importAccounts) }
 
     // Notifications can be blocked in Android at any time, so this is read
-    // again whenever the screen comes back, like the X links state.
+    // again whenever the screen comes back, like the LinkedIn links state.
     val notifier = remember { NewPostNotifier(context) }
     var notificationsAllowed by remember { mutableStateOf(notifier.canNotify()) }
     LifecycleResumeEffect(Unit) {
@@ -227,29 +227,15 @@ fun SettingsScreen(
                 summary = startTabLabel(settings.startTab),
                 onClick = { dialog = OpenDialog.START_TAB }
             )
-            SwitchRow(
-                title = "Newest posts from X",
-                summary = "Shows an account's latest posts faster and more reliably. " +
-                    "X can see your IP address while this is on.",
-                checked = settings.useXcomDirect,
-                onChange = viewModel::setXcomDirect
-            )
             SettingRow(
-                title = "Open X links in LinkedOut",
-                summary = if (xLinksOn) {
-                    "On. x.com and twitter.com links open here."
+                title = "Open LinkedIn links in LinkedOut",
+                summary = if (linkedInLinksOn) {
+                    "On. linkedin.com and lnkd.in links open here."
                 } else {
-                    "Off. Turn on \"Open supported links\" and add the x.com and " +
-                        "twitter.com links. Sharing a link to LinkedOut works either way."
+                    "Off. Turn on \"Open supported links\" and add the linkedin.com " +
+                        "links. Sharing a link to LinkedOut works either way."
                 },
                 onClick = { openLinkSettings(context) }
-            )
-            SwitchRow(
-                title = "Share links as Nitter",
-                summary = "Share and Copy link use your first enabled server instead of x.com, " +
-                    "so the link opens without X. \"Open on X\" still opens X.",
-                checked = settings.shareAsNitter,
-                onChange = viewModel::setShareAsNitter
             )
         }
 
@@ -298,12 +284,12 @@ fun SettingsScreen(
             )
             SettingRow(
                 title = "Export accounts",
-                summary = "Save the accounts you follow to a file. Fritter and Squawker can read it.",
+                summary = "Save the accounts you follow to a file, to keep or to move to another phone.",
                 onClick = { exporter.launch("linkedout-accounts.json") }
             )
             SettingRow(
                 title = "Import accounts",
-                summary = "From an LinkedOut, Fritter or Squawker export, or a text file of handles.",
+                summary = "From a LinkedOut export, or a text file of profile addresses, one per line.",
                 onClick = { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
             )
             SettingRow(
@@ -323,12 +309,12 @@ fun SettingsScreen(
         Section("Help") {
             SettingRow(
                 title = "Review the tutorial",
-                summary = "Where to find a handle, and the ways to follow an account.",
+                summary = "Where a profile address is, and the ways to follow someone.",
                 onClick = onOpenWelcome
             )
             SettingRow(
                 title = "Connection check",
-                summary = "See which servers answer right now, and why something does not load.",
+                summary = "How LinkedOut is reaching linkedin.com, and why something does not load.",
                 onClick = onOpenDiagnostics
             )
             SettingRow(
@@ -341,7 +327,7 @@ fun SettingsScreen(
         Section("About") {
             SettingRow(
                 title = "LinkedOut ${BuildConfig.VERSION_NAME}",
-                summary = "Read public X posts with no account, no tracking and no ads.",
+                summary = "Read public LinkedIn posts with no account, no tracking and no ads.",
                 onClick = null
             )
             SettingRow(
@@ -350,8 +336,8 @@ fun SettingsScreen(
                 onClick = { uriHandler.openUri("https://github.com/213YaZ786/LinkedOut") }
             )
             SettingRow(
-                title = "Thanks",
-                summary = "Made possible by Nitter and the people who run its servers.",
+                title = "Reads",
+                summary = "One host, www.linkedin.com, as a guest. No account, no API key.",
                 onClick = null
             )
         }
@@ -532,14 +518,22 @@ private fun intervalLabel(minutes: Int): String = when {
  * reader, since only X could verify the domain, so this reads the reader's
  * choice rather than a verification.
  */
-private fun xLinksEnabled(context: Context): Boolean {
+/**
+ * True when the reader has allowed LinkedOut to open LinkedIn links. The keys
+ * of hostToStateMap are the hosts the manifest declares, wildcard included, so
+ * this asks for the exact strings written there and not for a concrete
+ * subdomain like www.linkedin.com, which would never be a key.
+ */
+private fun linkedInLinksEnabled(context: Context): Boolean {
     val manager = context.getSystemService(DomainVerificationManager::class.java) ?: return false
     val state = runCatching { manager.getDomainVerificationUserState(context.packageName) }
         .getOrNull() ?: return false
     if (!state.isLinkHandlingAllowed) return false
-    val xState = state.hostToStateMap["x.com"]
-    return xState == DomainVerificationUserState.DOMAIN_STATE_SELECTED ||
-        xState == DomainVerificationUserState.DOMAIN_STATE_VERIFIED
+    return listOf("linkedin.com", "*.linkedin.com", "lnkd.in").any { host ->
+        val hostState = state.hostToStateMap[host]
+        hostState == DomainVerificationUserState.DOMAIN_STATE_SELECTED ||
+            hostState == DomainVerificationUserState.DOMAIN_STATE_VERIFIED
+    }
 }
 
 /** The system screen where supported links are switched on for this app. */
