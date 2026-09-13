@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.core.media.MediaDownloader
 import com.linkedout.app.data.settings.SettingsStore
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Feed
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
@@ -68,6 +69,7 @@ import com.linkedout.app.ui.component.relativeTime
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import androidx.compose.foundation.layout.WindowInsets
 
 /**
  * One account: a centred profile header, then its posts.
@@ -80,8 +82,8 @@ import org.koin.compose.koinInject
 @Composable
 fun FeedScreen(
     handle: String,
+    kind: AccountKind = AccountKind.PERSON,
     onBack: () -> Unit,
-    onOpenDiagnostics: () -> Unit,
     onOpenPost: (Post) -> Unit,
     viewModel: FeedViewModel = koinViewModel()
 ) {
@@ -108,7 +110,7 @@ fun FeedScreen(
         )
     }
 
-    LaunchedEffect(handle) { viewModel.load(handle) }
+    LaunchedEffect(handle, kind) { viewModel.load(handle, kind) }
 
     val tab = state.tab
     val tabFeed = state.tabFeed(tab)
@@ -128,8 +130,14 @@ fun FeedScreen(
     }
 
     Scaffold(
+        // The NavHost's own Scaffold already stands clear of the status and
+        // navigation bars. A nested Scaffold applies them a second time, and a
+        // TopAppBar a third, which is where the empty band above and below the
+        // content came from. Insets are owned once, up there.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = {
                     if (headerGone) {
                         Text(name ?: "@$handle", maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -198,7 +206,6 @@ fun FeedScreen(
                         modifier = Modifier.padding(16.dp),
                         error = it,
                         onRetry = viewModel::refresh,
-                        onOpenDiagnostics = onOpenDiagnostics,
                         onVerify = viewModel::verify
                     )
                 }

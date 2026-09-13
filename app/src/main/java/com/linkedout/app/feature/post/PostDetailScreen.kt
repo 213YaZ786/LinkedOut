@@ -74,6 +74,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import androidx.compose.foundation.layout.WindowInsets
 
 /**
  * One post, read in full. Everything comes from the local cache, so opening a
@@ -99,8 +100,14 @@ fun PostDetailScreen(
     val post = state.post
 
     Scaffold(
+        // The NavHost's own Scaffold already stands clear of the status and
+        // navigation bars. A nested Scaffold applies them a second time, and a
+        // TopAppBar a third, which is where the empty band above and below the
+        // content came from. Insets are owned once, up there.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Post") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

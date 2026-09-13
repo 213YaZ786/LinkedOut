@@ -4,7 +4,7 @@ Read public LinkedIn posts on Android, with no account, no tracking and no ads.
 
 ## What you can do
 
-- **Follow people** without a LinkedIn account. Your list stays on your phone.
+- **Follow people and companies** without a LinkedIn account. Your list stays on your phone.
 - **Read everything in one place.** Home shows everyone you follow, newest first. Pull down to refresh.
 - **Filter Home**: media only, hide replies, hide reposts.
 - **Look up a profile** from the Accounts tab before deciding to follow it.
@@ -25,7 +25,9 @@ linkedin.com/in/jane-doe-5b19a2
 In Accounts, type that part or paste the whole address. Sharing a profile to
 LinkedOut from a browser or from the LinkedIn app works too.
 
-Company and school pages are recognised but not read yet. People only.
+Company, school and showcase pages work the same way, with `/company/`,
+`/school/` or `/showcase/` in place of `/in/`. Paste the whole address for
+those, since the name alone cannot say which kind of page it is.
 
 ## Privacy
 

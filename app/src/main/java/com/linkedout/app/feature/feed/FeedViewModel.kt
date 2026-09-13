@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.common.Outcome
-import com.linkedout.app.core.common.valueOrNull
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Feed
 import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.core.model.Post
@@ -32,6 +32,8 @@ data class TabFeed(
 
 data class FeedUiState(
     val handle: String = "",
+    /** Which page this is, which decides the address and the parser. */
+    val kind: AccountKind = AccountKind.PERSON,
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val feed: Feed? = null,
@@ -67,16 +69,16 @@ class FeedViewModel(
         if (handle.isBlank()) return
         if (accounts.accounts.value.any { it.handle.equals(handle, ignoreCase = true) }) {
             accounts.remove(handle)
-        } else if (accounts.add(handle)) {
+        } else if (accounts.add(handle, _state.value.kind)) {
             _state.value.feed?.displayName
                 ?.takeIf { it.isNotBlank() && it != handle }
                 ?.let { accounts.updateDisplayName(handle, it) }
         }
     }
 
-    fun load(handle: String) {
-        if (_state.value.handle == handle && _state.value.feed != null) return
-        _state.value = FeedUiState(handle = handle, loading = true)
+    fun load(handle: String, kind: AccountKind = AccountKind.PERSON) {
+        if (_state.value.handle == handle && _state.value.kind == kind && _state.value.feed != null) return
+        _state.value = FeedUiState(handle = handle, kind = kind, loading = true)
 
         viewModelScope.launch {
             // Show what is on disk first. Opening an account you have read
@@ -107,7 +109,7 @@ class FeedViewModel(
         if (handle.isBlank()) return
         viewModelScope.launch {
             updateTab(tab) { it.copy(loading = true, error = null) }
-            when (val outcome = repository.loadTab(handle, tab)) {
+            when (val outcome = repository.loadTab(handle, tab, kind = _state.value.kind)) {
                 is Outcome.Success -> updateTab(tab) {
                     TabFeed(posts = outcome.value.posts, cursor = outcome.value.nextCursor, loaded = true)
                 }
@@ -127,7 +129,7 @@ class FeedViewModel(
 
         viewModelScope.launch {
             updateTab(tab) { it.copy(loadingMore = true, pagingFailed = false) }
-            when (val outcome = repository.loadTab(handle, tab, cursor)) {
+            when (val outcome = repository.loadTab(handle, tab, cursor, _state.value.kind)) {
                 is Outcome.Success -> updateTab(tab) { now ->
                     val known = now.posts.map { it.id }.toSet()
                     val fresh = outcome.value.posts.filterNot { it.id in known }
@@ -157,15 +159,7 @@ class FeedViewModel(
         viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
 
-            // x.com first. It is the quickest and most accurate head of the
-            // feed, so it goes on screen while the instances work on depth.
-            repository.loadHead(handle)?.valueOrNull()?.let { head ->
-                val merged = cache.append(head)
-                accounts.updateDisplayName(handle, head.displayName)
-                _state.value = _state.value.copy(feed = merged)
-            }
-
-            when (val outcome = repository.loadFeed(handle)) {
+            when (val outcome = repository.loadFeed(handle, kind = _state.value.kind)) {
                 is Outcome.Success -> {
                     val merged = cache.append(outcome.value)
                     accounts.updateDisplayName(handle, outcome.value.displayName)
@@ -199,7 +193,7 @@ class FeedViewModel(
         viewModelScope.launch {
             _state.value = _state.value.copy(loadingMore = true, pagingFailed = false)
             val before = current.feed?.posts?.size ?: 0
-            when (val outcome = repository.loadFeed(current.handle, cursor)) {
+            when (val outcome = repository.loadFeed(current.handle, cursor, current.kind)) {
                 is Outcome.Success -> {
                     val merged = cache.append(outcome.value, isPagedFetch = true)
                     _state.value = _state.value.copy(

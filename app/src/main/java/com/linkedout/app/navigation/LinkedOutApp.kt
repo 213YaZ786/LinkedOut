@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.UriHandler
 import androidx.navigation.NavHostController
 import com.linkedout.app.core.link.LinkRouter
 import com.linkedout.app.core.link.LinkedInLink
+import com.linkedout.app.core.model.AccountKind
 import org.koin.compose.koinInject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,7 +43,6 @@ import com.linkedout.app.data.settings.StartTab
 import com.linkedout.app.core.model.PostKind
 import com.linkedout.app.feature.accounts.AccountsScreen
 import com.linkedout.app.feature.debug.DebugLogScreen
-import com.linkedout.app.feature.connection.ConnectionScreen
 import com.linkedout.app.feature.feed.FeedScreen
 import com.linkedout.app.feature.post.PostDetailScreen
 import com.linkedout.app.feature.search.SearchScreen
@@ -68,7 +68,9 @@ fun LinkedOutApp() {
             is LinkedInLink.Profile -> navController.navigate(Routes.feed(link.handle))
             // A company is followed and read exactly like a person. Its posts
             // come off the same kind of page, so it lands on the same screen.
-            is LinkedInLink.Company -> navController.navigate(Routes.feed(link.slug))
+            is LinkedInLink.Company -> navController.navigate(
+                Routes.feed(link.slug, AccountKind.ofSegment(link.segment))
+            )
             is LinkedInLink.Post -> navController.navigate(Routes.post(link.id, link.handle.orEmpty()))
         }
     }
@@ -108,9 +110,8 @@ private fun LinkedOutNavHost(navController: NavHostController) {
         ) {
             composable(Routes.MAIN) {
                 MainTabs(
-                    onOpenDiagnostics = { navController.navigate(Routes.CONNECTION) },
                     onOpenDebugLog = { navController.navigate(Routes.DEBUG_LOG) },
-                    onOpenFeed = { handle -> navController.navigate(Routes.feed(handle)) },
+                    onOpenFeed = { handle, kind -> navController.navigate(Routes.feed(handle, kind)) },
                     onOpenPost = { post -> navController.navigate(Routes.post(post.id, post.cacheOwner())) },
                     onOpenSearch = { navController.navigate(Routes.SEARCH) }
                 )
@@ -130,13 +131,21 @@ private fun LinkedOutNavHost(navController: NavHostController) {
             }
             composable(
                 route = Routes.FEED_PATTERN,
-                arguments = listOf(navArgument("handle") { type = NavType.StringType })
+                arguments = listOf(
+                    navArgument("handle") { type = NavType.StringType },
+                    navArgument("kind") {
+                        type = NavType.StringType
+                        defaultValue = AccountKind.PERSON.name
+                    }
+                )
             ) { entry ->
                 Readable {
                     FeedScreen(
                         handle = entry.arguments?.getString("handle").orEmpty(),
+                        kind = runCatching {
+                            AccountKind.valueOf(entry.arguments?.getString("kind").orEmpty())
+                        }.getOrDefault(AccountKind.PERSON),
                         onBack = { navController.popBackStack() },
-                        onOpenDiagnostics = { navController.navigate(Routes.CONNECTION) },
                         onOpenPost = { post ->
                             navController.navigate(Routes.post(post.id, entry.arguments?.getString("handle").orEmpty()))
                         }
@@ -164,11 +173,6 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                     )
                 }
             }
-            composable(Routes.CONNECTION) {
-                Readable {
-                    ConnectionScreen(onBack = { navController.popBackStack() })
-                }
-            }
         }
     }
 }
@@ -189,9 +193,8 @@ private fun Post.cacheOwner(): String =
  */
 @Composable
 private fun MainTabs(
-    onOpenDiagnostics: () -> Unit,
     onOpenDebugLog: () -> Unit,
-    onOpenFeed: (String) -> Unit,
+    onOpenFeed: (String, AccountKind) -> Unit,
     onOpenPost: (Post) -> Unit,
     onOpenSearch: () -> Unit
 ) {
@@ -265,14 +268,12 @@ private fun MainTabs(
                 Readable {
                     when (tabs[page]) {
                         TopDestination.TIMELINE -> TimelineScreen(
-                            onOpenDiagnostics = onOpenDiagnostics,
                             onOpenAccounts = { go(TopDestination.ACCOUNTS.ordinal) },
                             onOpenPost = onOpenPost,
                             onOpenSearch = onOpenSearch
                         )
                         TopDestination.ACCOUNTS -> AccountsScreen(onOpenFeed = onOpenFeed)
                         TopDestination.SETTINGS -> SettingsScreen(
-                            onOpenDiagnostics = onOpenDiagnostics,
                             onOpenDebugLog = onOpenDebugLog,
                             onOpenWelcome = { showWelcome = true }
                         )

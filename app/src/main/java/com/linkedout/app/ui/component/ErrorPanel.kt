@@ -24,7 +24,6 @@ import com.linkedout.app.core.common.present
 fun ErrorPanel(
     error: AppError,
     onRetry: () -> Unit,
-    onOpenDiagnostics: () -> Unit,
     modifier: Modifier = Modifier,
     onVerify: ((AppError.ChallengeRequired) -> Unit)? = null
 ) {
@@ -45,15 +44,13 @@ fun ErrorPanel(
             )
             when (presentation.action) {
                 ErrorAction.RETRY -> TextButton(onClick = onRetry) { Text("Try again") }
-                ErrorAction.OPEN_CONNECTION -> TextButton(onClick = onOpenDiagnostics) {
-                    Text("Check connection")
-                }
                 ErrorAction.OPEN_FALLBACK_VIEWER -> {
                     val check = error as? AppError.ChallengeRequired
+                    // No fallback button. The check is the only thing that
+                    // helps here, and when it cannot be offered there is
+                    // nothing else to tap.
                     if (check != null && onVerify != null) {
                         TextButton(onClick = { onVerify(check) }) { Text("Do the check") }
-                    } else {
-                        TextButton(onClick = onOpenDiagnostics) { Text("Check connection") }
                     }
                 }
                 ErrorAction.NONE -> Unit

@@ -46,11 +46,6 @@ object LinkedOutIcons {
         )
     }
 
-    /** Used for the Diagnostics entry point and degraded instance state. */
-    val Pulse: ImageVector by lazy {
-        build("Pulse", "M1,21h22L12,2 1,21zM13,18h-2v-2h2v2zM13,14h-2v-4h2v4z")
-    }
-
     val Info: ImageVector by lazy {
         build(
             "Info",

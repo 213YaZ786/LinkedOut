@@ -64,7 +64,7 @@ private val PAGES = listOf(
         intro = "LinkedIn has no @handle. A person is named by the last part of " +
             "their profile address, after /in/.",
         points = listOf(
-            "Open the profile in a browser or in the LinkedIn app. The address is at the top.",
+            "Open the page in a browser or in the LinkedIn app. The address is at the top.",
             "LinkedOut wants the part in colour below. Pasting the whole address works too.",
             "A person's name will not do: searching LinkedIn by name needs an account."
         ),
@@ -77,7 +77,7 @@ private val PAGES = listOf(
         points = listOf(
             "In Accounts, paste the address or type the part after /in/, then tap Follow.",
             "From the LinkedIn app or a browser, share a profile to LinkedOut, then tap Follow.",
-            "People only for now. Company and school pages are not read yet."
+            "Company, school and showcase pages work the same way, with their own address."
         )
     )
 )

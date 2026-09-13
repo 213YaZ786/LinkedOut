@@ -1,6 +1,7 @@
 package com.linkedout.app.data.accounts
 
 import android.content.Context
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.FollowedAccount
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,13 +28,21 @@ class AccountStore(context: Context) {
         }.getOrDefault(emptyList())
     }
 
-    /** Returns false when the handle is invalid or already followed. */
-    fun add(rawHandle: String): Boolean {
+    /**
+     * Returns false when the name is invalid or already followed.
+     *
+     * Two different pages can share a name, one person and one organisation,
+     * so a name already followed as one kind is not followed again as the
+     * other. That is a deliberate limit rather than an oversight: the rest of
+     * the app keys caches and routes on the name alone.
+     */
+    fun add(rawHandle: String, kind: AccountKind = AccountKind.PERSON): Boolean {
         val handle = FollowedAccount.normalise(rawHandle) ?: return false
         if (_accounts.value.any { it.handle.equals(handle, ignoreCase = true) }) return false
         persist(
             _accounts.value + FollowedAccount(
                 handle = handle,
+                kind = kind,
                 addedAtMillis = System.currentTimeMillis()
             )
         )
@@ -45,12 +54,12 @@ class AccountStore(context: Context) {
      * how many were new. Used by import, where fifty separate writes would
      * also mean fifty separate list updates for Home to react to.
      */
-    fun addAll(rawHandles: List<String>): Int {
+    fun addAll(rawHandles: List<String>, kind: AccountKind = AccountKind.PERSON): Int {
         val known = _accounts.value.map { it.handle.lowercase() }.toMutableSet()
         val now = System.currentTimeMillis()
         val fresh = rawHandles.mapNotNull(FollowedAccount::normalise)
             .filter { known.add(it.lowercase()) }
-            .map { FollowedAccount(handle = it, addedAtMillis = now) }
+            .map { FollowedAccount(handle = it, kind = kind, addedAtMillis = now) }
         if (fresh.isNotEmpty()) persist(_accounts.value + fresh)
         return fresh.size
     }

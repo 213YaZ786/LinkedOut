@@ -15,6 +15,15 @@ import javax.net.ssl.SSLException
  */
 object ErrorMapper {
 
+    /**
+     * LinkedIn's own denial code. It is not an HTTP status: the standard has
+     * nothing above 599, and LinkedIn sends 999 with a tiny body when it
+     * decides a client is asking for too much. Read as a number it looks like
+     * a 5xx, which would mean "LinkedIn is broken, try again", the opposite of
+     * what it says.
+     */
+    const val LINKEDIN_DENIED = 999
+
     fun fromThrowable(host: String, t: Throwable): AppError = when (t) {
         is UnknownHostException -> AppError.DnsFailure(host)
         is SSLException -> AppError.TlsFailure(host, t.message)
@@ -67,6 +76,8 @@ object ErrorMapper {
 
         if (code == 403 || code == 401 || code == 406) return AppError.ClientRefused(host, code)
         if (code == 404 || code == 410) return AppError.AccountNotFound(handle ?: host)
+        // Before the 5xx test, which would otherwise swallow it.
+        if (code == LINKEDIN_DENIED) return AppError.ClientRefused(host, code)
         if (code >= 500) return AppError.ServerError(host, code)
         if (code >= 400) return AppError.ClientRefused(host, code)
         return null

@@ -2,6 +2,7 @@ package com.linkedout.app.data.repository
 
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.Conversation
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Feed
 import com.linkedout.app.core.model.ProfileTab
 import com.linkedout.app.data.linkedin.LinkedInSource
@@ -17,14 +18,6 @@ import com.linkedout.app.data.linkedin.LinkedInSource
  * page, when it lands, is a second call that belongs beside the first.
  */
 class FeedRepository(private val linkedin: LinkedInSource) {
-
-    /**
-     * MTGA fetched the head of a feed from x.com in parallel with the
-     * instances, because the two sources disagreed about freshness. One source
-     * cannot disagree with itself, so there is no second request to make.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    suspend fun loadHead(handle: String): Outcome<Feed>? = null
 
     /**
      * A post and the comments a guest is shown.
@@ -43,16 +36,33 @@ class FeedRepository(private val linkedin: LinkedInSource) {
      * second request.
      */
     @Suppress("UNUSED_PARAMETER")
-    suspend fun loadTab(handle: String, tab: ProfileTab, cursor: String? = null): Outcome<Feed> =
-        loadFeed(handle, cursor)
+    suspend fun loadTab(
+        handle: String,
+        tab: ProfileTab,
+        cursor: String? = null,
+        kind: AccountKind = AccountKind.PERSON
+    ): Outcome<Feed> =
+        loadFeed(handle, cursor, kind)
 
     /**
+     * [kind] decides both the address and the parser. It defaults to a person
+     * so every caller written before organisations existed keeps its old
+     * behaviour instead of silently asking /company/ for someone's profile.
+     *
      * [cursor] is accepted and ignored. A logged out profile page has no
-     * paging: LinkedIn serves a fixed slice of recent activity and offers no
-     * continuation, so every fetch returns the same window and
-     * [Feed.nextCursor] stays null.
+     * paging at all. An organisation page does hand out a continuation token,
+     * which [Feed.nextCursor] now carries, but following it is a request
+     * against an internal route and is not wired up yet.
      */
     @Suppress("UNUSED_PARAMETER")
-    suspend fun loadFeed(handle: String, cursor: String? = null): Outcome<Feed> =
-        linkedin.fetchProfile(handle)
+    suspend fun loadFeed(
+        handle: String,
+        cursor: String? = null,
+        kind: AccountKind = AccountKind.PERSON
+    ): Outcome<Feed> =
+        if (kind.isOrganisation) {
+            linkedin.fetchOrganisation(handle, kind.segment)
+        } else {
+            linkedin.fetchProfile(handle)
+        }
 }

@@ -113,7 +113,11 @@ class PostPageParser {
             id = PostId.normalize(permalink).takeIf { it != permalink } ?: activityId,
             authorHandle = handle.orEmpty(),
             authorName = card.authorName().orEmpty(),
-            avatarUrl = card.avatar(),
+            // The card is tried first because it is the picture actually on
+            // screen, then the graph. A company post is why the fallback
+            // exists: its author is an Organization whose logo the rendered
+            // lockup does not expose under the class the card reader knows.
+            avatarUrl = card.avatar() ?: post?.let { graph.authorImage(it) },
             // The graph is the untruncated copy, but a card with no graph at
             // all is still worth showing, so neither is required.
             text = fromGraph?.takeIf { it.isNotBlank() } ?: fromCard.orEmpty(),
@@ -127,6 +131,24 @@ class PostPageParser {
             quoted = card.parseReshare(),
             stats = graph.statsFromGraph(post) ?: card.statsFromCard()
         )
+    }
+
+    /**
+     * The author's picture out of the graph: a person's photo or a company's
+     * logo, both written as an ImageObject under the author's own "image".
+     *
+     * Bounded twice on purpose. Every record in this graph owns an ImageObject
+     * somewhere, the post's own pictures among them, so a loose search would
+     * hand back the first slide of a carousel as the author's face. The walk
+     * is author, then that object's image, then that object's url, and each
+     * step stays inside the braces of the one before.
+     */
+    private fun String.authorImage(post: Int): String? {
+        val author = ownKey("author", post).takeIf { it >= 0 } ?: return null
+        val authorBody = indexOf('{', author).takeIf { it >= 0 } ?: return null
+        val image = ownKey("image", authorBody + 1).takeIf { it >= 0 } ?: return null
+        val imageBody = indexOf('{', image).takeIf { it >= 0 } ?: return null
+        return ownString("url", imageBody + 1)?.let(Markup::decodeEntities)
     }
 
     /**

@@ -81,7 +81,8 @@ internal object Markup {
             .replace("&ndash;", "\u2013").replace("&amp;", "&")
         if ("&#" in out) {
             out = NUMERIC_ENTITY.replace(out) { match ->
-                val code = match.groupValues[1].toIntOrNull()
+                val hex = match.groupValues[1].isNotEmpty()
+                val code = match.groupValues[2].toIntOrNull(if (hex) 16 else 10)
                 if (code != null && code in 1..0x10FFFF) String(Character.toChars(code))
                 else match.value
             }
@@ -268,6 +269,11 @@ internal object Markup {
     }
 
     private val BLANK_RUN = Regex("\n{3,}")
-    private val NUMERIC_ENTITY = Regex("&#(\\d+);")
+    /**
+     * Decimal and hexadecimal both. LinkedIn writes accents as "&#xF4;" on its
+     * French pages, so a decimal only pattern left every accented word mangled
+     * and nothing in an English page ever showed it.
+     */
+    private val NUMERIC_ENTITY = Regex("&#(x?)([0-9a-fA-F]+);", RegexOption.IGNORE_CASE)
     private val HREF = Regex("""href="([^"]+)"""")
 }

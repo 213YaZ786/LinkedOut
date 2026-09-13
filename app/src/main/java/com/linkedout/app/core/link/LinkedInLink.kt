@@ -17,8 +17,14 @@ sealed interface LinkedInLink {
     /** A person. [handle] is the vanity name, the part after /in/. */
     data class Profile(val handle: String) : LinkedInLink
 
-    /** An organisation. [slug] is the part after /company/. */
-    data class Company(val slug: String) : LinkedInLink
+    /**
+     * An organisation. [slug] is the name in the path and [segment] is what
+     * came before it, one of company, school or showcase. The segment is kept
+     * because the three are not interchangeable: asking /company/ for a school
+     * earns a redirect at best, and a request spent against a host that rate
+     * limits guests is not free.
+     */
+    data class Company(val slug: String, val segment: String = "company") : LinkedInLink
 
     /**
      * One post. [id] is the numeric activity id, which is the only part that
@@ -60,7 +66,7 @@ sealed interface LinkedInLink {
                 "company", "school", "showcase" -> segments.getOrNull(1)
                     ?.let(::decode)
                     ?.takeIf(::isVanity)
-                    ?.let(::Company)
+                    ?.let { slug -> Company(slug, segments[0].lowercase()) }
 
                 // /posts/<author>_<words>-activity-<id>-<code>
                 "posts" -> segments.getOrNull(1)?.let { slug ->
@@ -114,7 +120,8 @@ sealed interface LinkedInLink {
 
         fun profileUrl(handle: String): String = canonical("in/$handle")
 
-        fun companyUrl(slug: String): String = canonical("company/$slug")
+        fun companyUrl(slug: String, segment: String = "company"): String =
+            canonical("$segment/$slug")
 
         private fun isId(value: String) = value.length in 1..25 && value.all(Char::isDigit)
 

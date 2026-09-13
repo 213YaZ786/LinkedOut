@@ -54,7 +54,7 @@ import org.koin.androidx.compose.koinViewModel
  */
 @Composable
 fun AccountsScreen(
-    onOpenFeed: (String) -> Unit,
+    onOpenFeed: (String, AccountKind) -> Unit,
     viewModel: AccountsViewModel = koinViewModel()
 ) {
     val rows by viewModel.rows.collectAsState()
@@ -65,8 +65,10 @@ fun AccountsScreen(
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     val trimmed = query.trim().removePrefix("@")
-    val kind = AccountsViewModel.classify(query)
-    val candidate = (kind as? QueryKind.Profile)?.handle
+    val queryKind = AccountsViewModel.classify(query)
+    val asProfile = queryKind as? QueryKind.Profile
+    val candidate = asProfile?.handle
+    val candidateKind = asProfile?.kind ?: AccountKind.PERSON
     val alreadyFollowed = candidate != null &&
         rows.any { it.handle.equals(candidate, ignoreCase = true) }
     // A pasted address is matched on the vanity it resolves to, otherwise
@@ -82,9 +84,9 @@ fun AccountsScreen(
         }
     }
 
-    fun open(handle: String) {
+    fun open(handle: String, kind: AccountKind) {
         focus.clearFocus()
-        onOpenFeed(handle)
+        onOpenFeed(handle, kind)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -107,7 +109,7 @@ fun AccountsScreen(
             onValueChange = { query = it },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
-            placeholder = { Text("Name in the address, or paste a profile link") },
+            placeholder = { Text("Name in the address, or paste a link") },
             leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
@@ -126,8 +128,8 @@ fun AccountsScreen(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = {
                 when {
-                    candidate != null && !alreadyFollowed -> open(candidate)
-                    visible.size == 1 -> open(visible.first().handle)
+                    candidate != null && !alreadyFollowed -> open(candidate, candidateKind)
+                    visible.size == 1 -> open(visible.first().handle, visible.first().kind)
                     else -> focus.clearFocus()
                 }
             }),
@@ -143,20 +145,21 @@ fun AccountsScreen(
                 item(key = "candidate") {
                     CandidateCard(
                         handle = candidate,
-                        onOpen = { open(candidate) },
-                        onFollow = { viewModel.follow(candidate) }
+                        kind = candidateKind,
+                        onOpen = { open(candidate, candidateKind) },
+                        onFollow = { viewModel.follow(candidate, candidateKind) }
                     )
                 }
             } else if (visible.isEmpty()) {
                 // Each reason gets its own line. "No match" alone would leave
                 // the reader guessing at a field that has no guessable rule.
-                explain(kind)?.let { message ->
+                explain(queryKind)?.let { message ->
                     item(key = "explain") { Hint(message) }
                 }
             }
 
             items(visible, key = { it.handle }) { row ->
-                AccountCard(row = row, onClick = { open(row.handle) })
+                AccountCard(row = row, onClick = { open(row.handle, row.kind) })
             }
 
             if (rows.isEmpty() && trimmed.isEmpty()) {
@@ -189,7 +192,7 @@ private fun AccountCard(row: AccountRow, onClick: () -> Unit) {
                 )
                 if (row.name != null) {
                     Text(
-                        "in/${row.handle}",
+                        "${row.kind.segment}/${row.handle}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -229,7 +232,7 @@ private fun CandidateCard(handle: String, onOpen: () -> Unit, onFollow: () -> Un
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    "linkedin.com/in/$handle, tap to read",
+                    "linkedin.com/${kind.segment}/$handle, tap to read",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
@@ -246,13 +249,12 @@ private fun CandidateCard(handle: String, onOpen: () -> Unit, onFollow: () -> Un
 private fun explain(kind: QueryKind): String? = when (kind) {
     is QueryKind.Profile -> null
     QueryKind.Blank -> null
-    QueryKind.Company -> "That is a company page. LinkedOut reads people for now."
     QueryKind.PostLink -> "That is a link to one post. Tap it outside the app to open it here."
     QueryKind.ShortLink -> "A lnkd.in link hides where it goes. Open it once in a browser, " +
         "then paste the address it lands on."
-    QueryKind.Unusable -> "No match, and that is not a profile address. LinkedIn has no " +
-        "searchable handle, so use the part after /in/ in the address, or paste the address " +
-        "itself. A person's name will not work."
+    QueryKind.Unusable -> "No match, and that is not a LinkedIn address. There is no " +
+        "searchable handle, so use the part after /in/ or /company/ in the address, or paste " +
+        "the address itself. A person's or a company's name will not work."
 }
 
 @Composable
@@ -281,10 +283,10 @@ private fun EmptyState() {
         )
         Text("No accounts yet", style = MaterialTheme.typography.titleLarge)
         Text(
-            "LinkedIn has no @handle. Open a profile in a browser and paste its address " +
-                "above, or type just the part after /in/. Reading it once is enough to " +
-                "follow it and build your timeline. Who you follow stays on this phone and " +
-                "is never sent anywhere but to linkedin.com itself.",
+            "LinkedIn has no @handle. Open a profile or a company page in a browser and " +
+                "paste its address above, or type just the part after /in/. Reading it once " +
+                "is enough to follow it and build your timeline. Who you follow stays on this " +
+                "phone and is never sent anywhere but to linkedin.com itself.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center

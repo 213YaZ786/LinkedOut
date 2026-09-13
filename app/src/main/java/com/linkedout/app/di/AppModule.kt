@@ -15,6 +15,7 @@ import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.linkedin.LinkedInSource
 import com.linkedout.app.data.linkedin.PostPageParser
+import com.linkedout.app.data.linkedin.CompanyPageParser
 import com.linkedout.app.data.linkedin.ProfilePageParser
 import com.linkedout.app.data.repository.FeedRepository
 import com.linkedout.app.data.repository.TimelineRepository
@@ -59,8 +60,9 @@ val appModule = module {
     single { LinkRouter(androidContext()) }
 
     single { ProfilePageParser() }
+    single { CompanyPageParser() }
     single { PostPageParser() }
-    single { LinkedInSource(get(), get(), get(), get(), get()) }
+    single { LinkedInSource(get(), get(), get(), get(), get(), get()) }
     single { FeedRepository(get()) }
 
     single {

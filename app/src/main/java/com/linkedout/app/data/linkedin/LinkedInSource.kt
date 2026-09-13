@@ -43,6 +43,7 @@ class LinkedInSource(
     private val gateway: ChallengeGateway,
     private val throttle: HostThrottle,
     private val profiles: ProfilePageParser,
+    private val organisations: CompanyPageParser,
     private val posts: PostPageParser,
     private val log: RequestLog
 ) {
@@ -64,6 +65,33 @@ class LinkedInSource(
                         outcome = "ok",
                         bodyBytes = attempt.text.length,
                         detail = "${feed.posts.size} posts, profile selectors ${ProfilePageParser.SELECTOR_SET_VERSION}"
+                    )
+                    Outcome.Success(feed)
+                }
+            }
+        }
+    }
+
+    /**
+     * A company, school or showcase page. Separate from [fetchProfile] because
+     * the two pages share no markup, so the parser is chosen here and not
+     * inside one parser that tries both. [segment] decides the address.
+     */
+    suspend fun fetchOrganisation(slug: String, segment: String): Outcome<Feed> {
+        val url = LinkedInLink.companyUrl(slug, segment)
+        return when (val attempt = fetch(url, RequestLog.Kind.PROFILE)) {
+            is Attempt.Failed -> Outcome.Failure(attempt.error)
+            is Attempt.Body -> {
+                val feed = organisations.parse(attempt.text, slug)
+                if (feed == null) {
+                    Outcome.Failure(refusal(attempt.text, slug, CompanyPageParser.SELECTOR_SET))
+                } else {
+                    log.record(
+                        kind = RequestLog.Kind.PARSE,
+                        url = url,
+                        outcome = "ok",
+                        bodyBytes = attempt.text.length,
+                        detail = "${feed.posts.size} posts, org selectors ${CompanyPageParser.SELECTOR_SET}"
                     )
                     Outcome.Success(feed)
                 }
@@ -159,7 +187,12 @@ class LinkedInSource(
             return Attempt.Failed(ErrorMapper.fromThrowable(LinkedInHost.HOST, failure))
         }
 
-        if (page.status == 429) throttle.penalise(LinkedInHost.HOST, page.retryAfterSeconds)
+        // A 429 and a 999 are the same message in two shapes: stop asking. The
+        // cooldown is per host and therefore stops every read, which is right,
+        // since LinkedIn refuses the address rather than the page.
+        if (page.status == 429 || page.status == ErrorMapper.LINKEDIN_DENIED) {
+            throttle.penalise(LinkedInHost.HOST, page.retryAfterSeconds)
+        }
 
         val walled = page.status == 200 && LinkedInHost.isAuthWall(page.body)
         log.record(

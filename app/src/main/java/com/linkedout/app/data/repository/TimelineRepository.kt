@@ -2,6 +2,7 @@ package com.linkedout.app.data.repository
 
 import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.common.Outcome
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.cache.FeedCache
@@ -59,16 +60,21 @@ class TimelineRepository(
      * the pool's backoff would then punish every later read.
      */
     suspend fun refresh(only: Set<String>? = null): Merged = coroutineScope {
-        val handles = accounts.accounts.value.map { it.handle }
-        if (handles.isEmpty()) return@coroutineScope Merged()
+        val followed = accounts.accounts.value
+        if (followed.isEmpty()) return@coroutineScope Merged()
 
-        val targets = if (only == null) handles else handles.filter { it.lowercase() in only }
+        val targets = if (only == null) followed else followed.filter { it.handle.lowercase() in only }
 
         val gate = Semaphore(MAX_PARALLEL_FETCHES)
 
-        val results = targets.map { handle ->
+        // Each account is asked for by its own kind. A company read as a person
+        // is a request to an address that does not exist, which LinkedIn
+        // answers with a denial rather than a 404.
+        val results = targets.map { account ->
             async {
-                gate.withPermit { handle to feeds.loadFeed(handle) }
+                gate.withPermit {
+                    account.handle to feeds.loadFeed(account.handle, kind = account.kind)
+                }
             }
         }.map { it.await() }
 
@@ -142,9 +148,19 @@ class TimelineRepository(
         val gate = Semaphore(MAX_PARALLEL_FETCHES)
         val errors = mutableMapOf<String, AppError>()
 
+        // The kind comes from the followed list, not from the cached feed,
+        // which does not record it.
+        val kinds = accounts.accounts.value.associate { it.handle to it.kind }
+
         blocking.map { feed ->
             async {
-                gate.withPermit { feed.handle to feeds.loadFeed(feed.handle, feed.nextCursor) }
+                gate.withPermit {
+                    feed.handle to feeds.loadFeed(
+                        handle = feed.handle,
+                        cursor = feed.nextCursor,
+                        kind = kinds[feed.handle] ?: AccountKind.PERSON
+                    )
+                }
             }
         }.map { it.await() }.forEach { (handle, outcome) ->
             when (outcome) {

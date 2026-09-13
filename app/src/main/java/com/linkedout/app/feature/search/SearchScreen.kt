@@ -41,6 +41,7 @@ import com.linkedout.app.ui.component.PostCard
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import androidx.compose.foundation.layout.WindowInsets
 
 /** Search through every post saved on this phone, instantly and offline. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,8 +73,14 @@ fun SearchScreen(
     }
 
     Scaffold(
+        // The NavHost's own Scaffold already stands clear of the status and
+        // navigation bars. A nested Scaffold applies them a second time, and a
+        // TopAppBar a third, which is where the empty band above and below the
+        // content came from. Insets are owned once, up there.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(LinkedOutIcons.ArrowBack, contentDescription = "Back")

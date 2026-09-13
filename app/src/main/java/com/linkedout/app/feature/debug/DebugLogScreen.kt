@@ -39,6 +39,7 @@ import org.koin.compose.koinInject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.layout.WindowInsets
 
 /**
  * Every request and its result, exportable as a text file.
@@ -58,9 +59,15 @@ fun DebugLogScreen(onBack: () -> Unit) {
     val stamp = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
 
     Scaffold(
+        // The NavHost's own Scaffold already stands clear of the status and
+        // navigation bars. A nested Scaffold applies them a second time, and a
+        // TopAppBar a third, which is where the empty band above and below the
+        // content came from. Insets are owned once, up there.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Activity log") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

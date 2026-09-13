@@ -3,6 +3,7 @@ package com.linkedout.app.feature.accounts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linkedout.app.core.link.LinkedInLink
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.cache.FeedCache
@@ -22,10 +23,7 @@ sealed interface QueryKind {
     data object Blank : QueryKind
 
     /** A vanity name, typed bare or pulled out of a pasted address. */
-    data class Profile(val handle: String) : QueryKind
-
-    /** A company, school or showcase page. No parser for these yet. */
-    data object Company : QueryKind
+    data class Profile(val handle: String, val kind: AccountKind = AccountKind.PERSON) : QueryKind
 
     /** A link to one post. Real, but this screen opens people, not posts. */
     data object PostLink : QueryKind
@@ -40,6 +38,7 @@ sealed interface QueryKind {
 /** One followed account as the list shows it, enriched from the local cache. */
 data class AccountRow(
     val handle: String,
+    val kind: AccountKind,
     val name: String?,
     val avatarUrl: String?,
     val lastPostMillis: Long?
@@ -65,6 +64,7 @@ class AccountsViewModel(
             val summary = known[account.handle.lowercase()]
             AccountRow(
                 handle = account.handle,
+                kind = account.kind,
                 name = summary?.name ?: account.displayName,
                 avatarUrl = summary?.avatarUrl,
                 lastPostMillis = summary?.lastPostMillis
@@ -95,8 +95,8 @@ class AccountsViewModel(
     fun isFollowed(handle: String): Boolean =
         store.accounts.value.any { it.handle.equals(handle, ignoreCase = true) }
 
-    fun follow(handle: String) {
-        store.add(handle)
+    fun follow(handle: String, kind: AccountKind) {
+        store.add(handle, kind)
     }
 
     companion object {
@@ -121,7 +121,11 @@ class AccountsViewModel(
                 if (host == "lnkd.in") return QueryKind.ShortLink
                 return when (val link = LinkedInLink.parse(url)) {
                     is LinkedInLink.Profile -> QueryKind.Profile(link.handle)
-                    is LinkedInLink.Company -> QueryKind.Company
+                    // Company, school and showcase are read by selector set 3,
+                    // so they are candidates like anyone else. The segment is
+                    // kept: the three are different addresses.
+                    is LinkedInLink.Company ->
+                        QueryKind.Profile(link.slug, AccountKind.ofSegment(link.segment))
                     is LinkedInLink.Post -> QueryKind.PostLink
                     null -> QueryKind.Unusable
                 }

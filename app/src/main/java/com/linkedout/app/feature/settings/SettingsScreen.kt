@@ -78,7 +78,6 @@ private fun keepLabel(days: Int): String = when (days) {
  */
 @Composable
 fun SettingsScreen(
-    onOpenDiagnostics: () -> Unit,
     onOpenDebugLog: () -> Unit,
     onOpenWelcome: () -> Unit,
     viewModel: SettingsViewModel = koinViewModel()
@@ -311,11 +310,6 @@ fun SettingsScreen(
                 title = "Review the tutorial",
                 summary = "Where a profile address is, and the ways to follow someone.",
                 onClick = onOpenWelcome
-            )
-            SettingRow(
-                title = "Connection check",
-                summary = "How LinkedOut is reaching linkedin.com, and why something does not load.",
-                onClick = onOpenDiagnostics
             )
             SettingRow(
                 title = "Activity log",

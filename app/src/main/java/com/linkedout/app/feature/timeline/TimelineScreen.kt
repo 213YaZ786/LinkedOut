@@ -56,19 +56,21 @@ import com.linkedout.app.ui.icon.LinkedOutIcons
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 
 /**
  * Home: everything you follow in one stream, newest first.
  *
  * Pull down to refresh. Posts that arrive while you are further down stay out
  * of your way, and a pill offers to jump up to them. Filters sit at the top of
- * the list and are remembered. The pulse icon turns red when a source fails
- * and opens Diagnostics.
+ * the list and are remembered. A profile that could not be read gets a quiet
+ * line in the list rather than a screen of its own.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimelineScreen(
-    onOpenDiagnostics: () -> Unit,
     onOpenAccounts: () -> Unit,
     onOpenPost: (Post) -> Unit,
     onOpenSearch: () -> Unit,
@@ -98,9 +100,22 @@ fun TimelineScreen(
             .collect { atTop -> if (atTop) viewModel.clearNewPosts() }
     }
 
+    // The bar leaves as soon as you scroll down and comes back on the first
+    // scroll up, so the list gets the whole screen while reading and the title
+    // and search are one flick away.
+    val barBehaviour = TopAppBarDefaults.enterAlwaysScrollBehavior()
+
     Scaffold(
+        modifier = Modifier.nestedScroll(barBehaviour.nestedScrollConnection),
+        // The NavHost's own Scaffold already stands clear of the status and
+        // navigation bars. A nested Scaffold applies them a second time, and a
+        // TopAppBar a third, which is where the empty band above and below the
+        // list came from. Insets are owned once, up there.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                scrollBehavior = barBehaviour,
                 title = {
                     Column {
                         Text("Home")
@@ -117,21 +132,6 @@ fun TimelineScreen(
                     if (state.followedCount > 0) {
                         IconButton(onClick = onOpenSearch) {
                             Icon(LinkedOutIcons.Search, contentDescription = "Search saved posts")
-                        }
-                        IconButton(onClick = onOpenDiagnostics) {
-                            Icon(
-                                LinkedOutIcons.Pulse,
-                                contentDescription = if (state.errors.isEmpty()) {
-                                    "Sources working"
-                                } else {
-                                    "Some sources failed"
-                                },
-                                tint = if (state.errors.isEmpty()) {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                } else {
-                                    MaterialTheme.colorScheme.error
-                                }
-                            )
                         }
                     }
                 }
@@ -159,10 +159,8 @@ fun TimelineScreen(
                     item(key = "nothing") {
                         EmptyState(
                             title = "Nothing could be loaded",
-                            message = "None of your accounts could be loaded. Pull down to try " +
-                                "again. The connection check shows which servers are down.",
-                            actionLabel = "Check connection",
-                            onAction = onOpenDiagnostics,
+                            message = "None of the profiles you follow could be read just now. " +
+                                "Pull down to try again.",
                             modifier = Modifier.fillParentMaxSize()
                         )
                     }
@@ -204,10 +202,7 @@ fun TimelineScreen(
 
                     if (state.errors.isNotEmpty()) {
                         item(key = "failures") {
-                            PartialFailureNotice(
-                                failed = state.errors.keys.toList(),
-                                onOpenDiagnostics = onOpenDiagnostics
-                            )
+                            PartialFailureNotice(failed = state.errors.keys.toList())
                         }
                     }
 
@@ -358,18 +353,17 @@ private const val LOAD_MORE_THRESHOLD = 5
  * readable above everything.
  */
 @Composable
-private fun PartialFailureNotice(failed: List<String>, onOpenDiagnostics: () -> Unit) {
+private fun PartialFailureNotice(failed: List<String>) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
             text = if (failed.size == 1) {
-                "@${failed.first()} couldn't be updated. Showing saved posts."
+                "in/${failed.first()} couldn't be updated. Showing saved posts."
             } else {
-                "${failed.size} accounts couldn't be updated. Showing saved posts."
+                "${failed.size} profiles couldn't be updated. Showing saved posts."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        TextButton(onClick = onOpenDiagnostics) { Text("Details") }
     }
 }
 
@@ -377,9 +371,9 @@ private fun PartialFailureNotice(failed: List<String>, onOpenDiagnostics: () -> 
 private fun EmptyState(
     title: String,
     message: String,
-    actionLabel: String,
-    onAction: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier.fillMaxSize().padding(32.dp),
@@ -394,6 +388,8 @@ private fun EmptyState(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
         )
-        TextButton(onClick = onAction) { Text(actionLabel) }
+        if (actionLabel != null && onAction != null) {
+            TextButton(onClick = onAction) { Text(actionLabel) }
+        }
     }
 }
