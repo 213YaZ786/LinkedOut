@@ -33,6 +33,11 @@ import java.io.ByteArrayInputStream
  * navigation off the challenged host, analytics hosts answered with nothing,
  * DOM storage wiped on release. JavaScript exists only while the task runs,
  * because the WebView itself only exists while the task runs.
+ *
+ * A reading task, [ChallengeSolver.Task.read], adds three things: the paths
+ * the page is not allowed to navigate to, which is how the sign in wall's own
+ * script is refused, an overridden User-Agent, and the headers the native
+ * request would have carried. See [BrowserRead].
  */
 @SuppressLint("SetJavaScriptEnabled")
 class ChallengeDriver(
@@ -45,6 +50,10 @@ class ChallengeDriver(
     private var done = false
     private var lastMainFrameError: Pair<String, Int>? = null
     private var lastFinishedAt = 0L
+
+    /** Navigations the page asked for and did not get. Read by the log line. */
+    var refusedNavigations = 0
+        private set
 
     val view: WebView = WebView(context).apply {
         settings.javaScriptEnabled = true
@@ -78,8 +87,12 @@ class ChallengeDriver(
     }
 
     init {
+        // Before the load, since the string decides which page LinkedIn
+        // builds, and after it the request is already out.
+        task.read?.userAgent?.let { view.settings.userAgentString = it }
         solver.onUserAgent(view.settings.userAgentString.orEmpty())
-        view.loadUrl(task.url)
+        val headers = task.read?.headers.orEmpty()
+        if (headers.isEmpty()) view.loadUrl(task.url) else view.loadUrl(task.url, headers)
         handler.postDelayed(poll, POLL_MS)
     }
 
@@ -132,7 +145,9 @@ class ChallengeDriver(
             }
 
             when (ChallengeDetector.detect(status, html)) {
-                null -> finish(ChallengeSolver.Result.Cleared(html, current, status))
+                null -> finish(
+                    ChallengeSolver.Result.Cleared(html, current, status, refusedNavigations)
+                )
                 ChallengeKind.WAF_BLOCK -> {
                     // A plain refusal with no script to run. Give it a moment
                     // in case something redirects, then stop wasting time.
@@ -167,7 +182,17 @@ class ChallengeDriver(
             if (!request.isForMainFrame) return false
             val url: Uri = request.url
             val allowed = url.scheme == "https" && onTaskHost(url.host)
-            return !allowed
+            if (!allowed) return true
+            // The sign in wall is not a status and not a check. It is a script
+            // on the page that sends the browser to /authwall, and a browser
+            // obeys it. Refusing that one navigation leaves the document that
+            // was already served in place, which is the page that was asked
+            // for. Nothing else about the load changes.
+            if (task.read?.refuses(url.path.orEmpty()) == true) {
+                refusedNavigations++
+                return true
+            }
+            return false
         }
 
         override fun shouldInterceptRequest(
@@ -231,7 +256,19 @@ class ChallengeDriver(
         const val READ_DOCUMENT_JS =
             "document.documentElement ? document.documentElement.outerHTML : null"
 
-        val MEDIA_HOSTS = listOf("pbs.twimg.com", "video.twimg.com", "abs.twimg.com")
+        /**
+         * Answered with nothing. The parser reads markup, so an avatar or a
+         * video fetched here would be paid for twice and shown never. Only
+         * the media hosts: static.licdn.com carries the page's own script and
+         * styles and is left alone.
+         */
+        val MEDIA_HOSTS = listOf(
+            "pbs.twimg.com",
+            "video.twimg.com",
+            "abs.twimg.com",
+            "media.licdn.com",
+            "dms.licdn.com"
+        )
         val MEDIA_PATHS = listOf("/pic/", "/video/")
 
         /** Answered with an empty body. Never needed to pass a check. */

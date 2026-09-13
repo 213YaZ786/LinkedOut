@@ -7,7 +7,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.accounts.SubscriptionCodec
+import com.linkedout.app.core.web.BrowserData
 import com.linkedout.app.core.web.GuestCookies
+import com.linkedout.app.core.web.WebSession
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.settings.Settings
 import com.linkedout.app.data.settings.SettingsStore
@@ -26,6 +28,7 @@ class SettingsViewModel(
     private val cache: FeedCache,
     private val accounts: AccountStore,
     private val cookies: GuestCookies,
+    private val session: WebSession,
     private val context: Context
 ) : ViewModel() {
 
@@ -178,12 +181,22 @@ class SettingsViewModel(
     }
 
     /**
-     * Forgets the guest session. The next read starts as a first time visitor,
-     * which costs one request and may bring back a refusal that cookies were
-     * getting past.
+     * Forgets the guest session, and the browser engine's one with it.
+     *
+     * Two stores, because there are two ways this app reads. The jar in
+     * [GuestCookies] is the one the number above counts. The engine that gets
+     * past the sign in wall keeps its own, which the app never reads and
+     * cannot show, and that is precisely why this button has to erase it too.
+     * [WebSession.forget] drops the judgements made about the host, so nothing
+     * keeps reading with a jar that is now empty.
+     *
+     * The next read starts as a first time visitor, which costs one request
+     * and may bring back a refusal that cookies were getting past.
      */
     fun clearBrowsingData() {
         cookies.clear()
+        BrowserData.clear()
+        session.forget()
         _guestCookies.value = 0
         _message.value = "Browsing data cleared"
     }

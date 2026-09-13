@@ -309,14 +309,16 @@ fun SettingsScreen(
                 summary = if (guestCookies == 0) {
                     "None held. LinkedIn refuses some pages to a visitor it has never seen."
                 } else {
-                    "$guestCookies cookies LinkedIn set for this phone. No account, " +
+                    "$guestCookies cookies LinkedIn set for this phone, plus whatever the " +
+                        "browser engine kept while getting past the sign in wall. No account, " +
                         "no advertising identifiers, never sent anywhere else."
                 },
                 onClick = null
             )
             SettingRow(
                 title = "Clear browsing data",
-                summary = "Start again as a first time visitor. Some pages may stop loading.",
+                summary = "Erases both stores, the app's and the engine's. Start again as a " +
+                    "first time visitor. Some pages may stop loading.",
                 onClick = { dialog = OpenDialog.COOKIES }
             )
         }
@@ -412,7 +414,8 @@ fun SettingsScreen(
             title = { Text("Clear browsing data?") },
             text = {
                 Text(
-                    "LinkedOut will visit LinkedIn as a first time visitor again. " +
+                    "Both cookie stores are erased, the app's own and the browser engine's. " +
+                        "LinkedOut will visit LinkedIn as a first time visitor again, and " +
                         "LinkedIn refuses some pages to a visitor it does not recognise, " +
                         "so an account that loads today may stop loading."
                 )

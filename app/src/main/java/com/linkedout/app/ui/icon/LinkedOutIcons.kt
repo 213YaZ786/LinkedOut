@@ -94,6 +94,15 @@ object LinkedOutIcons {
         )
     }
 
+    val Paste: ImageVector by lazy {
+        build(
+            "Paste",
+            "M19,2h-4.18C14.4,0.84 13.3,0 12,0 10.7,0 9.6,0.84 9.18,2L5,2c-1.1,0 -2,0.9 -2,2v16" +
+                "c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2L21,4c0,-1.1 -0.9,-2 -2,-2zM12,2" +
+                "c0.55,0 1,0.45 1,1s-0.45,1 -1,1 -1,-0.45 -1,-1 0.45,-1 1,-1zM19,20L5,20L5,4h2v3h10L17,4h2v16z"
+        )
+    }
+
     val Download: ImageVector by lazy {
         build("Download", "M19,9h-4V3H9v6H5l7,7 7,-7zM5,18v2h14v-2H5z")
     }

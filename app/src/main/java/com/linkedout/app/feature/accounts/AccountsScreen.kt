@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.accounts
 
+import android.content.ClipboardManager
+import com.linkedout.app.core.link.PastedText
 import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.ui.component.LocalDockPadding
 import androidx.compose.foundation.layout.Arrangement
@@ -28,11 +30,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -52,6 +56,12 @@ import org.koin.androidx.compose.koinViewModel
  * LinkedIn has no @handle and no guest search by name, so the field takes the
  * vanity name out of linkedin.com/in/<vanity> or a whole address pasted in.
  * A line under the field says so, because nothing else in the app can.
+ *
+ * Since the address has to come from somewhere else, the field carries a paste
+ * button: copy the page in the browser, tap it once, the profile opens. The
+ * button is always there and reads the clipboard only when tapped. Reading it
+ * to decide whether to show the button would be a read as well, and Android
+ * raises its own notice on every one of them.
  */
 @Composable
 fun AccountsScreen(
@@ -60,7 +70,9 @@ fun AccountsScreen(
 ) {
     val rows by viewModel.rows.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
+    var notice by remember { mutableStateOf<String?>(null) }
     val focus = LocalFocusManager.current
+    val context = LocalContext.current
 
     // Coming back from a profile may have brought new posts or an avatar.
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -90,6 +102,36 @@ fun AccountsScreen(
         onOpenFeed(handle, kind)
     }
 
+    /**
+     * One tap: read the clipboard, put what it holds in the field, and open
+     * the account it names. The clipboard often holds a sentence with the
+     * address inside it rather than the address alone, which is why the text
+     * goes through PastedText first. Anything that is not an account is left
+     * in the field, where the line underneath already explains why.
+     */
+    fun paste() {
+        val clip = context.getSystemService(ClipboardManager::class.java)
+            ?.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(context)
+            ?.toString()
+            .orEmpty()
+        val text = PastedText.query(clip)
+        if (text.isEmpty()) {
+            notice = "Nothing to paste. Open a profile in your browser and copy its address."
+            return
+        }
+        notice = null
+        query = text
+        val found = AccountsViewModel.classify(text) as? QueryKind.Profile
+        if (found != null) {
+            open(found.handle, found.kind)
+        } else {
+            focus.clearFocus()
+        }
+    }
+
     Column(Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 12.dp),
@@ -107,15 +149,26 @@ fun AccountsScreen(
 
         TextField(
             value = query,
-            onValueChange = { query = it },
+            onValueChange = {
+                query = it
+                notice = null
+            },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
             placeholder = { Text("Name in the address, or paste a link") },
             leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
             trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) {
-                        Icon(LinkedOutIcons.Close, contentDescription = "Clear")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = {
+                            query = ""
+                            notice = null
+                        }) {
+                            Icon(LinkedOutIcons.Close, contentDescription = "Clear")
+                        }
+                    }
+                    IconButton(onClick = { paste() }) {
+                        Icon(LinkedOutIcons.Paste, contentDescription = "Paste an address")
                     }
                 }
             },
@@ -142,6 +195,10 @@ fun AccountsScreen(
             contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + LocalDockPadding.current),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            notice?.let { message ->
+                item(key = "notice") { Hint(message) }
+            }
+
             if (candidate != null && !alreadyFollowed) {
                 item(key = "candidate") {
                     CandidateCard(

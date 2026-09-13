@@ -45,6 +45,29 @@ object LinkedInHost {
             "Chrome/140.0.0.0 Safari/537.36"
 
     /**
+     * Main frame addresses the browser engine is not allowed to follow when it
+     * reads a page for this app.
+     *
+     * The wall is not a status and not a bot check. It is a script on the page
+     * that sends the browser to /authwall, and a browser obeys it, which is
+     * why the engine was kept off the reading path for so long. Refusing these
+     * navigations leaves the document that was already served in place.
+     *
+     * Every entry is a sign in, sign up or checkpoint route, so none of them
+     * is a page this app reads and refusing them cannot cost a document.
+     */
+    val WALL_PATHS = listOf(
+        "/authwall",
+        "/login",
+        "/signup",
+        "/checkpoint",
+        "/uas/login",
+        "/uas/login-submit",
+        "/uas/request-password-reset",
+        "/m/login"
+    )
+
+    /**
      * True when what came back is the wall rather than the page. Checked on
      * the body, never on the status, which is 200 either way.
      *

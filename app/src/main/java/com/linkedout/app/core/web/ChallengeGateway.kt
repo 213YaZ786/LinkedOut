@@ -20,6 +20,14 @@ import io.ktor.client.statement.bodyAsText
  *    the WebView for the rest of the session, still offscreen, still parsed
  *    natively. The WebView is a transport here, never a screen.
  *
+ * [readInBrowser] adds a fourth case, and it is not a check at all. LinkedIn
+ * refuses a plain client a page it hands any browser, and no header will fix
+ * that: what differs is below the headers, in the TLS handshake and the HTTP/2
+ * settings, which a native client cannot rewrite. The engine on the device is
+ * a real browser and has neither problem. So when the native ladder ends at
+ * the wall, the same page is asked for again by the engine. See [BrowserRead]
+ * for what that costs and what is done to keep it cheap.
+ *
  * Only GET pages go through here. Callers keep their own parsing and error
  * mapping. The returned body may still be a check, and [ChallengeDetector]
  * inside the error mapper will name it.
@@ -50,10 +58,11 @@ class ChallengeGateway(
         url: String,
         host: String,
         kind: RequestLog.Kind,
-        requestHeaders: Map<String, String>
+        requestHeaders: Map<String, String>,
+        read: BrowserRead? = null
     ): Page {
         if (session.prefersWebView(host)) {
-            viaWebView(url, host, kind, alreadyPaced = true)?.let { return it }
+            viaWebView(url, host, kind, alreadyPaced = true, read = read)?.let { return it }
         }
 
         val response = client.get(url) { requestHeaders.forEach { (k, v) -> header(k, v) } }
@@ -77,16 +86,42 @@ class ChallengeGateway(
                 (if (hadCookie) " | cookie was sent and refused" else "") +
                 " | trying the offscreen browser"
         )
-        return viaWebView(url, host, kind, alreadyPaced = false) ?: native
+        return viaWebView(url, host, kind, alreadyPaced = false, read = read) ?: native
+    }
+
+    /**
+     * Reads a page through the engine because the native client was refused,
+     * not because a check appeared. Null when the engine could not be used or
+     * did not get the page either, and the caller keeps the native answer.
+     *
+     * A page that arrives this way marks the host as one the native client is
+     * refused on, so the next read starts with the engine instead of spending
+     * three requests learning the same thing again.
+     */
+    suspend fun readInBrowser(
+        url: String,
+        host: String,
+        kind: RequestLog.Kind,
+        read: BrowserRead
+    ): Page? {
+        val page = viaWebView(url, host, kind, alreadyPaced = false, read = read) ?: return null
+        session.markNativeRejected(host)
+        return page
     }
 
     private suspend fun viaWebView(
         url: String,
         host: String,
         kind: RequestLog.Kind,
-        alreadyPaced: Boolean
+        alreadyPaced: Boolean,
+        read: BrowserRead? = null
     ): Page? {
-        session.autoSolveSkipReason(host)?.let { reason ->
+        // A read is a page the reader is waiting for, on the one host this
+        // app talks to, so the pool rule that protects a list of servers does
+        // not apply to it. A failure still costs up to twenty seconds, which
+        // is why one is enough to stand down for a minute.
+        val skip = if (read != null) session.readSkipReason(host) else session.autoSolveSkipReason(host)
+        skip?.let { reason ->
             log.record(
                 kind = kind,
                 url = url,
@@ -100,7 +135,7 @@ class ChallengeGateway(
         if (!alreadyPaced && !throttle.acquire(host)) return null
 
         val startedAt = System.nanoTime()
-        val result = solver.solve(url, host)
+        val result = solver.solve(url, host, read = read)
         val elapsed = (System.nanoTime() - startedAt) / 1_000_000
 
         return when (result) {
@@ -112,10 +147,13 @@ class ChallengeGateway(
                     httpStatus = result.status,
                     bodyBytes = result.html.length,
                     durationMillis = elapsed,
-                    detail = if (session.prefersWebView(host)) {
-                        "$host checks every request, staying on the browser path"
-                    } else {
-                        "cookie now shared with the native client for $host"
+                    detail = when {
+                        read != null ->
+                            "the native client was refused, this is the engine's own read" +
+                                ", ${result.refusedNavigations} navigation away from the page refused"
+                        session.prefersWebView(host) ->
+                            "$host checks every request, staying on the browser path"
+                        else -> "cookie now shared with the native client for $host"
                     }
                 )
                 Page(result.status, result.html, null, Via.WEBVIEW)

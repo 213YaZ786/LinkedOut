@@ -10,6 +10,7 @@ import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.core.network.ErrorMapper
 import com.linkedout.app.core.network.HostThrottle
+import com.linkedout.app.core.web.BrowserRead
 import com.linkedout.app.core.web.ChallengeGateway
 import com.linkedout.app.core.web.GuestCookies
 import kotlinx.coroutines.sync.Mutex
@@ -42,11 +43,20 @@ import kotlinx.coroutines.sync.withLock
  * ladder of referrers rather than a repeat of the same request, and each rung
  * is named in the log so a failure says which ones were refused.
  *
- * The offscreen browser is deliberately not on that ladder. It runs the wall's
- * own script, which navigates to /authwall, so it would turn a readable body
- * into a redirect. It stays available through [ChallengeGateway] for the case
- * LinkedIn puts a real bot check in front, which is a different problem with a
- * different answer.
+ * The offscreen browser used to be deliberately off that ladder, because it
+ * runs the wall's own script and would turn a readable body into a redirect.
+ * That reason no longer holds: the engine is told which addresses it may not
+ * navigate to, so the script is refused and the document it was trying to
+ * leave stays where it is. The browser is now the last rung, spent only when
+ * every arrival was refused, and it is the one rung the native client cannot
+ * imitate. What differs is under the headers, in the TLS handshake and the
+ * HTTP/2 settings, and no header rewrites those.
+ *
+ * It is not free and it is not silent. It runs LinkedIn's own scripts, so
+ * LinkedIn gets the measurements a browser gives it, and it keeps its cookies
+ * in the engine's store rather than in the file Settings can count. Nothing
+ * there can sign anyone in, there is no credential in this app, and "Clear
+ * browsing data" erases both stores.
  *
  * Paging does not exist for a guest. A profile carries a fixed slice of recent
  * activity with no cursor, and a post page stops at ten comments behind a sign
@@ -215,7 +225,18 @@ class LinkedInSource(
 
     private sealed interface Attempt {
         class Body(val text: String) : Attempt
-        class Failed(val error: AppError) : Attempt
+
+        /**
+         * [denial] marks a 999, LinkedIn's own refusal. It is carried rather
+         * than acted on here, because the cooldown it earns would otherwise
+         * come down before the browser rung and refuse the one read that can
+         * still recover the page.
+         */
+        class Failed(
+            val error: AppError,
+            val denial: Boolean = false,
+            val retryAfterSeconds: Long? = null
+        ) : Attempt
     }
 
     /**
@@ -237,6 +258,8 @@ class LinkedInSource(
     private suspend fun fetch(url: String, kind: RequestLog.Kind): Attempt {
         warmUp()
         var wall: Attempt.Failed? = null
+        var denied: Attempt.Failed? = null
+
         for (arrival in Arrival.entries) {
             val attempt = request(url, kind, arrival) ?: return Attempt.Failed(
                 AppError.RateLimited(
@@ -254,11 +277,67 @@ class LinkedInSource(
                     return attempt
                 }
                 attempt is Attempt.Failed && attempt.error is AppError.AccountUnavailable -> wall = attempt
+                attempt is Attempt.Failed && attempt.denial -> {
+                    // A denial repeated on another rung has never answered
+                    // differently. Stop walking and spend the browser instead.
+                    denied = attempt
+                    break
+                }
                 else -> return attempt
             }
         }
-        return wall ?: Attempt.Failed(AppError.Unknown("No arrival got past the sign in wall"))
+
+        if (wall == null && denied == null) {
+            return Attempt.Failed(AppError.Unknown("No arrival got past the sign in wall"))
+        }
+
+        readInBrowser(url, kind)?.let { return it }
+
+        // Only now, and only if the browser did not get the page either.
+        denied?.let { throttle.penalise(LinkedInHost.HOST, it.retryAfterSeconds) }
+        return denied ?: wall ?: Attempt.Failed(AppError.Unknown("Refused by LinkedIn"))
     }
+
+    /**
+     * The last rung. The same address, asked for by the browser engine on the
+     * device, which is a real browser down to its handshake.
+     *
+     * A wall that reaches the engine too is not treated as a page: the parser
+     * would find no profile in it and report a markup change that never
+     * happened.
+     */
+    private suspend fun readInBrowser(url: String, kind: RequestLog.Kind): Attempt.Body? {
+        val page = gateway.readInBrowser(
+            url = url,
+            host = LinkedInHost.HOST,
+            kind = kind,
+            read = browserRead()
+        ) ?: return null
+
+        if (page.status != 200 || LinkedInHost.isAuthWall(page.body)) {
+            log.record(
+                kind = kind,
+                url = url,
+                outcome = "the browser reached the wall too",
+                httpStatus = page.status,
+                bodyBytes = page.body.length,
+                detail = "pageKey ${LinkedInHost.pageKey(page.body) ?: "none"}"
+            )
+            return null
+        }
+        log.keepBody(url, page.body)
+        return Attempt.Body(page.body)
+    }
+
+    /**
+     * How the engine reads a LinkedIn page. The arrival is the one the native
+     * ladder puts first, since it is the one LinkedIn answers pages to.
+     */
+    private fun browserRead(): BrowserRead = BrowserRead(
+        blockedPaths = LinkedInHost.WALL_PATHS,
+        userAgent = LinkedInHost.USER_AGENT,
+        headers = mapOf("Referer" to LinkedInHost.REFERER)
+    )
 
     /**
      * One request on the home page, before the first read of a run, kept for
@@ -305,7 +384,13 @@ class LinkedInSource(
         val page = try {
             // No Referer on purpose: a first visit to the home page is a
             // typed address, and this request exists to look like one.
-            gateway.getPage(url, LinkedInHost.HOST, RequestLog.Kind.SESSION, headers(Arrival.DIRECT))
+            gateway.getPage(
+                url = url,
+                host = LinkedInHost.HOST,
+                kind = RequestLog.Kind.SESSION,
+                requestHeaders = headers(Arrival.DIRECT),
+                read = browserRead()
+            )
         } catch (failure: Throwable) {
             log.record(
                 kind = RequestLog.Kind.SESSION,
@@ -349,16 +434,23 @@ class LinkedInSource(
         val started = System.currentTimeMillis()
 
         val page = try {
-            gateway.getPage(url, LinkedInHost.HOST, kind, headers(arrival))
+            gateway.getPage(
+                url = url,
+                host = LinkedInHost.HOST,
+                kind = kind,
+                requestHeaders = headers(arrival),
+                read = browserRead()
+            )
         } catch (failure: Throwable) {
             log.record(kind, url, "transport failure", detail = "${arrival.label} | ${failure.message}")
             return Attempt.Failed(ErrorMapper.fromThrowable(LinkedInHost.HOST, failure))
         }
 
-        // A 429 and a 999 are the same message in two shapes: stop asking. The
-        // cooldown is per host and therefore stops every read, which is right,
-        // since LinkedIn refuses the address rather than the page.
-        if (page.status == 429 || page.status == ErrorMapper.LINKEDIN_DENIED) {
+        // A 429 is an explicit rate limit and takes effect at once. A 999 is
+        // the same message in a different shape, but its cooldown is deferred
+        // to [fetch]: applied here it came down before the browser rung and
+        // refused the one request that could still recover the page.
+        if (page.status == 429) {
             throttle.penalise(LinkedInHost.HOST, page.retryAfterSeconds)
         }
         val walled = page.status == 200 && LinkedInHost.isAuthWall(page.body)
@@ -398,7 +490,15 @@ class LinkedInSource(
             retryAfterSeconds = page.retryAfterSeconds,
             bodyHint = page.body
         )
-        return if (error != null) Attempt.Failed(error) else Attempt.Body(page.body)
+        return if (error != null) {
+            Attempt.Failed(
+                error = error,
+                denial = page.status == ErrorMapper.LINKEDIN_DENIED,
+                retryAfterSeconds = page.retryAfterSeconds
+            )
+        } else {
+            Attempt.Body(page.body)
+        }
     }
 
     /**

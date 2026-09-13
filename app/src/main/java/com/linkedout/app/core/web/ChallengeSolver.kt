@@ -23,8 +23,19 @@ import java.util.concurrent.atomic.AtomicInteger
 class ChallengeSolver(private val session: WebSession) {
 
     sealed interface Result {
-        /** Through. [html] is the real page, [status] its main frame status. */
-        data class Cleared(val html: String, val finalUrl: String, val status: Int) : Result
+        /**
+         * Through. [html] is the real page, [status] its main frame status,
+         * and [refusedNavigations] how many times the page tried to send the
+         * engine somewhere it was not allowed to go. On LinkedIn that number
+         * is the wall's own script being turned down, and a zero next to a
+         * page that parsed says the wall was never in the way at all.
+         */
+        data class Cleared(
+            val html: String,
+            val finalUrl: String,
+            val status: Int,
+            val refusedNavigations: Int = 0
+        ) : Result
 
         /** Still a check when time ran out. A person may be able to pass it. */
         data object NeedsInteraction : Result
@@ -42,10 +53,16 @@ class ChallengeSolver(private val session: WebSession) {
         data class Failed(val detail: String) : Result
     }
 
+    /**
+     * [read] is null when the engine is here to pass a bot check, which is
+     * what it was built for, and set when the page itself is the point
+     * because the native client was refused. See [BrowserRead].
+     */
     class Task internal constructor(
         val url: String,
         val host: String,
-        val interactive: Boolean
+        val interactive: Boolean,
+        val read: BrowserRead? = null
     ) {
         internal val result = CompletableDeferred<Result>()
     }
@@ -60,10 +77,15 @@ class ChallengeSolver(private val session: WebSession) {
      * Loads [url] and waits until the page is no longer a check. Offscreen
      * attempts are bounded. Interactive ones wait for the user.
      */
-    suspend fun solve(url: String, host: String, interactive: Boolean = false): Result {
+    suspend fun solve(
+        url: String,
+        host: String,
+        interactive: Boolean = false,
+        read: BrowserRead? = null
+    ): Result {
         val result = mutex.withLock {
             if (hosts.get() == 0) return Result.NoHost
-            val task = Task(url, host, interactive)
+            val task = Task(url, host, interactive, read)
             _task.value = task
             try {
                 if (interactive) {
@@ -76,7 +98,11 @@ class ChallengeSolver(private val session: WebSession) {
                 _task.value = null
             }
         }
-        if (result is Result.Cleared) session.markCleared(host)
+        // Only a passed check marks the host. A page read around a wall
+        // passed nothing, and marking it would hand the engine's cookie jar
+        // to the native client, which is the jar Settings cannot show and the
+        // reader cannot count. The two sessions stay apart.
+        if (result is Result.Cleared && read == null) session.markCleared(host)
         return result
     }
 

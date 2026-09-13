@@ -92,6 +92,37 @@ class WebSession {
         return null
     }
 
+    /**
+     * Why a browser read should be skipped, or null to go ahead.
+     *
+     * Shorter than [autoSolveSkipReason] and without its pool rule. That rule
+     * exists to stop one wall from being met on ten servers in a row, and
+     * there is one host here. What is worth keeping is the cost: a read that
+     * fails can take twenty seconds, so one failure stands the engine down for
+     * a minute rather than making the next tap wait again.
+     */
+    fun readSkipReason(host: String): String? {
+        val last = failedAt[host] ?: return null
+        val since = System.currentTimeMillis() - last
+        return if (since < READ_RETRY_AFTER_MS) {
+            "the browser failed on $host ${since / 1000}s ago"
+        } else {
+            null
+        }
+    }
+
+    /**
+     * Forgets every judgement made about every host. Paired with erasing the
+     * engine's cookies, since a host marked cleared would otherwise keep being
+     * read with a jar that no longer holds anything.
+     */
+    fun forget() {
+        cleared.clear()
+        nativeRejected.clear()
+        failedAt.clear()
+        anyFailureAt = 0L
+    }
+
     private fun chromiumAcceptLanguage(): String {
         val tags = mutableListOf<String>()
         val locales = LocaleList.getAdjustedDefault()
@@ -116,5 +147,6 @@ class WebSession {
     private companion object {
         const val HOST_RETRY_AFTER_MS = 10 * 60_000L
         const val POOL_RETRY_AFTER_MS = 2 * 60_000L
+        const val READ_RETRY_AFTER_MS = 60_000L
     }
 }
