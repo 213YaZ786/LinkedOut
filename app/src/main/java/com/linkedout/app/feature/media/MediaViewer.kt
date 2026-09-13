@@ -61,6 +61,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
+import com.linkedout.app.core.debug.RequestLog
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.ui.icon.LinkedOutIcons
@@ -68,6 +69,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import androidx.media3.common.MediaItem as PlayableItem
+import org.koin.compose.koinInject
 
 /**
  * Full screen viewer for the media of one post.
@@ -243,6 +245,7 @@ private fun ZoomableImage(url: String, onZoomChanged: (Boolean) -> Unit) {
 @Composable
 private fun VideoPage(item: MediaItem, active: Boolean) {
     val context = LocalContext.current
+    val log: RequestLog = koinInject()
     val uriHandler = LocalUriHandler.current
     val policy = rememberMediaPolicy()
     val isGif = item.type == MediaType.GIF
@@ -266,6 +269,17 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
         val listener = object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 failed = true
+                // Recorded with its address. Until now the failure was a
+                // boolean and the reason died with it, so "the video does not
+                // play" could be a refused request, an unsupported container
+                // or a poster image handed to a player. The log now says which.
+                log.record(
+                    kind = RequestLog.Kind.MEDIA,
+                    url = item.downloadUrl,
+                    outcome = "failed",
+                    detail = "${error.errorCodeName}: ${error.message ?: "no message"}" +
+                        (error.cause?.let { " / ${it::class.java.simpleName}: ${it.message}" } ?: "")
+                )
             }
         }
         exo.addListener(listener)

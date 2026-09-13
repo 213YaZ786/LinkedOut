@@ -157,8 +157,19 @@ class LinkedInSource(
         val texts = count { it.text.isNotBlank() }
         val counts = count { it.stats != null }
         val videos = media.count { it.type == MediaType.VIDEO }
+        // The first video's address, shortened. Whether it is an mp4 on
+        // dms.licdn.com or a cover image on media.licdn.com is the whole
+        // difference between a reader that found the player and one that fell
+        // back to the poster, and no count can show that.
+        val firstVideo = media.firstOrNull { it.type == MediaType.VIDEO }
+            ?.downloadUrl
+            ?.let { url ->
+                val bare = url.substringAfter("://").substringBefore('?')
+                bare.split('/').take(4).joinToString("/")
+            }
         return "$size posts, $avatars avatars, $texts texts, " +
-            "${media.size} media ($videos video), $counts counts, $suffix"
+            "${media.size} media ($videos video), $counts counts, $suffix" +
+            (firstVideo?.let { ", first video $it" } ?: "")
     }
 
     // ---- the guest gateway -------------------------------------------------

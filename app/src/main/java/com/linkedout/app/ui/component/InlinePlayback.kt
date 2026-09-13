@@ -23,10 +23,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.linkedout.app.core.debug.RequestLog
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.model.Post
 import androidx.media3.common.MediaItem as PlayableItem
+import org.koin.compose.koinInject
 
 /**
  * False while a list is out of sight: another tab, or the guide on top.
@@ -92,6 +94,7 @@ fun rememberInlineTarget(
 @Composable
 internal fun InlineVideo(url: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val log: RequestLog = koinInject()
     var failed by remember(url) { mutableStateOf(false) }
     val exo = remember(url) {
         ExoPlayer.Builder(context).build().apply {
@@ -106,6 +109,17 @@ internal fun InlineVideo(url: String, onClick: () -> Unit, modifier: Modifier = 
         val listener = object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 failed = true
+                // Recorded with its address. Until now the failure was a
+                // boolean and the reason died with it, so "the video does not
+                // play" could be a refused request, an unsupported container
+                // or a poster image handed to a player. The log now says which.
+                log.record(
+                    kind = RequestLog.Kind.MEDIA,
+                    url = url,
+                    outcome = "failed",
+                    detail = "${error.errorCodeName}: ${error.message ?: "no message"}" +
+                        (error.cause?.let { " / ${it::class.java.simpleName}: ${it.message}" } ?: "")
+                )
             }
         }
         exo.addListener(listener)
