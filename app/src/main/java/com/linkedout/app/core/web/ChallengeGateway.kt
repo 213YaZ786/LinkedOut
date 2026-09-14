@@ -37,7 +37,8 @@ class ChallengeGateway(
     private val solver: ChallengeSolver,
     private val session: WebSession,
     private val throttle: HostThrottle,
-    private val log: RequestLog
+    private val log: RequestLog,
+    private val cookies: GuestCookies
 ) {
 
     enum class Via { NATIVE, WEBVIEW }
@@ -94,9 +95,17 @@ class ChallengeGateway(
      * not because a check appeared. Null when the engine could not be used or
      * did not get the page either, and the caller keeps the native answer.
      *
-     * A page that arrives this way marks the host as one the native client is
-     * refused on, so the next read starts with the engine instead of spending
-     * three requests learning the same thing again.
+     * What happens after a success is the whole point of this path being
+     * cheap. A phone browser sharing the engine's own fingerprint is refused
+     * on the first click and served on the second, so the thing that was
+     * missing is not the fingerprint, it is the cookies the wall sets. They
+     * are handed to the native client here, and the next read is one plain
+     * request instead of two page loads.
+     *
+     * One second chance, and no more. Arriving here with a handover already
+     * made says the cookies were not enough after all, and the engine leads
+     * from then on rather than being reached through a doomed ladder every
+     * time.
      */
     suspend fun readInBrowser(
         url: String,
@@ -104,9 +113,35 @@ class ChallengeGateway(
         kind: RequestLog.Kind,
         read: BrowserRead
     ): Page? {
+        if (session.cookiesWereHandedOver(host)) session.markNativeRejected(host)
+
         val page = viaWebView(url, host, kind, alreadyPaced = false, read = read) ?: return null
-        session.markNativeRejected(host)
+
+        val kept = cookies.put(GuestCookies.fromHeader(BrowserData.cookieLine(url), cookieDomainOf(host)))
+        if (kept.kept.isEmpty()) {
+            // Nothing to give, so the native client cannot be expected to do
+            // any better next time.
+            session.markNativeRejected(host)
+        } else {
+            session.handCookiesOver(host)
+        }
+        log.record(
+            kind = kind,
+            url = url,
+            outcome = "engine cookies handed to the native client",
+            detail = kept.toString()
+        )
         return page
+    }
+
+    /**
+     * The registrable domain a host's cookies should be filed under, so a
+     * cookie earned on fr.linkedin.com also rides on www.linkedin.com, which
+     * is the only host this app asks for pages from.
+     */
+    private fun cookieDomainOf(host: String): String {
+        val parts = host.split('.')
+        return if (parts.size >= 2) parts.takeLast(2).joinToString(".") else host
     }
 
     private suspend fun viaWebView(

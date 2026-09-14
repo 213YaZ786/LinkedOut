@@ -106,6 +106,7 @@ fun PostCard(
                             handle = quote.handle,
                             name = quote.name,
                             text = quote.text,
+                            avatarUrl = quote.avatarUrl,
                             note = quote.note,
                             onClick = { onOpenLink(quote.permalink) }
                         )
@@ -303,6 +304,7 @@ internal fun QuoteBlock(
     name: String,
     text: String,
     onClick: () -> Unit,
+    avatarUrl: String? = null,
     note: CommunityNote? = null
 ) {
     Surface(
@@ -312,13 +314,23 @@ internal fun QuoteBlock(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                if (name.isBlank()) "@$handle" else "$name  @$handle",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            // The person whose words these are, with their own face. The card
+            // above shows whoever reposted or reacted, and on a profile that
+            // is most of them, so without this the reader sees one picture and
+            // two names and has to work out which is which.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Avatar(avatarUrl, name, size = 24.dp)
+                Text(
+                    if (name.isBlank()) "@$handle" else "$name  @$handle",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
             if (text.isNotBlank()) {
                 Text(
                     text,

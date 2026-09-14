@@ -318,6 +318,11 @@ class PostPageParser {
                 ?.removePrefix("View organization page for ")
                 .orEmpty(),
             text = inner.textAfter("data-test-id=\"$RESHARE_COMMENTARY\"", "</p>").orEmpty(),
+            // Bound to the reshare's own actor marker, for the same reason the
+            // post's avatar is: hue-web-entity__image is worn by the signed
+            // out silhouette in the navigation bar and by every commenter.
+            avatarUrl = inner.attributeAfter("public_post_reshare_feed-actor-image", "data-delayed-url", window = 900)
+                ?.let(Markup::decodeEntities),
             permalink = if (id.isNotEmpty()) {
                 LinkedInLink.canonical("feed/update/urn:li:activity:$id")
             } else {

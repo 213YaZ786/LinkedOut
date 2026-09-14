@@ -278,7 +278,14 @@ class LinkedInSource(
                     log.keepBody(url, attempt.text)
                     return attempt
                 }
-                attempt is Attempt.Failed && attempt.error is AppError.AccountUnavailable -> wall = attempt
+                attempt is Attempt.Failed && attempt.error is AppError.AccountUnavailable -> {
+                    // The other arrivals have never answered a wall
+                    // differently, and each one is a request and a second
+                    // against a host that rate limits. The engine is what
+                    // answers differently, so go there now.
+                    wall = attempt
+                    break
+                }
                 attempt is Attempt.Failed && attempt.denial -> {
                     // A denial repeated on another rung has never answered
                     // differently. Stop walking and spend the browser instead.

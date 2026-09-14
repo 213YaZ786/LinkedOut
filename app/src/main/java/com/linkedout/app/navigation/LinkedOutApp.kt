@@ -22,6 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavHostController
 import com.linkedout.app.core.link.LinkRouter
 import com.linkedout.app.core.link.LinkedInLink
@@ -65,13 +71,13 @@ fun LinkedOutApp() {
 
     fun show(link: LinkedInLink) {
         when (link) {
-            is LinkedInLink.Profile -> navController.navigate(Routes.feed(link.handle))
+            is LinkedInLink.Profile -> navController.open(Routes.feed(link.handle))
             // A company is followed and read exactly like a person. Its posts
             // come off the same kind of page, so it lands on the same screen.
-            is LinkedInLink.Company -> navController.navigate(
+            is LinkedInLink.Company -> navController.open(
                 Routes.feed(link.slug, AccountKind.ofSegment(link.segment))
             )
-            is LinkedInLink.Post -> navController.navigate(Routes.post(link.id, link.handle.orEmpty()))
+            is LinkedInLink.Post -> navController.open(Routes.post(link.id, link.handle.orEmpty()))
         }
     }
 
@@ -100,33 +106,92 @@ fun LinkedOutApp() {
     }
 }
 
+/**
+ * One screen per tap.
+ *
+ * A tap while the previous one is still arriving used to push the same screen
+ * again, and two copies of a post need two taps of back to leave. The screen
+ * being left is also still on top of the stack during its own animation, so
+ * the second copy looked like a back gesture that had not worked.
+ *
+ * The entry only reaches RESUMED once it has arrived, which is exactly the
+ * moment another navigation becomes a deliberate one rather than a stutter.
+ */
+private fun NavHostController.open(route: String) {
+    val entry = currentBackStackEntry
+    if (entry != null && !entry.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+    navigate(route)
+}
+
+/**
+ * One step back per tap, for the same reason as [open]. Two quick taps on the
+ * arrow used to leave two screens, which from the reader's side is a back that
+ * skipped one.
+ */
+private fun NavHostController.back() {
+    val entry = currentBackStackEntry ?: return
+    if (!entry.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+    popBackStack()
+}
+
+/**
+ * How a screen arrives and leaves.
+ *
+ * The library's own default is a 700 ms cross fade, which is most of a second
+ * of the old screen still being there after a back gesture, and reads as a
+ * stuck app rather than as an animation. These are the Material durations: a
+ * short slide with the fade, quicker on the way out than on the way in, and
+ * the popped screen slides back out the side it came in from so the gesture
+ * and the picture agree.
+ */
+private const val ENTER_MS = 260
+private const val EXIT_MS = 180
+
 @Composable
 private fun LinkedOutNavHost(navController: NavHostController) {
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = Routes.MAIN,
-            modifier = Modifier.fillMaxSize().padding(innerPadding)
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            enterTransition = {
+                slideInHorizontally(tween(ENTER_MS)) { full -> full / 4 } +
+                    fadeIn(tween(ENTER_MS))
+            },
+            exitTransition = {
+                slideOutHorizontally(tween(EXIT_MS)) { full -> -full / 8 } +
+                    fadeOut(tween(EXIT_MS))
+            },
+            popEnterTransition = {
+                slideInHorizontally(tween(ENTER_MS)) { full -> -full / 8 } +
+                    fadeIn(tween(ENTER_MS))
+            },
+            // Seekable, so a predictive back drag moves this one under the
+            // reader's thumb instead of playing after the thumb has gone.
+            popExitTransition = {
+                slideOutHorizontally(tween(EXIT_MS)) { full -> full } +
+                    fadeOut(tween(EXIT_MS))
+            }
         ) {
             composable(Routes.MAIN) {
                 MainTabs(
-                    onOpenDebugLog = { navController.navigate(Routes.DEBUG_LOG) },
-                    onOpenFeed = { handle, kind -> navController.navigate(Routes.feed(handle, kind)) },
-                    onOpenPost = { post -> navController.navigate(Routes.post(post.id, post.cacheOwner())) },
-                    onOpenSearch = { navController.navigate(Routes.SEARCH) }
+                    onOpenDebugLog = { navController.open(Routes.DEBUG_LOG) },
+                    onOpenFeed = { handle, kind -> navController.open(Routes.feed(handle, kind)) },
+                    onOpenPost = { post -> navController.open(Routes.post(post.id, post.cacheOwner())) },
+                    onOpenSearch = { navController.open(Routes.SEARCH) }
                 )
             }
             composable(Routes.SEARCH) {
                 Readable {
                     SearchScreen(
-                        onBack = { navController.popBackStack() },
-                        onOpenPost = { post -> navController.navigate(Routes.post(post.id, post.cacheOwner())) }
+                        onBack = { navController.back() },
+                        onOpenPost = { post -> navController.open(Routes.post(post.id, post.cacheOwner())) }
                     )
                 }
             }
             composable(Routes.DEBUG_LOG) {
                 Readable {
-                    DebugLogScreen(onBack = { navController.popBackStack() })
+                    DebugLogScreen(onBack = { navController.back() })
                 }
             }
             composable(
@@ -145,9 +210,9 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                         kind = runCatching {
                             AccountKind.valueOf(entry.arguments?.getString("kind").orEmpty())
                         }.getOrDefault(AccountKind.PERSON),
-                        onBack = { navController.popBackStack() },
+                        onBack = { navController.back() },
                         onOpenPost = { post ->
-                            navController.navigate(Routes.post(post.id, entry.arguments?.getString("handle").orEmpty()))
+                            navController.open(Routes.post(post.id, entry.arguments?.getString("handle").orEmpty()))
                         }
                     )
                 }
@@ -167,9 +232,9 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                     PostDetailScreen(
                         id = entry.arguments?.getString("id").orEmpty(),
                         from = entry.arguments?.getString("from"),
-                        onBack = { navController.popBackStack() },
-                        onOpenProfile = { handle -> navController.navigate(Routes.feed(handle)) },
-                        onOpenPost = { post -> navController.navigate(Routes.post(post.id, post.authorHandle)) }
+                        onBack = { navController.back() },
+                        onOpenProfile = { handle -> navController.open(Routes.feed(handle)) },
+                        onOpenPost = { post -> navController.open(Routes.post(post.id, post.authorHandle)) }
                     )
                 }
             }

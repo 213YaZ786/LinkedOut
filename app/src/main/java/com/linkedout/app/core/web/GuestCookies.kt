@@ -190,6 +190,26 @@ class GuestCookies(private val storage: Storage = Storage.None) {
         )
 
         /**
+         * Reads the one line a browser hands out for an address, the same
+         * shape a `Cookie:` header carries, into records this jar can hold.
+         *
+         * That line says nothing about domains, paths or expiry, so the
+         * caller names the domain and everything is kept as a session cookie.
+         * That is the honest reading rather than a cautious one: a value
+         * copied out of the engine is only known to be good now, and holding
+         * it for the run means it is never written to disk.
+         */
+        fun fromHeader(text: String, domain: String): List<GuestCookie> =
+            text.split(';').mapNotNull { part ->
+                val pair = part.trim()
+                if (pair.isEmpty()) return@mapNotNull null
+                val name = pair.substringBefore('=').trim()
+                val value = pair.substringAfter('=', "").trim()
+                if (name.isEmpty() || value.isEmpty()) return@mapNotNull null
+                GuestCookie(name = name, value = value, domain = domain)
+            }
+
+        /**
          * A tab or a newline inside a value would split the line it is written
          * on and the cookie would come back as something else, or not at all.
          * No LinkedIn cookie carries one today, which is exactly why it would

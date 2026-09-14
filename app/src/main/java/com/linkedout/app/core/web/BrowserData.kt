@@ -23,13 +23,20 @@ object BrowserData {
      * enough that a wall visit earned something, and the values are exactly
      * what this app promises not to handle more than it must.
      */
-    fun cookieNames(url: String): List<String> = runCatching {
-        CookieManager.getInstance().getCookie(url)
-            .orEmpty()
-            .split(';')
+    fun cookieNames(url: String): List<String> =
+        cookieLine(url).split(';')
             .mapNotNull { it.substringBefore('=').trim().takeIf(String::isNotEmpty) }
             .sorted()
-    }.getOrDefault(emptyList())
+
+    /**
+     * The raw line the engine would send to [url], in the shape of a `Cookie:`
+     * header. Read by [GuestCookies.fromHeader] so what the engine earned at
+     * the wall can be handed to the native client, which is what turns a
+     * second reading into one plain request instead of two page loads.
+     */
+    fun cookieLine(url: String): String = runCatching {
+        CookieManager.getInstance().getCookie(url).orEmpty()
+    }.getOrDefault("")
 
     /** Best effort by design: a phone with no WebView installed throws here. */
     fun clear() {

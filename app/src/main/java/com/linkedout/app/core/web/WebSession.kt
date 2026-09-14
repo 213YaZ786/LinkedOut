@@ -92,6 +92,21 @@ class WebSession {
         return null
     }
 
+    private val handedOver: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * Records that what the engine earned on [host] has been handed to the
+     * native client. The next native refusal on that host is then worth
+     * something: it says the cookies were not what was missing, and the
+     * engine should lead from then on instead of being reached through three
+     * doomed requests every time.
+     */
+    fun handCookiesOver(host: String) {
+        handedOver += host
+    }
+
+    fun cookiesWereHandedOver(host: String): Boolean = host in handedOver
+
     /**
      * Why a browser read should be skipped, or null to go ahead.
      *
@@ -119,6 +134,7 @@ class WebSession {
     fun forget() {
         cleared.clear()
         nativeRejected.clear()
+        handedOver.clear()
         failedAt.clear()
         anyFailureAt = 0L
     }

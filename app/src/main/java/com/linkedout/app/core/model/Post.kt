@@ -42,7 +42,12 @@ data class Post(
         val merged = copy(
             avatarUrl = avatarUrl ?: fresh.avatarUrl,
             media = media.ifEmpty { fresh.media },
-            quoted = quoted?.let { q -> q.copy(note = fresh.quoted?.note ?: q.note) } ?: fresh.quoted,
+            quoted = quoted?.let { q ->
+                q.copy(
+                    avatarUrl = q.avatarUrl ?: fresh.quoted?.avatarUrl,
+                    note = fresh.quoted?.note ?: q.note
+                )
+            } ?: fresh.quoted,
             card = fresh.card ?: card,
             poll = fresh.poll ?: poll,
             note = fresh.note ?: note,
@@ -90,12 +95,23 @@ data class MediaItem(
     val sourcePostId: String? = null
 )
 
+/**
+ * The post a card carries rather than writes: what was reposted, or what was
+ * reacted to.
+ *
+ * [avatarUrl] is the original author's picture, not the resharer's. A card
+ * drew one picture until now, the account being read, so ten of seventeen
+ * cards on a profile showed the reader a face that had nothing to do with the
+ * words underneath. Null when the page names no picture, which the card draws
+ * as a silhouette rather than as a guess.
+ */
 @Serializable
 data class QuotedPost(
     val handle: String,
     val name: String,
     val text: String,
     val permalink: String,
+    val avatarUrl: String? = null,
     val note: CommunityNote? = null
 )
 

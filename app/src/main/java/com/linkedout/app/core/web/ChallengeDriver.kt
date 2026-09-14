@@ -65,6 +65,12 @@ class ChallengeDriver(
     /** True once the target was asked for the second time. One retry, ever. */
     private var wallRetried = false
 
+    private var wallWatching = false
+
+    /** What the engine already held before the wall was visited. */
+    private val cookiesBefore: Set<String> =
+        if (task.read != null) BrowserData.cookieNames(task.url).toSet() else emptySet()
+
     val view: WebView = WebView(context).apply {
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
@@ -152,14 +158,19 @@ class ChallengeDriver(
                 read.isDetour(Uri.parse(current).path.orEmpty(), html)
             ) {
                 wallVisited = true
+                // The visit is finished the moment it has handed over a
+                // cookie the engine did not hold before. Waiting on a timer
+                // past that point is time the reader spends for nothing, and
+                // the wall's whole page is heavier than what was wanted from
+                // it. The timer stays as the floor for a wall that sets
+                // nothing visible on this address.
                 val settled = SystemClock.elapsedRealtime() - lastFinishedAt > WALL_SETTLE_MS
-                if (settled) {
-                    wallRetried = true
-                    if (read.headers.isEmpty()) {
-                        view.loadUrl(task.url)
-                    } else {
-                        view.loadUrl(task.url, read.headers)
-                    }
+                if (cookiesGained().isNotEmpty() || settled) {
+                    askAgain()
+                } else {
+                    // Look again sooner than the poll would, since this is the
+                    // one moment the whole read is waiting on.
+                    handler.postDelayed({ if (!done) inspect() }, WALL_CHECK_MS)
                 }
                 return@evaluateJavascript
             }
@@ -200,6 +211,48 @@ class ChallengeDriver(
         }
     }
 
+    /** Cookie names the engine did not hold before the wall was visited. */
+    private fun cookiesGained(): Set<String> =
+        BrowserData.cookieNames(task.url).toSet() - cookiesBefore
+
+    /** The second ask. Once per task, and it carries what the wall just set. */
+    private fun askAgain() {
+        val read = task.read ?: return
+        if (wallRetried || done) return
+        wallRetried = true
+        view.stopLoading()
+        if (read.headers.isEmpty()) view.loadUrl(task.url) else view.loadUrl(task.url, read.headers)
+    }
+
+    /**
+     * Watches the wall from the moment it starts loading, rather than from
+     * the moment it finishes.
+     *
+     * The wall is a full page, form, footer and language picker, and none of
+     * that is wanted. What is wanted is the cookie its response sets, which
+     * arrives long before the page is drawn. So the target is asked for again
+     * as soon as a new cookie appears, and the rest of the wall is abandoned
+     * mid load. If nothing appears, this gives up quietly and the normal path
+     * takes over when the page finishes.
+     */
+    private fun startWallWatch() {
+        if (wallWatching || wallRetried || task.read == null) return
+        wallWatching = true
+        val startedAt = SystemClock.elapsedRealtime()
+        val watch = object : Runnable {
+            override fun run() {
+                if (done || wallRetried) return
+                if (cookiesGained().isNotEmpty()) {
+                    askAgain()
+                    return
+                }
+                if (SystemClock.elapsedRealtime() - startedAt > WALL_WATCH_MS) return
+                handler.postDelayed(this, WALL_CHECK_MS)
+            }
+        }
+        handler.postDelayed(watch, WALL_CHECK_MS)
+    }
+
     private fun decode(raw: String?): String? {
         if (raw.isNullOrEmpty() || raw == "null") return null
         return runCatching {
@@ -230,9 +283,14 @@ class ChallengeDriver(
             // load: the visit is what sets the cookies the second ask rides
             // on. After it, a wall coming back is a refusal to report, not a
             // page to stand on, and following it again would loop.
-            if (task.read?.refuses(url.path.orEmpty()) == true && wallRetried) {
-                refusedNavigations++
-                return true
+            if (task.read?.refuses(url.path.orEmpty()) == true) {
+                if (wallRetried) {
+                    refusedNavigations++
+                    return true
+                }
+                // Let it go, and start counting what it gives back.
+                wallVisited = true
+                startWallWatch()
             }
             return false
         }
@@ -298,6 +356,12 @@ class ChallengeDriver(
          * and some of them are set by its script rather than by its response.
          */
         const val WALL_SETTLE_MS = 2_000L
+
+        /** How often the wall is asked whether it has handed anything over. */
+        const val WALL_CHECK_MS = 250L
+
+        /** After this, the wall set nothing on this address and is left alone. */
+        const val WALL_WATCH_MS = 8_000L
 
         /** What Cloudflare style and WAF checks answer on the page they guard. */
         val CHECK_STATUSES = setOf(403, 503)

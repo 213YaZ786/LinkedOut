@@ -64,9 +64,12 @@ val appModule = module {
             cookieDomain = LinkedInHost.COOKIE_DOMAIN
         )
     }
-    single { ChallengeGateway(get(), get(), get(), get(), get()) }
+    single { ChallengeGateway(get(), get(), get(), get(), get(), get()) }
     single { ConnectivityMonitor(androidContext()) }
-    single { MediaDownloader(androidContext()) }
+    single {
+        val videos: VideoSources = get()
+        MediaDownloader(androidContext(), get(named("appScope"))) { id -> videos.sourceFor(id) }
+    }
     single { AccountStore(androidContext()) }
     single { SettingsStore(androidContext()) }
     single { LinkRouter(androidContext()) }

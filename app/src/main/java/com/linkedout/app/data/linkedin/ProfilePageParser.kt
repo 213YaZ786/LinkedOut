@@ -379,7 +379,13 @@ class ProfilePageParser {
             handle = Markup.handleIn(href).orEmpty(),
             name = inner.cardAuthorName().orEmpty(),
             text = inner.commentaryText(outerOnly = false).orEmpty(),
-            permalink = inner.postPermalink() ?: postPermalink().orEmpty()
+            permalink = inner.postPermalink() ?: postPermalink().orEmpty(),
+            // Read from inside the nested lockup, so it is the original
+            // author's picture. The outer card's own read starts at the top of
+            // the chunk and finds the resharer's, which is the right one there
+            // and the wrong one here. Both are now drawn, and neither is
+            // borrowed from the other.
+            avatarUrl = inner.url("hue-web-entity__image", "data-delayed-url")
         )
     }
 
