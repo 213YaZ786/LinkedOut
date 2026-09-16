@@ -79,14 +79,54 @@ class GuestCookies(private val storage: Storage = Storage.None) {
         return Kept(kept, dropped)
     }
 
-    /** Everything that should ride on a request to this address. */
+    /**
+     * Takes over what a browser holds for [host]. One record per name, and
+     * anything already in the jar that would ride on the same request is
+     * replaced rather than joined.
+     *
+     * A `Cookie` line carries no domain, so an imported record cannot be told
+     * apart from one a `Set-Cookie` left under a different spelling of the
+     * same domain. Keeping both put every name twice in the header and
+     * LinkedIn answered 400 to the next request, which is how this was found.
+     */
+    fun replaceFor(
+        host: String,
+        cookies: List<GuestCookie>,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Kept {
+        synchronized(lock) {
+            val names = cookies.map { it.name }.toSet()
+            val stale = jar.values.filter { it.name in names && it.matches(host, "/") }
+            stale.forEach { jar.remove(it.key()) }
+        }
+        return put(cookies.distinctBy { it.name }, nowMillis)
+    }
+
+    /**
+     * Everything that should ride on a request to this address, at most one
+     * per name.
+     *
+     * The specification allows two records of one name to be sent together,
+     * and LinkedIn refuses a request that does. Where there is a choice, the
+     * one bound to this exact host wins over one bound to the domain, and a
+     * longer path wins over a shorter, which is the same order of specificity
+     * a browser uses to decide what to send first.
+     */
     fun matching(
         host: String,
         path: String = "/",
         nowMillis: Long = System.currentTimeMillis()
     ): List<GuestCookie> = synchronized(lock) {
         purge(nowMillis)
-        jar.values.filter { it.matches(host, path) }
+        jar.values.asSequence()
+            .filter { it.matches(host, path) }
+            .sortedWith(
+                compareByDescending<GuestCookie> { it.hostOnly }
+                    .thenByDescending { it.domain.length }
+                    .thenByDescending { it.path.length }
+            )
+            .distinctBy { it.name }
+            .toList()
     }
 
     /** The names only, for a log line. */

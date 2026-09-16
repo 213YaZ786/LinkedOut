@@ -354,6 +354,16 @@ class LinkedInSource(
         hostSuffix = LinkedInHost.COOKIE_DOMAIN,
         userAgent = LinkedInHost.USER_AGENT,
         headers = mapOf("Referer" to LinkedInHost.REFERER),
+        // The engine is greeted before it asks for anything, because a
+        // browser always is. Opening cold on a post is the one arrival
+        // LinkedIn treats worst, and it leaves no history entry to go back
+        // to, which is the gesture that gets the page on a desk.
+        preludeUrl = LinkedInHost.BASE + "/",
+        // What the wall is visited for. `fid` comes from the abuse-features
+        // module the wall loads, `__cf_bm` from the Cloudflare tier in front
+        // of the country hosts. Neither is set by the response, so leaving
+        // early throws away the reason for going.
+        awaitCookies = listOf("fid", "__cf_bm"),
         looksBlocked = LinkedInHost::isAuthWall
     )
 

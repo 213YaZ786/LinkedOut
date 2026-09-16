@@ -117,7 +117,10 @@ class ChallengeGateway(
 
         val page = viaWebView(url, host, kind, alreadyPaced = false, read = read) ?: return null
 
-        val kept = cookies.put(GuestCookies.fromHeader(BrowserData.cookieLine(url), cookieDomainOf(host)))
+        val kept = cookies.replaceFor(
+            host = host,
+            cookies = GuestCookies.fromHeader(BrowserData.cookieLine(url), cookieDomainOf(host))
+        )
         if (kept.kept.isEmpty()) {
             // Nothing to give, so the native client cannot be expected to do
             // any better next time.
@@ -185,11 +188,15 @@ class ChallengeGateway(
                     detail = when {
                         read != null -> buildString {
                             append("the engine's own read")
-                            if (result.wallVisited) {
-                                append(", the wall was visited once and the page asked again")
-                            }
+                            append(
+                                if (result.wallVisited) {
+                                    ", the wall came up, was let run, then back and asked again"
+                                } else {
+                                    ", no wall on the way"
+                                }
+                            )
                             if (result.refusedNavigations > 0) {
-                                append(", ${result.refusedNavigations} wall after the retry refused")
+                                append(", ${result.refusedNavigations} navigation off the domain refused")
                             }
                             // Names only, never values. The presence of fid or
                             // __cf_bm is the whole proof the detour earned its

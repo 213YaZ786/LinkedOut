@@ -31,14 +31,55 @@ package com.linkedout.app.core.web
  *
  * [headers] ride on the main request, the Referer above all, since it is what
  * decides between the page and the wall in the first place.
+ *
+ * [preludeUrl] is loaded before the target, and it is the difference between
+ * this engine and the browser on a desk. A browser arrives at a post from
+ * somewhere: it has a page behind it, a history entry to go back to, and a
+ * session that has already been greeted. The engine used to open cold on the
+ * target, which is the one arrival LinkedIn treats worst.
+ *
+ * [awaitCookies] are the names the wall is visited for. Leaving the wall as
+ * soon as any cookie appeared was a mistake made for speed in 0.6.15: the
+ * first ones are set by the response, while `fid` comes from the page's own
+ * abuse-features script seconds later, and cutting the load early threw away
+ * the reason for being there.
  */
 class BrowserRead(
     val blockedPaths: List<String> = emptyList(),
     val hostSuffix: String? = null,
     val userAgent: String? = null,
     val headers: Map<String, String> = emptyMap(),
+    val preludeUrl: String? = null,
+    val awaitCookies: List<String> = emptyList(),
     val looksBlocked: (String) -> Boolean = { false }
 ) {
+
+    /**
+     * True when this document is the page the engine was greeted on rather
+     * than the page it was sent for. Compares paths, because LinkedIn answers
+     * from the country subdomain of whoever owns the page and the host is
+     * therefore not a reliable difference.
+     *
+     * Without this, a read of the greeting that was already in flight when
+     * the engine moved on came back afterwards and was taken for the answer.
+     * On the device that meant a profile request returning the guest home
+     * page, 144 kB of it, parsed to nothing.
+     */
+    fun isGreeting(currentUrl: String, targetUrl: String): Boolean {
+        if (preludeUrl == null) return false
+        return pathOf(currentUrl).isEmpty() && pathOf(targetUrl).isNotEmpty()
+    }
+
+    private fun pathOf(url: String): String =
+        url.substringAfter("://", url)
+            .substringAfter('/', "")
+            .substringBefore('?')
+            .substringBefore('#')
+            .trim('/')
+
+    /** True when [held] contains something the wall was visited for. */
+    fun hasWhatWasWanted(held: Set<String>): Boolean =
+        awaitCookies.isNotEmpty() && awaitCookies.any { it in held }
 
     /** True when this main frame path is one of the wall's own addresses. */
     fun refuses(path: String): Boolean {

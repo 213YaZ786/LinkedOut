@@ -22,6 +22,12 @@ import com.linkedout.app.core.common.ChallengeKind
 import com.linkedout.app.core.network.ChallengeDetector
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 
 /**
@@ -54,7 +60,7 @@ class ChallengeDriver(
     private var lastMainFrameError: Pair<String, Int>? = null
     private var lastFinishedAt = 0L
 
-    /** Navigations refused after the retry was already spent. */
+    /** Navigations off the domain, refused. */
     var refusedNavigations = 0
         private set
 
@@ -65,11 +71,36 @@ class ChallengeDriver(
     /** True once the target was asked for the second time. One retry, ever. */
     private var wallRetried = false
 
-    private var wallWatching = false
+    /** Which leg of a reading task is in flight. See [advance]. */
+    private enum class Leg { PRELUDE, TARGET, WALL, BACK, RETRY }
 
-    /** What the engine already held before the wall was visited. */
-    private val cookiesBefore: Set<String> =
-        if (task.read != null) BrowserData.cookieNames(task.url).toSet() else emptySet()
+    private var leg: Leg = if (task.read?.preludeUrl != null) Leg.PRELUDE else Leg.TARGET
+
+    private var wallSince = 0L
+
+    /**
+     * What the last probe saw. A page that has not changed since the last
+     * full read has nothing new to say, and reading it again is the expensive
+     * part of this class.
+     */
+    private var lastSeen: String? = null
+
+    /**
+     * Which document the engine is on. Every load moves it forward, and a
+     * read that comes back carrying an older number is describing a page that
+     * has already been left.
+     *
+     * Two reads of one document can be in flight at once, one from the load
+     * that finished and one from the timer. The first makes the engine move
+     * on, and the second used to arrive afterwards holding the page it had
+     * just left, on a leg where that page counts as the answer. That is how
+     * the home page came back labelled as a profile.
+     */
+    private var document = 0
+
+    /** Off the main thread, where a 400 kB document belongs. */
+    private val work = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
 
     val view: WebView = WebView(context).apply {
         settings.javaScriptEnabled = true
@@ -107,14 +138,16 @@ class ChallengeDriver(
         // builds, and after it the request is already out.
         task.read?.userAgent?.let { view.settings.userAgentString = it }
         solver.onUserAgent(view.settings.userAgentString.orEmpty())
-        val headers = task.read?.headers.orEmpty()
-        if (headers.isEmpty()) view.loadUrl(task.url) else view.loadUrl(task.url, headers)
+        val read = task.read
+        val first = read?.preludeUrl?.takeIf { leg == Leg.PRELUDE } ?: task.url
+        if (read == null) view.loadUrl(task.url) else load(first, read)
         handler.postDelayed(poll, POLL_MS)
     }
 
     /** Must be called when the view leaves the screen. Idempotent. */
     fun release() {
         done = true
+        work.cancel()
         handler.removeCallbacksAndMessages(null)
         runCatching {
             view.stopLoading()
@@ -135,122 +168,171 @@ class ChallengeDriver(
     }
 
     /**
-     * Reads the current document and asks the same detector the native path
-     * uses whether it is still a check. Runs after every page load and on a
-     * timer, because some checks swap the page without navigating.
+     * Asks the page for a few bytes about itself, and only pulls the whole
+     * document when those bytes have changed.
+     *
+     * This is where the app's own animations were being eaten. A LinkedIn page
+     * is around 400 kB, `outerHTML` copies it, the bridge escapes it into a
+     * JSON string, and the callback lands on the main thread, where it was
+     * then unescaped character by character. On a timer, every 1.5 seconds,
+     * for the life of the task. The probe below costs a few dozen bytes and
+     * answers the only question the timer exists for: has this document been
+     * swapped without a navigation.
      */
     private fun inspect() {
         if (done || lastFinishedAt == 0L || view.progress < 100) return
         val current = view.url ?: return
         if (!current.startsWith("https://")) return
 
-        view.evaluateJavascript(READ_DOCUMENT_JS) { raw ->
+        view.evaluateJavascript(PROBE_JS) { raw ->
             if (done) return@evaluateJavascript
-            val html = decode(raw) ?: return@evaluateJavascript
+            val seen = raw?.trim('"').orEmpty()
+            if (seen.isEmpty() || seen == "null") return@evaluateJavascript
+            if (!seen.startsWith("complete") && !seen.startsWith("interactive")) return@evaluateJavascript
+            if (seen == lastSeen) return@evaluateJavascript
+            lastSeen = seen
+            readDocument(current)
+        }
+    }
 
-            // The wall detour, for reading tasks only. Standing on the wall is
-            // not a result: it is the visit that earns the cookies. Once it
-            // has settled, ask for the target again, once. After that retry
-            // the document is taken for what it is, and a wall that came back
-            // anyway is reported upstream as one.
-            val read = task.read
-            if (read != null && !wallRetried &&
-                read.isDetour(Uri.parse(current).path.orEmpty(), html)
-            ) {
-                wallVisited = true
-                // The visit is finished the moment it has handed over a
-                // cookie the engine did not hold before. Waiting on a timer
-                // past that point is time the reader spends for nothing, and
-                // the wall's whole page is heavier than what was wanted from
-                // it. The timer stays as the floor for a wall that sets
-                // nothing visible on this address.
-                val settled = SystemClock.elapsedRealtime() - lastFinishedAt > WALL_SETTLE_MS
-                if (cookiesGained().isNotEmpty() || settled) {
-                    askAgain()
-                } else {
-                    // Look again sooner than the poll would, since this is the
-                    // one moment the whole read is waiting on.
-                    handler.postDelayed({ if (!done) inspect() }, WALL_CHECK_MS)
-                }
-                return@evaluateJavascript
-            }
-
-            val recorded = lastMainFrameError?.takeIf { it.first == current }?.second ?: 200
-            // A check answers 403 or 503 on the very URL it guards, then
-            // reloads that URL with the real page. A success fires no error
-            // callback, so the check's status stays recorded against the URL.
-            // In 1.3.4 twstalker's real page came back labelled 403 and was
-            // read as a refusal. Posts on the page settle it. A genuine 404
-            // is left alone.
-            val status = if (recorded in CHECK_STATUSES && ChallengeDetector.hasContent(html)) {
-                200
-            } else {
-                recorded
-            }
-
-            when (ChallengeDetector.detect(status, html)) {
-                null -> finish(
-                    ChallengeSolver.Result.Cleared(
-                        html = html,
-                        finalUrl = current,
-                        status = status,
-                        refusedNavigations = refusedNavigations,
-                        wallVisited = wallVisited
-                    )
-                )
-                ChallengeKind.WAF_BLOCK -> {
-                    // A plain refusal with no script to run. Give it a moment
-                    // in case something redirects, then stop wasting time.
-                    val settled = SystemClock.elapsedRealtime() - lastFinishedAt > BLOCK_SETTLE_MS
-                    if (!task.interactive && settled) {
-                        finish(ChallengeSolver.Result.Blocked(status))
-                    }
-                }
-                else -> Unit // still working, the page will move on by itself
+    /** The expensive read, made once per version of a document. */
+    private fun readDocument(current: String) {
+        val asked = document
+        view.evaluateJavascript(READ_DOCUMENT_JS) { raw ->
+            if (done || raw == null || document != asked) return@evaluateJavascript
+            // Decoding and matching happen off the main thread. Only the
+            // decisions come back to it, because only they touch the view.
+            work.launch {
+                val html = decode(raw) ?: return@launch
+                withContext(Dispatchers.Main) { judge(current, html, asked) }
             }
         }
     }
 
-    /** Cookie names the engine did not hold before the wall was visited. */
-    private fun cookiesGained(): Set<String> =
-        BrowserData.cookieNames(task.url).toSet() - cookiesBefore
+    private fun judge(current: String, html: String, asked: Int) {
+        if (done || document != asked) return
 
-    /** The second ask. Once per task, and it carries what the wall just set. */
-    private fun askAgain() {
-        val read = task.read ?: return
-        if (wallRetried || done) return
-        wallRetried = true
-        view.stopLoading()
-        if (read.headers.isEmpty()) view.loadUrl(task.url) else view.loadUrl(task.url, read.headers)
+        // The page the engine was greeted on is never an answer to a request
+        // for something else, whatever leg thinks it has finished.
+        val read = task.read
+        if (leg != Leg.PRELUDE && read?.isGreeting(current, task.url) == true) return
+
+        if (read != null && !advance(read, current, html)) return
+
+        val recorded = lastMainFrameError?.takeIf { it.first == current }?.second ?: 200
+        // A check answers 403 or 503 on the very URL it guards, then
+        // reloads that URL with the real page. A success fires no error
+        // callback, so the check's status stays recorded against the URL.
+        // In 1.3.4 twstalker's real page came back labelled 403 and was
+        // read as a refusal. Posts on the page settle it. A genuine 404
+        // is left alone.
+        val status = if (recorded in CHECK_STATUSES && ChallengeDetector.hasContent(html)) {
+            200
+        } else {
+            recorded
+        }
+
+        when (ChallengeDetector.detect(status, html)) {
+            null -> finish(
+                ChallengeSolver.Result.Cleared(
+                    html = html,
+                    finalUrl = current,
+                    status = status,
+                    refusedNavigations = refusedNavigations,
+                    wallVisited = wallVisited
+                )
+            )
+            ChallengeKind.WAF_BLOCK -> {
+                // A plain refusal with no script to run. Give it a moment
+                // in case something redirects, then stop wasting time.
+                val settled = SystemClock.elapsedRealtime() - lastFinishedAt > BLOCK_SETTLE_MS
+                if (!task.interactive && settled) {
+                    finish(ChallengeSolver.Result.Blocked(status))
+                }
+            }
+            else -> Unit // still working, the page will move on by itself
+        }
     }
 
     /**
-     * Watches the wall from the moment it starts loading, rather than from
-     * the moment it finishes.
+     * Walks a reading task through its legs and says whether the document in
+     * hand is the answer. False means the engine is still working and this
+     * document is scaffolding: the page it was greeted on, or the wall.
      *
-     * The wall is a full page, form, footer and language picker, and none of
-     * that is wanted. What is wanted is the cookie its response sets, which
-     * arrives long before the page is drawn. So the target is asked for again
-     * as soon as a new cookie appears, and the rest of the wall is abandoned
-     * mid load. If nothing appears, this gives up quietly and the normal path
-     * takes over when the page finishes.
+     * The legs are one person's gesture, written down. Arrive somewhere
+     * first. Ask for the post. If the wall comes up, let it finish its work,
+     * because that work is what hands over `fid`. Go back, which is what a
+     * thumb does, and ask again from the page behind it. Whatever comes back
+     * then is the answer, page or wall.
      */
-    private fun startWallWatch() {
-        if (wallWatching || wallRetried || task.read == null) return
-        wallWatching = true
-        val startedAt = SystemClock.elapsedRealtime()
-        val watch = object : Runnable {
-            override fun run() {
-                if (done || wallRetried) return
-                if (cookiesGained().isNotEmpty()) {
-                    askAgain()
-                    return
-                }
-                if (SystemClock.elapsedRealtime() - startedAt > WALL_WATCH_MS) return
-                handler.postDelayed(this, WALL_CHECK_MS)
+    private fun advance(read: BrowserRead, current: String, html: String): Boolean {
+        val onWall = read.isDetour(Uri.parse(current).path.orEmpty(), html)
+        when (leg) {
+            Leg.PRELUDE -> {
+                // Greeted. Now ask for what was wanted.
+                leg = Leg.TARGET
+                load(task.url, read)
+                return false
             }
+            Leg.TARGET -> {
+                if (!onWall) return true
+                wallVisited = true
+                leg = Leg.WALL
+                wallSince = SystemClock.elapsedRealtime()
+                watchWall(read)
+                return false
+            }
+            // The chain started when the wall came up keeps its own timer.
+            // Nothing here has to push it along.
+            Leg.WALL -> return false
+            // Going back lands on the page behind, which is not an answer to
+            // anything. The second ask has not even been made yet.
+            Leg.BACK -> return false
+            Leg.RETRY -> return true
         }
-        handler.postDelayed(watch, WALL_CHECK_MS)
+    }
+
+    /**
+     * Sits on the wall until it has handed over what it is visited for, or
+     * until it has had long enough. Then goes back and asks again.
+     *
+     * Going back rather than reloading matters. A reload from the wall carries
+     * the wall as its referrer, which is the arrival LinkedIn just refused. A
+     * browser that goes back and clicks again arrives from the page behind,
+     * and that is the one that works.
+     */
+    private fun watchWall(read: BrowserRead) {
+        if (done || leg != Leg.WALL) return
+        val held = BrowserData.cookieNames(task.url).toSet()
+        val waited = SystemClock.elapsedRealtime() - wallSince
+        val ready = read.hasWhatWasWanted(held) || waited > WALL_MAX_MS
+        if (!ready) {
+            handler.postDelayed({ watchWall(read) }, WALL_CHECK_MS)
+            return
+        }
+        wallRetried = true
+        if (view.canGoBack()) {
+            leg = Leg.BACK
+            document++
+            lastSeen = null
+            view.goBack()
+            // The back has to land before the second ask, or the ask is the
+            // navigation that gets replaced.
+            handler.postDelayed({
+                if (done) return@postDelayed
+                leg = Leg.RETRY
+                load(task.url, read)
+            }, BACK_SETTLE_MS)
+        } else {
+            leg = Leg.RETRY
+            load(task.url, read)
+        }
+    }
+
+    private fun load(url: String, read: BrowserRead) {
+        document++
+        lastSeen = null
+        if (read.headers.isEmpty()) view.loadUrl(url) else view.loadUrl(url, read.headers)
     }
 
     private fun decode(raw: String?): String? {
@@ -278,20 +360,19 @@ class ChallengeDriver(
             // to fr.linkedin.com is a formality, not an exit.
             val allowed = url.scheme == "https" &&
                 (onTaskHost(url.host) || task.read?.allowsHost(url.host.orEmpty()) == true)
-            if (!allowed) return true
+            if (!allowed) {
+                refusedNavigations++
+                return true
+            }
             // The wall's own addresses. Before the retry they are allowed to
             // load: the visit is what sets the cookies the second ask rides
             // on. After it, a wall coming back is a refusal to report, not a
             // page to stand on, and following it again would loop.
-            if (task.read?.refuses(url.path.orEmpty()) == true) {
-                if (wallRetried) {
-                    refusedNavigations++
-                    return true
-                }
-                // Let it go, and start counting what it gives back.
-                wallVisited = true
-                startWallWatch()
-            }
+            // The wall's own addresses are followed, on purpose. The visit is
+            // what sets the cookies the second ask rides on, and refusing it
+            // in 0.6.13 was the mistake that kept the page out of reach. There
+            // is no loop to guard against any more: the legs in [advance] end
+            // at the second ask whatever comes back.
             return false
         }
 
@@ -315,11 +396,20 @@ class ChallengeDriver(
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             lastFinishedAt = 0L
+            // A new document, so the last probe describes something that is
+            // no longer on screen, and any read still in flight describes it
+            // too.
+            lastSeen = null
+            document++
         }
 
         override fun onPageFinished(view: WebView, url: String?) {
             lastFinishedAt = SystemClock.elapsedRealtime()
-            inspect()
+            // A finished load is a new document by definition, so this one
+            // skips the probe and reads it.
+            val current = view.url
+            lastSeen = null
+            if (current != null && current.startsWith("https://")) readDocument(current)
         }
 
         override fun onReceivedHttpError(
@@ -350,24 +440,36 @@ class ChallengeDriver(
         const val POLL_MS = 1_500L
         const val BLOCK_SETTLE_MS = 4_000L
 
-        /**
-         * How long the wall gets to finish its own work before the target is
-         * asked for again. The cookies it sets are the point of the visit,
-         * and some of them are set by its script rather than by its response.
-         */
-        const val WALL_SETTLE_MS = 2_000L
 
         /** How often the wall is asked whether it has handed anything over. */
-        const val WALL_CHECK_MS = 250L
+        const val WALL_CHECK_MS = 300L
 
-        /** After this, the wall set nothing on this address and is left alone. */
-        const val WALL_WATCH_MS = 8_000L
+        /**
+         * The longest the wall is given to run its own scripts. `fid` is set
+         * by the abuse-features module the wall loads, not by its response,
+         * so this is a wait for someone else's work to finish.
+         */
+        const val WALL_MAX_MS = 9_000L
+
+        /** A back gesture is a navigation and needs its moment to land. */
+        const val BACK_SETTLE_MS = 600L
 
         /** What Cloudflare style and WAF checks answer on the page they guard. */
         val CHECK_STATUSES = setOf(403, 503)
 
         const val READ_DOCUMENT_JS =
             "document.documentElement ? document.documentElement.outerHTML : null"
+
+        /**
+         * A few bytes that change when the document does: its state, the two
+         * meta fields that name a LinkedIn page, and how many elements it
+         * holds. Cheap enough to run on a timer without the reader feeling it.
+         */
+        const val PROBE_JS =
+            "(function(){try{var m=document.querySelector('meta[name=pageKey]');" +
+                "var c=document.querySelector('link[rel=canonical]');" +
+                "return document.readyState+'|'+(m?m.content:'')+'|'+(c?c.getAttribute('href'):'')" +
+                "+'|'+document.getElementsByTagName('*').length;}catch(e){return 'err'}})()"
 
         /**
          * Answered with nothing. The parser reads markup, so an avatar or a
