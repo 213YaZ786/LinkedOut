@@ -37,9 +37,23 @@ data class FollowedAccount(
     val handle: String,
     val kind: AccountKind = AccountKind.PERSON,
     val displayName: String? = null,
+    /**
+     * Which folder this account is filed in. Never empty: an account that has
+     * been put nowhere is in [MAIN], which is why old files load with every
+     * name in the main folder, where they were.
+     *
+     * A folder is its own name and nothing else. There is no list of folders
+     * anywhere, the folders that exist are the ones some account names, so
+     * renaming one is renaming it on each of its accounts and deleting one is
+     * sending them back to [MAIN].
+     */
+    val folder: String = MAIN,
     val addedAtMillis: Long = 0L
 ) {
     companion object {
+        /** Where an account goes when it has been put nowhere. */
+        const val MAIN = "Main"
+
         /**
          * A LinkedIn vanity name: the part after /in/. Letters, digits and
          * hyphens, and long, because LinkedIn appends a hash to duplicates.

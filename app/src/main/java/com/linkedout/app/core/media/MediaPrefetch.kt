@@ -12,6 +12,7 @@ import com.linkedout.app.core.debug.RequestLog
 import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.settings.AutoDownload
+import com.linkedout.app.data.repository.VideoSources
 import com.linkedout.app.data.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -40,6 +41,7 @@ class MediaPrefetch(
     private val context: Context,
     private val settings: SettingsStore,
     private val offline: OfflineMedia,
+    private val videos: VideoSources,
     private val log: RequestLog,
     private val scope: CoroutineScope
 ) {
@@ -73,12 +75,17 @@ class MediaPrefetch(
 
                 for (post in posts) {
                     for (item in post.media) {
-                        val url = item.downloadUrl
+                        // A video the page named without carrying has an
+                        // address only once it has been played or opened. That
+                        // address is taken if it is already known and never
+                        // asked for here: one request per video on every
+                        // refresh is exactly what the reader cannot afford.
+                        val url = if (!item.playable && item.type == MediaType.VIDEO) {
+                            videos.knownSource(post.id).orEmpty()
+                        } else {
+                            item.downloadUrl
+                        }
                         when {
-                            // A video the page named without carrying has no
-                            // address yet. Finding it costs a request per post
-                            // and belongs to a tap, not to a background pass.
-                            !item.playable && item.type != MediaType.PHOTO -> unsaveable++
                             url.isBlank() || url.looksLikePlaylist() -> unsaveable++
                             offline.has(url) -> present++
                             else -> when (val result = enqueue(manager, url, choice)) {
@@ -219,7 +226,11 @@ class MediaPrefetch(
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         if (manager.getNotificationChannel(CHANNEL) != null) return
         manager.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Saving media", NotificationManager.IMPORTANCE_LOW).apply {
+            // Default rather than low. At low importance Android collapses
+            // the line to the bottom of the shade, which on a batch that
+            // lasts a few seconds means nobody ever sees it. Silence comes
+            // from setSilent on the notification, not from the channel.
+            NotificationChannel(CHANNEL, "Saving media", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Progress while pictures and videos are saved for offline reading."
                 setShowBadge(false)
             }

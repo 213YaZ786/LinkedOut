@@ -2,7 +2,9 @@ package com.linkedout.app.data.repository
 
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.Conversation
+import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.model.AccountKind
+import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.core.model.Feed
 import com.linkedout.app.data.linkedin.LinkedInSource
 
@@ -16,7 +18,10 @@ import com.linkedout.app.data.linkedin.LinkedInSource
  * kept rather than dissolved because the screens call it, and because the post
  * page, when it lands, is a second call that belongs beside the first.
  */
-class FeedRepository(private val linkedin: LinkedInSource) {
+class FeedRepository(
+    private val linkedin: LinkedInSource,
+    private val accounts: AccountStore
+) {
 
     /**
      * A post and the comments a guest is shown.
@@ -44,10 +49,22 @@ class FeedRepository(private val linkedin: LinkedInSource) {
         handle: String,
         cursor: String? = null,
         kind: AccountKind = AccountKind.PERSON
-    ): Outcome<Feed> =
-        if (kind.isOrganisation) {
-            linkedin.fetchOrganisation(handle, kind.segment)
-        } else {
-            linkedin.fetchProfile(handle)
-        }
+    ): Outcome<Feed> {
+        if (kind.isOrganisation) return linkedin.fetchOrganisation(handle, kind.segment)
+
+        val asPerson = linkedin.fetchProfile(handle)
+        if (asPerson !is Outcome.Failure || asPerson.error !is AppError.AccountNotFound) return asPerson
+
+        // A company followed as a person. Their two addresses are different
+        // pages and /in/ answers 404 for an organisation, which the reader
+        // reads as "this account does not exist" about an account they can
+        // see in a browser. The logs had three of them, all real.
+        //
+        // Only on a 404, so a refusal or a wall never sends a second request,
+        // and the answer is filed so the mistake costs one extra read once
+        // and never again.
+        val asCompany = linkedin.fetchOrganisation(handle, AccountKind.COMPANY.segment)
+        if (asCompany is Outcome.Success) accounts.updateKind(handle, AccountKind.COMPANY)
+        return if (asCompany is Outcome.Success) asCompany else asPerson
+    }
 }

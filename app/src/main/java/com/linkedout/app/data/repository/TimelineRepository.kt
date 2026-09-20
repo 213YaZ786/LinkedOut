@@ -3,6 +3,7 @@ package com.linkedout.app.data.repository
 import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.AccountKind
+import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.core.media.MediaPrefetch
@@ -27,6 +28,10 @@ class TimelineRepository(
     private val media: MediaPrefetch
 ) {
 
+    /** Null means every account, which is the stream with no folder chosen. */
+    private fun List<FollowedAccount>.inFolder(folder: String?): List<FollowedAccount> =
+        if (folder == null) this else filter { it.folder == folder }
+
     data class Merged(
         val posts: List<Post> = emptyList(),
         val errors: Map<String, AppError> = emptyMap(),
@@ -35,9 +40,14 @@ class TimelineRepository(
         val canLoadMore: Boolean = false
     )
 
-    /** Instant, offline, no network touched. */
-    suspend fun cached(): Merged {
-        val handles = accounts.accounts.value.map { it.handle }
+    /**
+     * Instant, offline, no network touched.
+     *
+     * [folder] narrows it to the accounts filed there. Null is every account,
+     * which is the stream Home opens on.
+     */
+    suspend fun cached(folder: String? = null): Merged {
+        val handles = accounts.accounts.value.inFolder(folder).map { it.handle }
         if (handles.isEmpty()) return Merged()
 
         val loaded = handles.mapNotNull { cache.read(it) }
@@ -61,8 +71,8 @@ class TimelineRepository(
      * a single surviving instance is the fastest way to get rate limited, and
      * the pool's backoff would then punish every later read.
      */
-    suspend fun refresh(only: Set<String>? = null): Merged = coroutineScope {
-        val followed = accounts.accounts.value
+    suspend fun refresh(only: Set<String>? = null, folder: String? = null): Merged = coroutineScope {
+        val followed = accounts.accounts.value.inFolder(folder)
         if (followed.isEmpty()) return@coroutineScope Merged()
 
         val targets = if (only == null) followed else followed.filter { it.handle.lowercase() in only }
@@ -112,7 +122,7 @@ class TimelineRepository(
         // fetch happened to return. This is what makes background polling
         // accumulate history instead of replacing it. The list is read again
         // here, so an account unfollowed during the fetch does not come back.
-        val stored = accounts.accounts.value.mapNotNull { cache.read(it.handle) }
+        val stored = accounts.accounts.value.inFolder(folder).mapNotNull { cache.read(it.handle) }
         val posts = merge(stored.flatMap { it.posts })
 
         // Only what this pass actually read, not the whole merged archive: a

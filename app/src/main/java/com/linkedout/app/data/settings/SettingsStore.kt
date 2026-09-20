@@ -60,6 +60,12 @@ data class Settings(
      * reader who decides to spend the space.
      */
     val autoDownloadMedia: AutoDownload = AutoDownload.NEVER,
+    /**
+     * The folder Home was last showing. Null is every account. Kept across
+     * launches because reopening on a different stream than the one you left
+     * is disorienting.
+     */
+    val homeFolder: String? = null,
     /** Saved posts older than this many days are dropped. 0 keeps everything. */
     val keepPostsDays: Int = 0,
     val startTab: StartTab = StartTab.HOME,

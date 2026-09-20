@@ -461,6 +461,22 @@ class LinkedInSource(
 
     /** Null when the throttle refused to let the request out at all. */
     private suspend fun request(url: String, kind: RequestLog.Kind, arrival: Arrival): Attempt? {
+        // Before the throttle, because the cheapest request is the one not
+        // sent. The logs show the same address read twice in three seconds,
+        // once by the Home refresh and once by opening the screen, and a
+        // guest gets very few profile reads before LinkedIn starts answering
+        // 999 to all of them. Spending two on one page is spending half.
+        rememberedBody(url)?.let { (body, ageMillis) ->
+            log.record(
+                kind = kind,
+                url = url,
+                outcome = "served from the copy read ${ageMillis / 1000}s ago",
+                bodyBytes = body.length,
+                detail = "no request sent"
+            )
+            return Attempt.Body(body)
+        }
+
         if (!throttle.acquire(LinkedInHost.HOST)) return null
         val started = System.currentTimeMillis()
 
@@ -528,9 +544,41 @@ class LinkedInSource(
                 retryAfterSeconds = page.retryAfterSeconds
             )
         } else {
+            remember(url, page.body)
             Attempt.Body(page.body)
         }
     }
+
+    /**
+     * The last few pages read, for a minute each.
+     *
+     * Only whole pages that came back clean are kept, never a wall and never
+     * an error, so a refusal is always asked again. Six at a time, oldest out
+     * first: a profile page is half a megabyte and this is a reprieve, not a
+     * cache. The disk cache of posts is elsewhere and outlives everything.
+     */
+    private suspend fun rememberedBody(url: String): Pair<String, Long>? = recentLock.withLock {
+        val held = recent[url] ?: return@withLock null
+        val age = System.currentTimeMillis() - held.atMillis
+        if (age > RECENT_MILLIS) {
+            recent.remove(url)
+            null
+        } else {
+            held.body to age
+        }
+    }
+
+    private suspend fun remember(url: String, body: String) = recentLock.withLock {
+        val now = System.currentTimeMillis()
+        recent.entries.removeAll { now - it.value.atMillis > RECENT_MILLIS }
+        while (recent.size >= RECENT_PAGES) {
+            val oldest = recent.minByOrNull { it.value.atMillis }?.key ?: break
+            recent.remove(oldest)
+        }
+        recent[url] = RecentPage(now, body)
+    }
+
+    private class RecentPage(val atMillis: Long, val body: String)
 
     /**
      * A desktop browser, and an arrival. Both matter. LinkedIn serves a
@@ -567,10 +615,22 @@ class LinkedInSource(
     }
 
     private val warmUpLock = Mutex()
+    private val recentLock = Mutex()
+    private val recent = mutableMapOf<String, RecentPage>()
 
     private companion object {
         /** How long before a warm up that set no cookie is worth trying again. */
         const val WARM_UP_RETRY_AFTER_MS = 5 * 60_000L
+
+        /**
+         * How long a page just read answers for the next ask. Short enough
+         * that pulling to refresh a minute later really goes out, long enough
+         * to cover a refresh and the tap that follows it.
+         */
+        const val RECENT_MILLIS = 60_000L
+
+        /** Half a megabyte each, so a handful and no more. */
+        const val RECENT_PAGES = 6
 
         /** Below this a 200 is the wall stub or an error page, not a page. */
         const val MIN_PAGE_BYTES = 20_000
