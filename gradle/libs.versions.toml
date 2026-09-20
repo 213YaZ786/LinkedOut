@@ -17,7 +17,7 @@ navigation = "2.10.1"
 koin = "4.2.2"
 ktor = "3.5.2"
 coil = "3.6.2"
-media3 = "1.10.1"
+media3 = "1.11.1"
 # Client hints override for the offscreen engine, see ChallengeDriver.
 # 1.17.0 is the stable release of August 2026, minSdk 24, well under ours.
 webkit = "1.17.0"
