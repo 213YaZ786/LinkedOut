@@ -42,6 +42,10 @@ import org.koin.androidx.compose.koinViewModel
 /**
  * Folders, and what is in them.
  *
+ * A folder exists as soon as it is created, empty, and Home can be switched to
+ * it straight away. It used to exist only as the name its accounts carried, so
+ * a new folder was invisible everywhere else until something was filed in it.
+ *
  * One folder holds an account, never two, so filing is moving rather than
  * adding, and a tick means "this is where it lives". Opening a folder lists
  * every account you follow: tap one to move it in, tap it again to send it
@@ -70,7 +74,9 @@ fun FoldersScreen(
             confirm = "Create",
             onConfirm = { name ->
                 creating = false
-                open = name.trim().takeIf { it.isNotEmpty() }
+                // The folder is written now, empty, so Home can offer it
+                // before anything is filed in it.
+                open = viewModel.createFolder(name)
             },
             onDismiss = { creating = false }
         )
@@ -117,13 +123,6 @@ fun FoldersScreen(
         )
     }
 
-    // A folder being filled but still empty exists only here, until the first
-    // account is filed in it. Nothing is written until then, which is why a
-    // new folder opens straight away.
-    val names = remember(folders, open) {
-        (folders + listOfNotNull(open)).distinct()
-    }
-
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp)
@@ -131,7 +130,7 @@ fun FoldersScreen(
         item(key = "banner") {
             ScreenBanner(
                 title = "Folders",
-                subtitle = if (names.size == 1) "1 folder" else "${names.size} folders",
+                subtitle = if (folders.size == 1) "1 folder" else "${folders.size} folders",
                 leading = {
                     BannerAction(
                         icon = LinkedOutIcons.ArrowBack,
@@ -149,7 +148,7 @@ fun FoldersScreen(
             )
         }
 
-        items(names, key = { it }) { name ->
+        items(folders, key = { it }) { name ->
             val count = rows.count { it.folder == name }
             Zone(
                 modifier = Modifier

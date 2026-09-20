@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.accounts.AccountStore
-import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.data.read.ReadPosts
 import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.data.repository.TimelineRepository
@@ -68,6 +67,14 @@ class TimelineViewModel(
     /** Followed handles, lowercased, that the state reflects. Touched only under [work]. */
     private var known: Set<String> = emptySet()
 
+    /**
+     * Which folder each followed handle sits in, as the state reflects it.
+     * Moving an account between folders leaves [known] identical, so without
+     * this a folder being read did not notice an account arriving in it.
+     * Touched only under [work].
+     */
+    private var filed: Map<String, String> = emptyMap()
+
     /** Set from a pull until it runs, so a second pull cannot queue a second pass. */
     private var fullRefreshQueued = false
 
@@ -77,6 +84,7 @@ class TimelineViewModel(
             // request goes out, then refresh over the top.
             work.withLock {
                 known = followedKeys()
+                filed = filedIn()
                 val cached = repository.cached(folder)
                 // The safety net. Everything already on disk at launch counts
                 // as read, so an outline can only mean "arrived while you were
@@ -84,7 +92,7 @@ class TimelineViewModel(
                 readPosts.mark(cached.posts.map { it.id })
                 _state.value = _state.value.copy(
                     folder = folder,
-                    folders = folderNames(),
+                    folders = accounts.folders.value,
                     allPosts = cached.posts,
                     followedCount = known.size,
                     lastUpdatedMillis = cached.oldestFetchedAtMillis,
@@ -100,6 +108,40 @@ class TimelineViewModel(
         viewModelScope.launch {
             accounts.accounts.collect { reconcile() }
         }
+
+        // The folder list is its own flow, and it has to be, because
+        // reconcile() above returns early when the set of followed handles has
+        // not moved. Creating a folder or filing an account into one moves no
+        // handle, so before 0.6.48 the new folder never reached Home and only
+        // a restart showed it.
+        viewModelScope.launch {
+            accounts.folders.collect { onFolders(it) }
+        }
+    }
+
+    /**
+     * Takes the folder list as it is now. Costs no request: the names change
+     * far more often than the accounts do, and the only case that touches the
+     * stream is the folder being read having been deleted.
+     */
+    private suspend fun onFolders(names: List<String>) = work.withLock {
+        val lost = folder != null && folder !in names
+        if (lost) {
+            // Home would otherwise show nothing at all, so it falls back to
+            // the whole stream rather than to an empty one.
+            folder = null
+            settings.update { it.copy(homeFolder = null) }
+            val cached = repository.cached(null)
+            _state.value = _state.value.copy(
+                folder = null,
+                folders = names,
+                allPosts = cached.posts,
+                lastUpdatedMillis = cached.oldestFetchedAtMillis,
+                canLoadMore = cached.canLoadMore
+            )
+        } else {
+            _state.value = _state.value.copy(folders = names)
+        }
     }
 
     fun refresh() {
@@ -109,6 +151,7 @@ class TimelineViewModel(
             work.withLock {
                 fullRefreshQueued = false
                 known = followedKeys()
+                filed = filedIn()
                 fetch(only = null)
             }
         }
@@ -119,26 +162,23 @@ class TimelineViewModel(
      * request, its posts simply leave. A follow fetches that account only,
      * after showing whatever its cache already holds, for example from having
      * just opened its feed.
+     *
+     * Filing an account into another folder is the third case, and it costs no
+     * request either: every post is already on disk, the folder being read
+     * simply covers a different set of accounts now.
      */
     private suspend fun reconcile() = work.withLock {
         val current = followedKeys()
         val added = current - known
         val removed = known - current
-        if (added.isEmpty() && removed.isEmpty()) return@withLock
+        val placed = filedIn()
+        if (added.isEmpty() && removed.isEmpty() && placed == filed) return@withLock
         known = current
-
-        // A folder that no longer exists would leave Home showing nothing at
-        // all, so it falls back to the whole stream rather than to an empty one.
-        val names = folderNames()
-        if (folder != null && folder !in names) {
-            folder = null
-            settings.update { it.copy(homeFolder = null) }
-        }
+        filed = placed
 
         val cached = repository.cached(folder)
         _state.value = _state.value.copy(
             folder = folder,
-            folders = names,
             allPosts = cached.posts,
             followedCount = current.size,
             canLoadMore = cached.canLoadMore,
@@ -182,12 +222,6 @@ class TimelineViewModel(
         )
     }
 
-    /** The folders that exist, which is to say the ones some account names. */
-    private fun folderNames(): List<String> =
-        (listOf(FollowedAccount.MAIN) + accounts.accounts.value.map { it.folder })
-            .distinct()
-            .sortedWith(compareBy({ it != FollowedAccount.MAIN }, { it.lowercase() }))
-
     /**
      * Switches Home to another folder. The stream is repainted from the cache
      * at once and only then refreshed, so the change is instant and the
@@ -200,6 +234,7 @@ class TimelineViewModel(
         viewModelScope.launch {
             work.withLock {
                 known = followedKeys()
+                filed = filedIn()
                 val cached = repository.cached(folder)
                 readPosts.mark(cached.posts.map { it.id })
                 _state.value = _state.value.copy(
@@ -217,6 +252,9 @@ class TimelineViewModel(
 
     private fun followedKeys(): Set<String> =
         accounts.accounts.value.map { it.handle.lowercase() }.toSet()
+
+    private fun filedIn(): Map<String, String> =
+        accounts.accounts.value.associate { it.handle.lowercase() to it.folder }
 
     /**
      * Called when the reader nears the bottom, and by the retry button.

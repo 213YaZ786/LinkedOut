@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -60,14 +59,15 @@ class AccountsViewModel(
 
     private val summaries = MutableStateFlow<Map<String, Summary>>(emptyMap())
 
-    /** Every folder that exists, which is every folder some account names. */
-    val folders: StateFlow<List<String>> = store.accounts
-        .map { list ->
-            (listOf(FollowedAccount.MAIN) + list.map { it.folder })
-                .distinct()
-                .sortedWith(compareBy({ it != FollowedAccount.MAIN }, { it.lowercase() }))
-        }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, listOf(FollowedAccount.MAIN))
+    /**
+     * Every folder that exists. The store owns the list now, so a folder
+     * created and left empty is still there, which is the whole point of
+     * creating one before filling it.
+     */
+    val folders: StateFlow<List<String>> = store.folders
+
+    /** Returns the folder to open, which is the existing one when the name is taken. */
+    fun createFolder(name: String): String? = store.createFolder(name)
 
     fun setFolder(handle: String, folder: String) = store.setFolder(handle, folder)
 
