@@ -46,6 +46,19 @@ class WebSession {
         if (value.isNotBlank()) userAgent = value
     }
 
+    /**
+     * What became of the last client hint override. Kept so the request log
+     * can say it: a read that fails with hints aligned and one that fails
+     * with an engine too old to align them are two different problems.
+     */
+    @Volatile
+    var clientHints: String? = null
+        private set
+
+    fun onClientHints(outcome: String) {
+        clientHints = outcome
+    }
+
     fun isCleared(host: String): Boolean = host in cleared
 
     fun markCleared(host: String) {
@@ -112,9 +125,14 @@ class WebSession {
      *
      * Shorter than [autoSolveSkipReason] and without its pool rule. That rule
      * exists to stop one wall from being met on ten servers in a row, and
-     * there is one host here. What is worth keeping is the cost: a read that
-     * fails can take twenty seconds, so one failure stands the engine down for
-     * a minute rather than making the next tap wait again.
+     * there is one host here.
+     *
+     * The wait is short on purpose. There is no check for a person to pass on
+     * LinkedIn, so standing down for a minute meant a reader who tapped again
+     * was refused by us rather than by the wall, and the log said we were
+     * waiting for something that was never going to happen. Asking again is
+     * the only move there is, and in a browser it is the move that works, so
+     * the cost of one failed attempt is all this holds back.
      */
     fun readSkipReason(host: String): String? {
         val last = failedAt[host] ?: return null
@@ -163,6 +181,6 @@ class WebSession {
     private companion object {
         const val HOST_RETRY_AFTER_MS = 10 * 60_000L
         const val POOL_RETRY_AFTER_MS = 2 * 60_000L
-        const val READ_RETRY_AFTER_MS = 60_000L
+        const val READ_RETRY_AFTER_MS = 15_000L
     }
 }

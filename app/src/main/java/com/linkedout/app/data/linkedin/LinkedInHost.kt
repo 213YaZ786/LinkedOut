@@ -1,5 +1,7 @@
 package com.linkedout.app.data.linkedin
 
+import com.linkedout.app.core.web.ClientHints
+
 /**
  * The one host this app talks to, and how to tell a real page from a wall.
  *
@@ -40,9 +42,42 @@ object LinkedInHost {
      * reads as a phone, with no activity section at all, so asking as a phone
      * would cost exactly the content this app exists to show.
      */
+    const val CHROME_MAJOR = "140"
+    const val CHROME_FULL = "140.0.0.0"
+
     const val USER_AGENT =
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/140.0.0.0 Safari/537.36"
+            "Chrome/$CHROME_FULL Safari/537.36"
+
+    /**
+     * The client hints that go with [USER_AGENT], field for field.
+     *
+     * A string alone is half a claim. Chromium sends Sec-CH-UA, and on request
+     * the platform, the architecture and the rest, and a WebView fills them
+     * from the real phone however the string is rewritten. Desktop Chrome on
+     * Linux beside an Android WebView that says it is mobile is a combination
+     * no browser produces, and it is the difference between this app and
+     * Firefox, which the wall lets through.
+     *
+     * Built from the same two constants as the string above, so the two
+     * cannot drift apart in a later edit.
+     */
+    val CLIENT_HINTS = ClientHints(
+        brands = listOf(
+            // The third brand is deliberate nonsense, as Chrome's own is:
+            // it exists so parsers do not assume a fixed list.
+            ClientHints.Brand("Chromium", CHROME_MAJOR, CHROME_FULL),
+            ClientHints.Brand("Google Chrome", CHROME_MAJOR, CHROME_FULL),
+            ClientHints.Brand("Not;A=Brand", "99", "99.0.0.0")
+        ),
+        fullVersion = CHROME_FULL,
+        platform = "Linux",
+        platformVersion = "6.6.0",
+        architecture = "x86",
+        bitness = 64,
+        model = "",
+        mobile = false
+    )
 
     /**
      * Main frame addresses the browser engine is not allowed to follow when it

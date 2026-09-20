@@ -25,9 +25,18 @@ package com.linkedout.app.core.web
  *
  * [userAgent] overrides the engine's own string. The WebView says it is
  * Chrome on Android, and LinkedIn answers a phone with a stripped page that
- * has no activity section at all. Stated plainly: the client hints beside the
- * string still describe the real device, and a server comparing the two can
- * tell.
+ * has no activity section at all.
+ *
+ * [clientHints] is the other half of that override, and it is what a browser
+ * built on this same engine gets wrong. Chromium sends Sec-CH-UA,
+ * Sec-CH-UA-Mobile and Sec-CH-UA-Platform on every request, and a WebView
+ * fills them from the real device: brand "Android WebView", mobile yes,
+ * platform Android, whatever the string above claims. A server that compares
+ * the two sees a desktop Chrome string beside an Android WebView that says it
+ * is a phone, and that is not a browser. It is also the difference the user
+ * found: a WebView based browser meets the wall every time where Firefox and
+ * Chromium, whose hints agree with their string, get through. So the hints
+ * are rewritten to match the string, field by field.
  *
  * [headers] ride on the main request, the Referer above all, since it is what
  * decides between the page and the wall in the first place.
@@ -44,10 +53,29 @@ package com.linkedout.app.core.web
  * abuse-features script seconds later, and cutting the load early threw away
  * the reason for being there.
  */
+/**
+ * The client hints a page should see, to be kept in step with the user agent
+ * string they sit beside. Every field maps to one Sec-CH-UA header.
+ */
+class ClientHints(
+    val brands: List<Brand>,
+    val fullVersion: String,
+    val platform: String,
+    val platformVersion: String,
+    val architecture: String,
+    val bitness: Int,
+    /** Empty on a desktop, which is the whole point of claiming to be one. */
+    val model: String,
+    val mobile: Boolean
+) {
+    class Brand(val name: String, val majorVersion: String, val fullVersion: String)
+}
+
 class BrowserRead(
     val blockedPaths: List<String> = emptyList(),
     val hostSuffix: String? = null,
     val userAgent: String? = null,
+    val clientHints: ClientHints? = null,
     val headers: Map<String, String> = emptyMap(),
     val preludeUrl: String? = null,
     val awaitCookies: List<String> = emptyList(),

@@ -58,7 +58,12 @@ data class Post(
 }
 
 @Serializable
-enum class PostKind { ORIGINAL, REPOST, REPLY, QUOTE }
+/**
+ * REACTION is a card from the Reactions panel of a profile: a post by someone
+ * else that this person liked. It used to be filed as REPLY, so the card said
+ * "Replying to" about someone who had not written a word.
+ */
+enum class PostKind { ORIGINAL, REPOST, REPLY, QUOTE, REACTION }
 
 @Serializable
 enum class MediaType { PHOTO, VIDEO, GIF }
@@ -208,18 +213,6 @@ data class ProfileStats(
     val followers: Long? = null,
     val likes: Long? = null
 )
-
-/**
- * The tabs of a profile, mapped to Nitter's own paths. Posts is the cached,
- * multi source feed. Replies and Media are read from Nitter only, fresh, and
- * never saved, like a conversation.
- */
-enum class ProfileTab(val label: String, val path: String, val query: String?) {
-    POSTS("Posts", "", null),
-    REPLIES("Replies", "/with_replies", null),
-    // Forced to the timeline view, the grid and gallery views have no post markup.
-    MEDIA("Media", "/media", "view=timeline")
-}
 
 /**
  * A post with its surroundings, as read from its own page. Not cached: replies

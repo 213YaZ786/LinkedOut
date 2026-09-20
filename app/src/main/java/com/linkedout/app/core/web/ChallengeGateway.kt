@@ -163,8 +163,8 @@ class ChallengeGateway(
             log.record(
                 kind = kind,
                 url = url,
-                outcome = "browser check skipped",
-                detail = "$reason, waiting for a manual check"
+                outcome = "browser read skipped",
+                detail = "$reason, it will be tried again on the next refresh"
             )
             return null
         }
@@ -207,6 +207,10 @@ class ChallengeGateway(
                                 if (held.isEmpty()) ", engine holds no cookies"
                                 else ", engine cookies " + held.joinToString(",")
                             )
+                            // A read that fails with the hints aligned and one
+                            // that fails on an engine too old to align them are
+                            // two different problems, so the line names which.
+                            append(", client hints ${session.clientHints ?: "not set"}")
                         }
                         session.prefersWebView(host) ->
                             "$host checks every request, staying on the browser path"
@@ -222,9 +226,15 @@ class ChallengeGateway(
                 log.record(
                     kind = kind,
                     url = url,
-                    outcome = "browser check not passed",
+                    outcome = "browser read did not get the page",
                     durationMillis = elapsed,
-                    detail = describe(result)
+                    // The hint state belongs on the failures above all. A
+                    // failure with them aligned and one on an engine that
+                    // could not align them are two different problems, and
+                    // 0.6.33 printed it only on the successes, which are the
+                    // ones that need no explaining.
+                    detail = describe(result) +
+                        " | client hints ${session.clientHints ?: "not set"}"
                 )
                 null
             }
@@ -233,7 +243,11 @@ class ChallengeGateway(
 
     private fun describe(result: ChallengeSolver.Result): String = when (result) {
         is ChallengeSolver.Result.Cleared -> "cleared"
-        ChallengeSolver.Result.NeedsInteraction -> "still a check after 20s, needs a manual check"
+        // There is no check for a person to pass on LinkedIn. What stands in
+        // the way is a sign in wall, and the engine either gets behind it or
+        // does not, so this says what happened rather than asking for help
+        // that cannot be given.
+        ChallengeSolver.Result.NeedsInteraction -> "the wall was still up when patience ran out"
         is ChallengeSolver.Result.Blocked -> "the browser was refused too (${result.status ?: "no status"})"
         ChallengeSolver.Result.NoHost -> "app not on screen, no browser available"
         ChallengeSolver.Result.Cancelled -> "closed by the user"

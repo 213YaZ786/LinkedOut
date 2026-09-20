@@ -110,7 +110,10 @@ class ProfilePageParser {
         text = exact.text.ifBlank { text },
         links = exact.links.ifEmpty { links },
         publishedAtMillis = exact.publishedAtMillis,
-        authorName = authorName.ifBlank { exact.authorName },
+        // The graph only knows the person whose page this is, so its name is
+        // only ever the right one on a post they wrote themselves. Lending it
+        // to a card they passed on would put their name on someone else's post.
+        authorName = if (kind == PostKind.ORIGINAL) authorName.ifBlank { exact.authorName } else authorName,
         stats = stats?.let { own -> exact.stats?.let(own::mergedWith) ?: own } ?: exact.stats
     )
 
@@ -207,7 +210,7 @@ class ProfilePageParser {
      */
     private fun extractCards(html: String, handle: String): List<Post> {
         val posts = html.panel(POSTS_PANEL).cardsIn(handle, PostKind.ORIGINAL)
-        val reactions = html.panel(REACTIONS_PANEL).cardsIn(handle, PostKind.REPLY)
+        val reactions = html.panel(REACTIONS_PANEL).cardsIn(handle, PostKind.REACTION)
         return (posts + reactions).distinctBy { it.id }
     }
 
@@ -238,7 +241,7 @@ class ProfilePageParser {
         // ever matched and every card fell through to the fallback. The tab is
         // a structure and says the same thing in every language.
         val kind = when {
-            fallbackKind == PostKind.REPLY -> PostKind.REPLY
+            fallbackKind == PostKind.REACTION -> PostKind.REACTION
             reshared != null -> PostKind.REPOST
             else -> PostKind.ORIGINAL
         }
@@ -247,27 +250,68 @@ class ProfilePageParser {
         // first see-more-text would put the original's text on the wrong author.
         val text = chunk.commentaryText(outerOnly = reshared != null).orEmpty()
 
+        // Everything above the nested card belongs to the person whose profile
+        // this is. The three fields of an identity used to be read from three
+        // different places: the name from the first lockup anywhere in the
+        // chunk, which on a reshare is the original author's, the picture from
+        // the first entity image, which is the person who passed it on, and
+        // the handle from the author lockup. One row then showed one person's
+        // face beside another person's name. They are read from one region now.
+        val outer = chunk.outerCard()
+        val actorHandle = outer.cardAuthorHandle() ?: handle
+
+        // A card someone passed on or reacted to without adding a word is that
+        // other person's post, so the card carries the original author, face
+        // included, and the line above says who brought it here. With a comment
+        // of their own they are the author and the original becomes the quoted
+        // card, the way a quote post reads everywhere else. Held as the nested
+        // card itself rather than as a flag, so the branches below can use it.
+        val passedOn = reshared?.takeIf { text.isBlank() }
+
         return Post(
             id = id,
-            authorHandle = chunk.cardAuthorHandle() ?: handle,
-            authorName = chunk.cardAuthorName().orEmpty(),
+            authorHandle = passedOn?.handle?.ifBlank { actorHandle } ?: actorHandle,
+            authorName = passedOn?.name ?: outer.cardAuthorName().orEmpty(),
             // url(), not attributeAfter(). This was the only address in this
             // file read without decoding, so it kept its &amp; and reached the
             // CDN as "?e=...&amp;v=beta&amp;t=<signature>", where the query
             // names become amp;v and amp;t, the signature is lost and the image
             // is refused. It looked like a missing avatar, not like a bug.
-            avatarUrl = chunk.url("hue-web-entity__image", "data-delayed-url"),
-            text = text,
+            // No falling back across people. If the nested card gave no
+            // picture, the card shows none rather than borrowing the face of
+            // whoever passed it on, which is the very swap this fixes.
+            avatarUrl = if (passedOn != null) {
+                passedOn.avatarUrl
+            } else {
+                outer.url("hue-web-entity__image", "data-delayed-url")
+            },
+            text = passedOn?.text ?: text,
             links = Markup.links(chunk.commentaryHtml().orEmpty()),
             publishedAtMillis = Timestamps.fromRelative(chunk.relativeAge()),
             permalink = permalink,
             kind = kind,
-            relatedHandle = reshared?.handle,
+            relatedHandle = when {
+                passedOn != null -> actorHandle
+                // A card in the Reactions panel is there because this person
+                // reacted to it. That comes from the panel, not from markup,
+                // so it holds even when the page names no one.
+                kind == PostKind.REACTION -> handle
+                else -> reshared?.handle
+            },
             media = chunk.parseMedia(id),
-            quoted = reshared,
+            quoted = if (passedOn != null) null else reshared,
             card = chunk.parseCard(),
             stats = chunk.parseStats()
         )
+    }
+
+    /**
+     * The part of a card above the post it carries. On an ordinary card that
+     * is the whole thing.
+     */
+    private fun String.outerCard(): String {
+        val nested = indexOf("profile-activity-root-author")
+        return if (nested < 0) this else substring(0, nested)
     }
 
     /**

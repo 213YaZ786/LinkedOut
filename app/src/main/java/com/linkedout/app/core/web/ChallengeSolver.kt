@@ -119,6 +119,9 @@ class ChallengeSolver(private val session: WebSession) {
 
     fun onUserAgent(value: String) = session.onUserAgent(value)
 
+    /** What became of the client hint override, for the request log. */
+    fun onClientHints(outcome: String) = session.onClientHints(outcome)
+
     fun attachHost() {
         hosts.incrementAndGet()
     }
@@ -134,7 +137,13 @@ class ChallengeSolver(private val session: WebSession) {
         /** Anubis at typical difficulty takes a few seconds on a phone. */
         const val OFFSCREEN_TIMEOUT_MS = 20_000L
 
-        /** Two loads and a settle, on a phone network. */
-        const val READ_TIMEOUT_MS = 35_000L
+        /**
+         * Up to four loads and their settles, on a phone network. The wall is
+         * walked back from and asked again several times, and only the first
+         * round waits on the wall's own scripts, so the rounds after it are
+         * short. Still generous rather than tight: running out of patience
+         * here reads to the reader as "the account will not load".
+         */
+        const val READ_TIMEOUT_MS = 50_000L
     }
 }

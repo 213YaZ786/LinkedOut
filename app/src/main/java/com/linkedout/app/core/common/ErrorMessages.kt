@@ -15,11 +15,14 @@ data class ErrorPresentation(
 )
 
 /**
- * OPEN_CONNECTION is gone with the screen it opened. What is left is: try
- * again, pass a check, or nothing to do but wait. An error with nothing to
- * offer says so in words rather than showing a button that leads nowhere.
+ * Try again, or nothing to do but wait. An error with nothing to offer says
+ * so in words rather than showing a button that leads nowhere.
+ *
+ * There used to be a third, a check to pass by hand. LinkedIn never asks the
+ * reader for one: the wall it puts up is passed by the offscreen engine or
+ * not at all, so the button only ever offered work that was not theirs.
  */
-enum class ErrorAction { RETRY, OPEN_FALLBACK_VIEWER, NONE }
+enum class ErrorAction { RETRY, NONE }
 
 /**
  * A vanity name fit to print, or null. Blank when a post page hit the wall and
@@ -85,9 +88,10 @@ fun AppError.present(): ErrorPresentation = when (this) {
             action = ErrorAction.NONE
         )
         else -> ErrorPresentation(
-            headline = "$host asks for a quick check",
-            explanation = "It wants to make sure a real person is reading. Do it once and LinkedOut remembers it.",
-            action = ErrorAction.OPEN_FALLBACK_VIEWER
+            headline = "$host put up its sign in wall",
+            explanation = "LinkedOut reads the page behind it on its own and does not always get " +
+                "through on the first try. Trying again often works.",
+            action = ErrorAction.RETRY
         )
     }
 

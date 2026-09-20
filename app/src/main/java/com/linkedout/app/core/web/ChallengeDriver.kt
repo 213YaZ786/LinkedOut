@@ -15,6 +15,9 @@ import android.webkit.SslErrorHandler
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
+import androidx.webkit.UserAgentMetadata
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -73,6 +76,9 @@ class ChallengeDriver(
 
     /** Which leg of a reading task is in flight. See [advance]. */
     private enum class Leg { PRELUDE, TARGET, WALL, BACK, RETRY }
+
+    /** How many times the wall has been met, walked back from and asked again. */
+    private var wallRounds = 0
 
     private var leg: Leg = if (task.read?.preludeUrl != null) Leg.PRELUDE else Leg.TARGET
 
@@ -137,6 +143,7 @@ class ChallengeDriver(
         // Before the load, since the string decides which page LinkedIn
         // builds, and after it the request is already out.
         task.read?.userAgent?.let { view.settings.userAgentString = it }
+        alignClientHints(task.read)
         solver.onUserAgent(view.settings.userAgentString.orEmpty())
         val read = task.read
         val first = read?.preludeUrl?.takeIf { leg == Leg.PRELUDE } ?: task.url
@@ -277,6 +284,7 @@ class ChallengeDriver(
             Leg.TARGET -> {
                 if (!onWall) return true
                 wallVisited = true
+                wallRounds = 1
                 leg = Leg.WALL
                 wallSince = SystemClock.elapsedRealtime()
                 watchWall(read)
@@ -288,7 +296,19 @@ class ChallengeDriver(
             // Going back lands on the page behind, which is not an answer to
             // anything. The second ask has not even been made yet.
             Leg.BACK -> return false
-            Leg.RETRY -> return true
+            // The wall again on the second ask is not an answer, it is the
+            // same door. A person in a browser walks back and clicks a second
+            // and a third time, and on one of them the page comes. So does
+            // this, up to [MAX_WALL_ROUNDS], after which the wall is handed
+            // back as the answer it is and the error names it.
+            Leg.RETRY -> {
+                if (!onWall || wallRounds >= MAX_WALL_ROUNDS) return true
+                wallRounds++
+                leg = Leg.WALL
+                wallSince = SystemClock.elapsedRealtime()
+                watchWall(read)
+                return false
+            }
         }
     }
 
@@ -305,7 +325,12 @@ class ChallengeDriver(
         if (done || leg != Leg.WALL) return
         val held = BrowserData.cookieNames(task.url).toSet()
         val waited = SystemClock.elapsedRealtime() - wallSince
-        val ready = read.hasWhatWasWanted(held) || waited > WALL_MAX_MS
+        // Only the first visit waits on the wall's own scripts, because that
+        // is the visit that sets `fid`. If a second or a third meeting with
+        // the wall has not produced it in a few seconds, it never will, and
+        // the whole read has a budget to respect.
+        val patience = if (wallRounds <= 1) WALL_MAX_MS else WALL_AGAIN_MS
+        val ready = read.hasWhatWasWanted(held) || waited > patience
         if (!ready) {
             handler.postDelayed({ watchWall(read) }, WALL_CHECK_MS)
             return
@@ -327,6 +352,52 @@ class ChallengeDriver(
             leg = Leg.RETRY
             load(task.url, read)
         }
+    }
+
+    /**
+     * Rewrites the user-agent client hints to match the string set above.
+     *
+     * Without this the engine sends a desktop Chrome string with Android
+     * WebView hints beside it, which no real browser does. Google's own
+     * guidance is to call this whenever the string is overridden.
+     *
+     * Silent when the installed WebView is too old to support it: the read
+     * then behaves as it did before, which is to say it meets the wall more
+     * often. The log line says which of the two happened.
+     */
+    private fun alignClientHints(read: BrowserRead?) {
+        val hints = read?.clientHints ?: return
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+            solver.onClientHints("not supported by this WebView")
+            return
+        }
+        val outcome = runCatching {
+            val metadata = UserAgentMetadata.Builder()
+                .setBrandVersionList(
+                    hints.brands.map { brand ->
+                        UserAgentMetadata.BrandVersion.Builder()
+                            .setBrand(brand.name)
+                            .setMajorVersion(brand.majorVersion)
+                            .setFullVersion(brand.fullVersion)
+                            .build()
+                    }
+                )
+                .setFullVersion(hints.fullVersion)
+                .setPlatform(hints.platform)
+                .setPlatformVersion(hints.platformVersion)
+                .setArchitecture(hints.architecture)
+                .setBitness(hints.bitness)
+                .setModel(hints.model)
+                .setMobile(hints.mobile)
+                .build()
+            WebSettingsCompat.setUserAgentMetadata(view.settings, metadata)
+        }
+        solver.onClientHints(
+            outcome.fold(
+                onSuccess = { "aligned with the user agent" },
+                onFailure = { "refused: ${it::class.simpleName}" }
+            )
+        )
     }
 
     private fun load(url: String, read: BrowserRead) {
@@ -451,8 +522,19 @@ class ChallengeDriver(
          */
         const val WALL_MAX_MS = 9_000L
 
+        /** The wall met a second time, which has nothing left to hand over. */
+        const val WALL_AGAIN_MS = 3_000L
+
         /** A back gesture is a navigation and needs its moment to land. */
         const val BACK_SETTLE_MS = 600L
+
+        /**
+         * How many times the walk back and second ask is repeated. One was
+         * what a browser needs on a good day, and the logs showed days where
+         * it is not enough. Each round costs the wall's own wait, which is
+         * why this is three and not ten.
+         */
+        const val MAX_WALL_ROUNDS = 3
 
         /** What Cloudflare style and WAF checks answer on the page they guard. */
         val CHECK_STATUSES = setOf(403, 503)

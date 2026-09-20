@@ -15,6 +15,14 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 @Serializable
 enum class StartTab { HOME, ACCOUNTS, LAST }
 
+/**
+ * When pictures and videos are saved for offline reading. WIFI is really
+ * "not on a metered network", which is what the reader means: a phone
+ * hotspot is Wi-Fi and costs data.
+ */
+@Serializable
+enum class AutoDownload { NEVER, WIFI, ALWAYS }
+
 @Serializable
 data class Settings(
     /** Poll followed accounts in the background so history accumulates. */
@@ -28,10 +36,6 @@ data class Settings(
      * switching them on does not flood the shade with the backlog.
      */
     val notifySinceMillis: Long = 0,
-    /** Home filters. Kept across launches, because a filter is a reading habit. */
-    val homeHideReplies: Boolean = false,
-    val homeHideReposts: Boolean = false,
-    val homeMediaOnly: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** True black instead of dark grey in dark mode. */
     val pureBlack: Boolean = false,
@@ -50,6 +54,12 @@ data class Settings(
      * default: it is a data saver the reader chooses to impose.
      */
     val mediaOnWifiOnly: Boolean = false,
+    /**
+     * Saves the media of freshly read posts into the app's own folder, so a
+     * saved post can be looked at with no network. Off by default: it is the
+     * reader who decides to spend the space.
+     */
+    val autoDownloadMedia: AutoDownload = AutoDownload.NEVER,
     /** Saved posts older than this many days are dropped. 0 keeps everything. */
     val keepPostsDays: Int = 0,
     val startTab: StartTab = StartTab.HOME,

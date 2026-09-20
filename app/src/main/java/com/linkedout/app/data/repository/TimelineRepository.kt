@@ -5,6 +5,7 @@ import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.accounts.AccountStore
+import com.linkedout.app.core.media.MediaPrefetch
 import com.linkedout.app.data.cache.FeedCache
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -22,7 +23,8 @@ import kotlinx.coroutines.sync.withPermit
 class TimelineRepository(
     private val accounts: AccountStore,
     private val feeds: FeedRepository,
-    private val cache: FeedCache
+    private val cache: FeedCache,
+    private val media: MediaPrefetch
 ) {
 
     data class Merged(
@@ -79,6 +81,7 @@ class TimelineRepository(
         }.map { it.await() }
 
         val errors = mutableMapOf<String, AppError>()
+        val fresh = mutableListOf<Post>()
         var oldest: Long? = null
         var more = false
 
@@ -92,6 +95,7 @@ class TimelineRepository(
                     // Merge rather than overwrite, so a refresh does not throw
                     // away every page the reader already scrolled through.
                     val merged = cache.append(outcome.value)
+                    fresh += outcome.value.posts
                     accounts.updateDisplayName(handle, outcome.value.displayName)
                     if (merged.nextCursor != null) more = true
                     oldest = minOf(oldest ?: outcome.value.fetchedAtMillis, outcome.value.fetchedAtMillis)
@@ -109,9 +113,16 @@ class TimelineRepository(
         // accumulate history instead of replacing it. The list is read again
         // here, so an account unfollowed during the fetch does not come back.
         val stored = accounts.accounts.value.mapNotNull { cache.read(it.handle) }
+        val posts = merge(stored.flatMap { it.posts })
+
+        // Only what this pass actually read, not the whole merged archive: a
+        // first run would otherwise queue every picture ever cached at once.
+        // Here rather than in the screen, so a background check saves media
+        // too. It returns at once, the work is handed to DownloadManager.
+        media.queue(fresh)
 
         Merged(
-            posts = merge(stored.flatMap { it.posts }),
+            posts = posts,
             errors = errors,
             fromCache = false,
             oldestFetchedAtMillis = oldest,

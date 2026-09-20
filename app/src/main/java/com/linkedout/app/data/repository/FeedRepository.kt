@@ -4,7 +4,6 @@ import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.Conversation
 import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Feed
-import com.linkedout.app.core.model.ProfileTab
 import com.linkedout.app.data.linkedin.LinkedInSource
 
 /**
@@ -29,20 +28,6 @@ class FeedRepository(private val linkedin: LinkedInSource) {
      */
     suspend fun loadConversation(id: String): Outcome<Conversation> =
         linkedin.fetchPost(id, permalink = null)
-
-    /**
-     * The guest profile page carries Posts, Comments and Reactions in one
-     * document, and the parser already splits them apart, so a tab is not a
-     * second request.
-     */
-    @Suppress("UNUSED_PARAMETER")
-    suspend fun loadTab(
-        handle: String,
-        tab: ProfileTab,
-        cursor: String? = null,
-        kind: AccountKind = AccountKind.PERSON
-    ): Outcome<Feed> =
-        loadFeed(handle, cursor, kind)
 
     /**
      * [kind] decides both the address and the parser. It defaults to a person

@@ -353,6 +353,9 @@ class LinkedInSource(
         blockedPaths = LinkedInHost.WALL_PATHS,
         hostSuffix = LinkedInHost.COOKIE_DOMAIN,
         userAgent = LinkedInHost.USER_AGENT,
+        // The hints go with the string. Sent without them, the string is a
+        // claim the headers beside it contradict.
+        clientHints = LinkedInHost.CLIENT_HINTS,
         headers = mapOf("Referer" to LinkedInHost.REFERER),
         // The engine is greeted before it asks for anything, because a
         // browser always is. Opening cold on a post is the one arrival
