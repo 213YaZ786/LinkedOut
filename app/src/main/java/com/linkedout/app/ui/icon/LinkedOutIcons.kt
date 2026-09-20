@@ -54,6 +54,14 @@ object LinkedOutIcons {
         )
     }
 
+    /** The failure mark. A triangle reads as "attention" at 22 dp, a circle does not. */
+    val Warning: ImageVector by lazy {
+        build(
+            "Warning",
+            "M1,21h22L12,2 1,21zM13,18h-2v-2h2v2zM13,14h-2v-4h2v4z"
+        )
+    }
+
     val ArrowBack: ImageVector by lazy {
         build("ArrowBack", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z")
     }

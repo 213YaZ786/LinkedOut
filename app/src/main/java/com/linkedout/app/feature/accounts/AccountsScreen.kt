@@ -21,7 +21,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -43,6 +42,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.ui.component.Avatar
+import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.Zone
 import com.linkedout.app.ui.component.relativeTime
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.androidx.compose.koinViewModel
@@ -133,19 +134,10 @@ fun AccountsScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 12.dp),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            Text("Accounts", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-            if (rows.isNotEmpty()) {
-                Text(
-                    "${rows.size} followed",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        ScreenBanner(
+            title = "Accounts",
+            subtitle = if (rows.isEmpty()) null else "${rows.size} followed"
+        )
 
         TextField(
             value = query,
@@ -155,7 +147,7 @@ fun AccountsScreen(
             },
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
-            placeholder = { Text("Name in the address, or paste a link") },
+            placeholder = { Text("Paste a full profile address") },
             leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
             trailingIcon = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -189,6 +181,20 @@ fun AccountsScreen(
             }),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
         )
+
+        // Said under the field and not only in the empty screen, because the
+        // rule is the opposite of every other social app: there is no handle
+        // to guess here, "@chu-nantes" is not an address and never resolves.
+        if (trimmed.isEmpty()) {
+            Text(
+                "LinkedIn has no @handle. Paste the whole address, " +
+                    "linkedin.com/in/name or linkedin.com/company/name.",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+        }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -229,9 +235,8 @@ fun AccountsScreen(
 
 @Composable
 private fun AccountCard(row: AccountRow, onClick: () -> Unit) {
-    Surface(
+    Zone(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -274,9 +279,8 @@ private fun CandidateCard(
     onOpen: () -> Unit,
     onFollow: () -> Unit
 ) {
-    Surface(
+    Zone(
         onClick = onOpen,
-        shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.fillMaxWidth()
     ) {

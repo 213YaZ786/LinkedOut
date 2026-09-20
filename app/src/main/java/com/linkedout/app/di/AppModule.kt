@@ -4,6 +4,8 @@ import com.linkedout.app.core.debug.LogExporter
 import com.linkedout.app.core.debug.RequestLog
 import com.linkedout.app.core.link.LinkRouter
 import com.linkedout.app.core.media.MediaDownloader
+import com.linkedout.app.core.media.MediaPrefetch
+import com.linkedout.app.core.media.OfflineMedia
 import com.linkedout.app.core.network.ConnectivityMonitor
 import com.linkedout.app.core.network.HostThrottle
 import com.linkedout.app.core.network.HttpClientFactory
@@ -16,6 +18,7 @@ import com.linkedout.app.core.web.WebSession
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.linkedin.LinkedInSource
+import com.linkedout.app.data.read.ReadPosts
 import com.linkedout.app.data.linkedin.PostPageParser
 import com.linkedout.app.data.linkedin.CompanyPageParser
 import com.linkedout.app.data.linkedin.ProfilePageParser
@@ -70,7 +73,10 @@ val appModule = module {
         val videos: VideoSources = get()
         MediaDownloader(androidContext(), get(named("appScope"))) { id -> videos.sourceFor(id) }
     }
+    single { OfflineMedia(androidContext()) }
+    single { MediaPrefetch(androidContext(), get(), get(), get(), get(named("appScope"))) }
     single { AccountStore(androidContext()) }
+    single { ReadPosts(androidContext(), get(named("appScope"))) }
     single { SettingsStore(androidContext()) }
     single { LinkRouter(androidContext()) }
 
@@ -85,12 +91,12 @@ val appModule = module {
         val settings: SettingsStore = get()
         FeedCache(androidContext()) { settings.current.keepPostsDays }
     }
-    single { TimelineRepository(get(), get(), get()) }
+    single { TimelineRepository(get(), get(), get(), get()) }
 
     viewModel { AccountsViewModel(get(), get()) }
-    viewModel { PostDetailViewModel(get(), get(), get()) }
+    viewModel { PostDetailViewModel(get(), get()) }
     viewModel { SearchViewModel(get()) }
-    viewModel { FeedViewModel(get(), get(), get(), get()) }
+    viewModel { FeedViewModel(get(), get(), get()) }
     viewModel { TimelineViewModel(get(), get(), get()) }
-    viewModel { SettingsViewModel(get(), get(), get(), get(), get(), androidContext()) }
+    viewModel { SettingsViewModel(get(), get(), get(), get(), get(), get(), androidContext()) }
 }

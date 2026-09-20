@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,16 +22,13 @@ import com.linkedout.app.core.common.present
 fun ErrorPanel(
     error: AppError,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
-    onVerify: ((AppError.ChallengeRequired) -> Unit)? = null
+    modifier: Modifier = Modifier
 ) {
     val presentation = error.present()
 
-    Card(
+    Zone(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(presentation.headline, style = MaterialTheme.typography.titleMedium)
@@ -44,15 +39,6 @@ fun ErrorPanel(
             )
             when (presentation.action) {
                 ErrorAction.RETRY -> TextButton(onClick = onRetry) { Text("Try again") }
-                ErrorAction.OPEN_FALLBACK_VIEWER -> {
-                    val check = error as? AppError.ChallengeRequired
-                    // No fallback button. The check is the only thing that
-                    // helps here, and when it cannot be offered there is
-                    // nothing else to tap.
-                    if (check != null && onVerify != null) {
-                        TextButton(onClick = { onVerify(check) }) { Text("Do the check") }
-                    }
-                }
                 ErrorAction.NONE -> Unit
             }
         }

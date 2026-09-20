@@ -57,14 +57,12 @@ fun rememberInlineTarget(
     listState: LazyListState,
     posts: List<Post>,
     keyOf: (Post) -> Any,
-    paused: Boolean,
-    /** Changes whenever [keyOf] would give different keys, a profile tab for example. */
-    keySpace: Any? = null
+    paused: Boolean
 ): String? {
     val policy = rememberMediaPolicy()
     val allowed = LocalInlinePlaybackAllowed.current && !paused && policy.autoplay && !policy.hold
     val currentKeyOf by rememberUpdatedState(keyOf)
-    val playable = remember(posts, keySpace) {
+    val playable = remember(posts) {
         posts.filter { it.inlinePlayable() != null }.associateBy { currentKeyOf(it) }
     }
     val target by remember(listState, playable) {

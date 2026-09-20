@@ -22,6 +22,7 @@ object Routes {
     const val FEED_PATTERN = "feed/{handle}?kind={kind}"
     const val DEBUG_LOG = "debuglog"
     const val SEARCH = "search"
+    const val SAVED_MEDIA = "savedmedia"
 
     const val POST_PATTERN = "post/{id}?from={from}"
 

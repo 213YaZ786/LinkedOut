@@ -8,10 +8,12 @@ import androidx.lifecycle.viewModelScope
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.accounts.SubscriptionCodec
 import com.linkedout.app.core.web.BrowserData
+import com.linkedout.app.core.media.OfflineMedia
 import com.linkedout.app.core.web.GuestCookies
 import com.linkedout.app.core.web.WebSession
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.settings.Settings
+import com.linkedout.app.data.settings.AutoDownload
 import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.data.settings.StartTab
 import com.linkedout.app.data.settings.ThemeMode
@@ -28,6 +30,7 @@ class SettingsViewModel(
     private val cache: FeedCache,
     private val accounts: AccountStore,
     private val cookies: GuestCookies,
+    private val offline: OfflineMedia,
     private val session: WebSession,
     private val context: Context
 ) : ViewModel() {
@@ -112,6 +115,10 @@ class SettingsViewModel(
 
     private val _storageBytes = MutableStateFlow<Long?>(null)
     val storageBytes: StateFlow<Long?> = _storageBytes.asStateFlow()
+
+    /** How many media files are kept for offline reading, and their weight. */
+    private val _savedMedia = MutableStateFlow<Pair<Int, Long>?>(null)
+    val savedMedia: StateFlow<Pair<Int, Long>?> = _savedMedia.asStateFlow()
 
     /**
      * How many guest cookies LinkedIn has set on this phone. Shown as a
@@ -203,8 +210,16 @@ class SettingsViewModel(
 
     fun measureStorage() {
         viewModelScope.launch { _storageBytes.value = cache.sizeBytes() }
+        viewModelScope.launch(Dispatchers.IO) {
+            offline.refresh()
+            val files = offline.saved()
+            _savedMedia.value = files.size to files.sumOf { it.length() }
+        }
         _guestCookies.value = cookies.count()
     }
+
+    fun setAutoDownloadMedia(choice: AutoDownload) =
+        store.update { it.copy(autoDownloadMedia = choice) }
 
     private fun applySchedule() {
         val current = store.current

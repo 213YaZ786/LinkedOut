@@ -4,10 +4,17 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!--
-        Third and last permission. Only used when the reader turns on
-        notifications for new posts, and only asked for at that moment.
+        Asked for at the moment the reader turns on notifications for new
+        posts, or automatic media downloads, and never before.
     -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+        Required to hand DownloadManager a request with its own notification
+        turned off. Without it every enqueue throws a SecurityException, which
+        is what silently refused every automatic media download in 0.6.30.
+        Granted at install, it asks the reader nothing.
+    -->
+    <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
     <application
         android:name=".LinkedOutApplication"

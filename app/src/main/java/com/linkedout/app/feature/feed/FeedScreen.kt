@@ -2,10 +2,7 @@ package com.linkedout.app.feature.feed
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import com.linkedout.app.ui.component.rememberMediaPolicy
@@ -23,18 +20,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +33,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,27 +49,35 @@ import com.linkedout.app.core.model.Feed
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.model.Post
-import com.linkedout.app.core.model.ProfileTab
 import com.linkedout.app.feature.media.MediaViewer
 import com.linkedout.app.ui.component.Avatar
+import com.linkedout.app.ui.component.BannerAction
 import com.linkedout.app.ui.component.ErrorPanel
+import com.linkedout.app.ui.component.InnerZoneShape
 import com.linkedout.app.ui.component.LocalInlinePlaying
 import com.linkedout.app.ui.component.PostCard
+import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.ScrollUpButton
+import com.linkedout.app.ui.component.Zone
+import com.linkedout.app.ui.component.ZoneGap
 import com.linkedout.app.ui.component.rememberInlineTarget
 import com.linkedout.app.ui.component.relativeTime
 import com.linkedout.app.ui.icon.LinkedOutIcons
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import androidx.compose.foundation.layout.WindowInsets
 
 /**
- * One account: a centred profile header, then its posts.
+ * One account: a banner, the profile in its own zone, then its posts.
  *
- * The header is always there, even before anything loaded, so you can follow
- * an account whose feed is momentarily unreachable. The top bar stays quiet
- * and only shows the name once the header has scrolled away.
+ * The Replies and Media tabs are gone. They were a Nitter shape that never
+ * meant anything here: the guest profile page is one document, and the tab
+ * read the same page again through the same call, so the two extra tabs cost
+ * a request each to show a subset of what was already on screen.
+ *
+ * The profile zone is always there, even before anything loaded, so you can
+ * follow an account whose page is momentarily unreachable.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(
     handle: String,
@@ -95,11 +94,11 @@ fun FeedScreen(
     val settingsStore: SettingsStore = koinInject()
     val settings by settingsStore.settings.collectAsState()
     val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
     var viewing by remember { mutableStateOf<Pair<List<MediaItem>, Int>?>(null) }
 
     val feed = state.feed
     val name = feed?.displayName?.takeIf { it.isNotBlank() && it != handle }
-    val headerGone by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
 
     viewing?.let { (media, index) ->
         MediaViewer(
@@ -112,167 +111,150 @@ fun FeedScreen(
 
     LaunchedEffect(handle, kind) { viewModel.load(handle, kind) }
 
-    val tab = state.tab
-    val tabFeed = state.tabFeed(tab)
-    val shown = if (tab == ProfileTab.POSTS) feed?.posts.orEmpty() else tabFeed.posts
-    val canMore = if (tab == ProfileTab.POSTS) state.canLoadMore else tabFeed.cursor != null
-    val pagingFailed = if (tab == ProfileTab.POSTS) state.pagingFailed else tabFeed.pagingFailed
-    val loadingMore = if (tab == ProfileTab.POSTS) state.loadingMore else tabFeed.loadingMore
+    val shown = feed?.posts.orEmpty()
 
-    val shouldLoadMore by remember(shown.size, tab) {
+    val shouldLoadMore by remember(shown.size) {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             shown.isNotEmpty() && last >= shown.size - 5
         }
     }
-    LaunchedEffect(shouldLoadMore, canMore, pagingFailed, tab) {
+    LaunchedEffect(shouldLoadMore, state.canLoadMore, state.pagingFailed) {
         if (shouldLoadMore) viewModel.loadMore()
     }
 
-    Scaffold(
-        // The NavHost's own Scaffold already stands clear of the status and
-        // navigation bars. A nested Scaffold applies them a second time, and a
-        // TopAppBar a third, which is where the empty band above and below the
-        // content came from. Insets are owned once, up there.
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                title = {
-                    if (headerGone) {
-                        Text(name ?: "@$handle", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(LinkedOutIcons.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = viewModel::refresh, enabled = !state.loading) {
-                        if (state.loading) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(LinkedOutIcons.Refresh, contentDescription = "Refresh")
+    val inline = rememberInlineTarget(
+        listState = listState,
+        posts = shown,
+        keyOf = { it.id },
+        paused = viewing != null
+    )
+    CompositionLocalProvider(LocalInlinePlaying provides inline) {
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item(key = "banner") {
+                    ScreenBanner(
+                        title = name ?: "@$handle",
+                        subtitle = feed?.let(::sourceLine),
+                        leading = {
+                            BannerAction(
+                                icon = LinkedOutIcons.ArrowBack,
+                                label = "Back",
+                                onClick = onBack
+                            )
+                        },
+                        trailing = {
+                            if (state.loading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                BannerAction(
+                                    icon = LinkedOutIcons.Refresh,
+                                    label = "Refresh",
+                                    onClick = viewModel::refresh
+                                )
+                            }
                         }
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        val inline = rememberInlineTarget(
-            listState = listState,
-            posts = shown,
-            keyOf = { "${tab.name}-${it.id}" },
-            paused = viewing != null,
-            keySpace = tab
-        )
-        CompositionLocalProvider(LocalInlinePlaying provides inline) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize().padding(padding)
-        ) {
-            item(key = "header") {
-                ProfileHeader(
-                    handle = handle,
-                    name = name,
-                    feed = feed,
-                    isFollowing = isFollowing,
-                    onToggleFollow = viewModel::toggleFollow,
-                    onOpenAvatar = { small ->
-                        viewing = listOf(
-                            MediaItem(previewUrl = small, downloadUrl = largeAvatar(small), type = MediaType.PHOTO)
-                        ) to 0
-                    }
-                )
-            }
-
-            item(key = "tabs") {
-                SecondaryTabRow(selectedTabIndex = tab.ordinal) {
-                    ProfileTab.entries.forEach { entry ->
-                        Tab(
-                            selected = entry == tab,
-                            onClick = { viewModel.selectTab(entry) },
-                            text = { Text(entry.label) }
-                        )
-                    }
-                }
-            }
-
-            val error = if (tab == ProfileTab.POSTS) state.error else tabFeed.error
-            error?.let {
-                item(key = "error-${tab.name}") {
-                    ErrorPanel(
-                        modifier = Modifier.padding(16.dp),
-                        error = it,
-                        onRetry = viewModel::refresh,
-                        onVerify = viewModel::verify
                     )
                 }
-            }
 
-            val firstLoad = if (tab == ProfileTab.POSTS) feed == null && state.loading else tabFeed.loading
-            if (shown.isEmpty()) {
-                if (firstLoad) {
-                    item(key = "loading-${tab.name}") {
-                        Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                item(key = "header") {
+                    ProfileZone(
+                        handle = handle,
+                        name = name,
+                        feed = feed,
+                        isFollowing = isFollowing,
+                        onToggleFollow = viewModel::toggleFollow,
+                        onOpenAvatar = { small ->
+                            viewing = listOf(
+                                MediaItem(
+                                    previewUrl = small,
+                                    downloadUrl = largeAvatar(small),
+                                    type = MediaType.PHOTO
+                                )
+                            ) to 0
                         }
-                    }
-                } else if (tab != ProfileTab.POSTS && tabFeed.loaded && error == null) {
-                    item(key = "empty-${tab.name}") {
-                        Text(
-                            if (tab == ProfileTab.MEDIA) "No photos or videos." else "No replies.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(32.dp)
+                    )
+                }
+
+                state.error?.let {
+                    item(key = "error") {
+                        ErrorPanel(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = ZoneGap),
+                            error = it,
+                            onRetry = viewModel::refresh
                         )
                     }
                 }
-                return@LazyColumn
-            }
 
-            // Keys carry the tab, the same post can sit in two tabs.
-            items(shown, key = { "${tab.name}-${it.id}" }) { post ->
-                PostCard(
-                    post = post,
-                    onClick = { onOpenPost(post) },
-                    onOpenLink = { uriHandler.openUri(it) },
-                    onDownload = { downloader.download(it, post.authorHandle) },
-                    showStats = settings.showCounts,
-                    onOpenMedia = { index -> viewing = post.media to index }
-                )
-            }
-
-            item(key = "footer") {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    when {
-                        loadingMore -> CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
-                        )
-                        canMore -> TextButton(onClick = { viewModel.loadMore(manual = true) }) {
-                            Text(if (pagingFailed) "Try again" else "Load older posts")
+                if (shown.isEmpty()) {
+                    if (feed == null && state.loading) {
+                        item(key = "loading") {
+                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
                         }
-                        else -> Text(
-                            "No older posts available.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    }
+                    return@LazyColumn
+                }
+
+                items(shown, key = { it.id }) { post ->
+                    PostCard(
+                        post = post,
+                        onClick = { onOpenPost(post) },
+                        onOpenLink = { uriHandler.openUri(it) },
+                        onDownload = { downloader.download(it, post.authorHandle) },
+                        showStats = settings.showCounts,
+                        onOpenMedia = { index -> viewing = post.media to index }
+                    )
+                }
+
+                item(key = "footer") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when {
+                            state.loadingMore -> CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                            state.canLoadMore -> TextButton(onClick = { viewModel.loadMore(manual = true) }) {
+                                Text(if (state.pagingFailed) "Try again" else "Load older posts")
+                            }
+                            else -> Text(
+                                "No older posts available.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
-        }
+
+            val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
+            ScrollUpButton(
+                visible = scrolled,
+                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp)
+            )
         }
     }
 }
 
+/**
+ * Who this account is, in one zone. The name is in the banner above, so it is
+ * not repeated here.
+ */
 @Composable
-private fun ProfileHeader(
+private fun ProfileZone(
     handle: String,
     name: String?,
     feed: Feed?,
@@ -282,114 +264,101 @@ private fun ProfileHeader(
 ) {
     val uriHandler = LocalUriHandler.current
     val hold = rememberMediaPolicy().hold
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+    Zone(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = ZoneGap)
     ) {
-        // The banner is a picture like any other, so Wi-Fi only holds it too.
-        val banner = feed?.bannerUrl
-        if (banner != null && !hold) {
-            AsyncImage(
-                model = banner,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(3f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            )
-        }
-
-        val avatar = feed?.avatarUrl
-        Box(
-            Modifier
-                .clip(CircleShape)
-                .clickable(enabled = avatar != null) { avatar?.let(onOpenAvatar) }
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Avatar(url = avatar, name = name ?: handle, size = 88.dp)
-        }
+            // The banner is a picture like any other, so Wi-Fi only holds it too.
+            val banner = feed?.bannerUrl
+            if (banner != null && !hold) {
+                AsyncImage(
+                    model = banner,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(3f)
+                        .clip(InnerZoneShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                )
+            }
 
-        Text(
-            name ?: "@$handle",
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 6.dp)
-        )
-        if (name != null) {
+            val avatar = feed?.avatarUrl
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .clickable(enabled = avatar != null) { avatar?.let(onOpenAvatar) }
+            ) {
+                Avatar(url = avatar, name = name ?: handle, size = 88.dp)
+            }
+
             Text(
                 "@$handle",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        feed?.bio?.let { bio ->
-            Text(
-                bio,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(max = 520.dp).padding(top = 4.dp)
-            )
-        }
-
-        val meta = listOfNotNull(feed?.location, feed?.school).joinToString(" · ")
-        if (meta.isNotEmpty()) {
-            Text(
-                meta,
-                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
-        }
-        feed?.currentCompany?.let { site ->
-            Text(
-                site.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/'),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.clickable { uriHandler.openUri(site) }
-            )
-        }
-        feed?.stats?.let { stats ->
-            val parts = listOfNotNull(
-                stats.posts?.let { "${compactCount(it)} posts" },
-                stats.following?.let { "${compactCount(it)} following" },
-                stats.followers?.let { "${compactCount(it)} followers" }
-            )
-            if (parts.isNotEmpty()) {
+
+            feed?.bio?.let { bio ->
                 Text(
-                    parts.joinToString(" · "),
-                    style = MaterialTheme.typography.labelLarge,
+                    bio,
+                    style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 2.dp)
+                    modifier = Modifier.widthIn(max = 520.dp).padding(top = 4.dp)
                 )
             }
-        }
 
-        if (isFollowing) {
-            OutlinedButton(onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Following")
+            val meta = listOfNotNull(feed?.location, feed?.school).joinToString(" · ")
+            if (meta.isNotEmpty()) {
+                Text(
+                    meta,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
             }
-        } else {
-            FilledTonalButton(onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
-                Text("Follow")
+            feed?.currentCompany?.let { site ->
+                Text(
+                    site.removePrefix("https://").removePrefix("http://").removePrefix("www.").trimEnd('/'),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.clickable { uriHandler.openUri(site) }
+                )
+            }
+            feed?.stats?.let { stats ->
+                val parts = listOfNotNull(
+                    stats.posts?.let { "${compactCount(it)} posts" },
+                    stats.following?.let { "${compactCount(it)} following" },
+                    stats.followers?.let { "${compactCount(it)} followers" }
+                )
+                if (parts.isNotEmpty()) {
+                    Text(
+                        parts.joinToString(" · "),
+                        style = MaterialTheme.typography.labelLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
+            }
+
+            if (isFollowing) {
+                OutlinedButton(onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
+                    Text("Following")
+                }
+            } else {
+                FilledTonalButton(onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
+                    Text("Follow")
+                }
             }
         }
-
-        feed?.let {
-            Text(
-                sourceLine(it),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-        }
-
-        // The tab row right under the header draws its own line.
-        Spacer(Modifier.height(4.dp))
     }
 }
 

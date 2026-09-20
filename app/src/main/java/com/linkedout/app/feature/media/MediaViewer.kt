@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +74,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import androidx.media3.common.MediaItem as PlayableItem
+import com.linkedout.app.core.media.OfflineMedia
 import org.koin.compose.koinInject
 
 /**
@@ -213,6 +215,9 @@ fun MediaViewer(
  */
 @Composable
 private fun ZoomableImage(url: String, onZoomChanged: (Boolean) -> Unit) {
+    val offline: OfflineMedia = koinInject()
+    val saved by offline.names.collectAsState()
+    val model = remember(url, saved) { offline.modelFor(url) }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
@@ -263,7 +268,9 @@ private fun ZoomableImage(url: String, onZoomChanged: (Boolean) -> Unit) {
             }
     ) {
         AsyncImage(
-            model = url,
+            // The saved copy when there is one, so a picture already on the
+            // phone opens with no network at all.
+            model = model,
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier

@@ -6,7 +6,6 @@ import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.Conversation
 import com.linkedout.app.core.model.Post
-import com.linkedout.app.core.web.ChallengeSolver
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.repository.FeedRepository
 import com.linkedout.app.core.link.ShareLink
@@ -37,8 +36,7 @@ data class PostDetailUiState(
  */
 class PostDetailViewModel(
     private val cache: FeedCache,
-    private val repository: FeedRepository,
-    private val solver: ChallengeSolver
+    private val repository: FeedRepository
 ) : ViewModel() {
 
     /**
@@ -74,13 +72,6 @@ class PostDetailViewModel(
         if (_state.value.thread is ThreadState.Loading) return
         _state.value = _state.value.copy(thread = ThreadState.Loading)
         viewModelScope.launch { fetchThread() }
-    }
-
-    fun verify(error: AppError.ChallengeRequired) {
-        viewModelScope.launch {
-            val result = solver.solve(error.url, error.host, interactive = true)
-            if (result is ChallengeSolver.Result.Cleared) retryThread()
-        }
     }
 
     private suspend fun fetchThread() {

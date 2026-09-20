@@ -14,11 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.setValue
@@ -36,6 +34,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
+import androidx.compose.runtime.collectAsState
+import com.linkedout.app.core.media.OfflineMedia
 import com.linkedout.app.core.model.CommunityNote
 import com.linkedout.app.core.model.LinkCard
 import com.linkedout.app.core.model.MediaItem
@@ -44,6 +44,7 @@ import com.linkedout.app.core.model.Poll
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.core.model.PostKind
 import com.linkedout.app.ui.icon.LinkedOutIcons
+import org.koin.compose.koinInject
 import java.util.concurrent.TimeUnit
 
 /**
@@ -51,6 +52,11 @@ import java.util.concurrent.TimeUnit
  * media, then the numbers. Media carries its own download control, since
  * saving a picture is the single most common thing people want from a client
  * like this and burying it in a long press is hostile.
+ *
+ * The card is a [Zone], so it has its own fill and its own rounded corners,
+ * and the list needs no rule between two posts. It carries no outline: the
+ * only one in the app is [unread], a post that arrived since the last visit,
+ * and it goes away as soon as the reader has scrolled past it.
  */
 @Composable
 fun PostCard(
@@ -60,16 +66,20 @@ fun PostCard(
     onDownload: (MediaItem) -> Unit,
     onOpenMedia: (index: Int) -> Unit = {},
     showStats: Boolean = true,
+    unread: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val compact = LocalDisplayPrefs.current.compact
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface
+    Zone(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = ZoneGap),
+        outline = if (unread) MaterialTheme.colorScheme.primary else null,
+        onClick = onClick
     ) {
         Column(
-            Modifier.clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = if (compact) 7.dp else 12.dp),
+            Modifier
+                .padding(horizontal = 16.dp, vertical = if (compact) 10.dp else 14.dp),
             verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)
         ) {
             post.contextLine()?.let { ContextLine(it) }
@@ -119,7 +129,6 @@ fun PostCard(
             }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHigh)
 }
 
 @Composable
@@ -223,6 +232,9 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
     // Compact trades some picture for a list that moves faster.
     val ratio = if (LocalDisplayPrefs.current.compact) 2f else 16f / 9f
     val hold = rememberMediaPolicy().hold
+    val offline: OfflineMedia = koinInject()
+    // Read here so the block redraws when a download lands under it.
+    val saved by offline.names.collectAsState()
     // Only the first video or GIF of the post chosen by the list plays inline.
     val inlineIndex = if (LocalInlinePlaying.current == post.id) {
         post.media.indexOfFirst { it.type != MediaType.PHOTO }
@@ -235,10 +247,11 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
             // reader taps. One tap loads the preview, the next opens it.
             var revealed by remember(item.previewUrl) { mutableStateOf(false) }
             val waiting = hold && !revealed
+            val model = remember(item.previewUrl, saved) { offline.modelFor(item.previewUrl) }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(InnerZoneShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .clickable { if (waiting) revealed = true else onOpen(index) }
             ) {
@@ -246,7 +259,10 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
                     HeldMedia(item.type, Modifier.fillMaxWidth().aspectRatio(ratio))
                 } else {
                     AsyncImage(
-                        model = item.previewUrl,
+                        // The saved copy when there is one, the address
+                        // otherwise. A post read offline still shows its
+                        // pictures, and a downloaded one costs no request.
+                        model = model,
                         contentDescription = null,
                         contentScale = ContentScale.FillWidth,
                         modifier = Modifier.fillMaxWidth().aspectRatio(ratio)
@@ -307,9 +323,9 @@ internal fun QuoteBlock(
     avatarUrl: String? = null,
     note: CommunityNote? = null
 ) {
-    Surface(
+    Zone(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = InnerZoneShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -351,10 +367,9 @@ internal fun QuoteBlock(
  */
 @Composable
 internal fun NoteBlock(note: CommunityNote, text: AnnotatedString? = null, maxLines: Int = Int.MAX_VALUE) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
+    Zone(
+        shape = InnerZoneShape,
         color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -387,9 +402,9 @@ internal fun LinkCardBlock(card: LinkCard, onClick: () -> Unit) {
     val image = card.imageUrl
     val waiting = hold && !revealed
 
-    Surface(
+    Zone(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = InnerZoneShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -526,7 +541,7 @@ internal fun PollBlock(poll: Poll) {
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(MaterialTheme.colorScheme.surfaceContainer)
             ) {
                 // The fill sits in its own box: under matchParentSize the width
@@ -617,7 +632,12 @@ private fun Stat(icon: androidx.compose.ui.graphics.vector.ImageVector, value: I
 
 internal fun Post.contextLine(): String? = when {
     isPinned -> "Pinned"
-    kind == PostKind.REPOST -> relatedHandle?.let { "Reposted by $it" } ?: "Repost"
+    // The card carries the original author, so this line names whoever put it
+    // in front of you. When they added words of their own they are the author
+    // instead, the original sits in the quoted card, and there is nothing to
+    // announce.
+    kind == PostKind.REPOST -> relatedHandle?.let { "Reposted by $it" }
+    kind == PostKind.REACTION -> relatedHandle?.let { "Liked by $it" }
     kind == PostKind.REPLY -> relatedHandle?.let { "Replying to @$it" } ?: "Reply"
     else -> null
 }

@@ -1,7 +1,6 @@
 package com.linkedout.app.sync
 
 import com.linkedout.app.core.model.Post
-import com.linkedout.app.core.model.PostKind
 
 /**
  * Decides which posts are worth a notification. Pure, so it can be run
@@ -19,13 +18,6 @@ object NewPosts {
     /** What the cache held for one account before the check. */
     data class Before(val ids: Set<String>, val newestMillis: Long?)
 
-    /** Home's own filters, so a notification never announces what Home hides. */
-    data class Filters(
-        val hideReplies: Boolean = false,
-        val hideReposts: Boolean = false,
-        val mediaOnly: Boolean = false
-    )
-
     fun snapshot(posts: List<Post>): Before =
         Before(posts.map { it.id }.toSet(), posts.maxOfOrNull { it.publishedAtMillis })
 
@@ -36,8 +28,7 @@ object NewPosts {
     fun detect(
         before: Map<String, Before>,
         after: Map<String, List<Post>>,
-        sinceMillis: Long,
-        filters: Filters = Filters()
+        sinceMillis: Long
     ): List<Post> = after.flatMap { (handle, posts) ->
         val known = before[handle] ?: return@flatMap emptyList()
         val watermark = known.newestMillis ?: return@flatMap emptyList()
@@ -45,10 +36,7 @@ object NewPosts {
         posts.filter { post ->
             post.id !in known.ids &&
                 post.publishedAtMillis > floor &&
-                !post.isPinned &&
-                !(filters.hideReplies && post.kind == PostKind.REPLY) &&
-                !(filters.hideReposts && post.kind == PostKind.REPOST) &&
-                !(filters.mediaOnly && post.media.isEmpty())
+                !post.isPinned
         }
     }
         .distinctBy { it.id }

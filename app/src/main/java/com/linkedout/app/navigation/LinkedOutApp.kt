@@ -53,6 +53,7 @@ import com.linkedout.app.feature.feed.FeedScreen
 import com.linkedout.app.feature.post.PostDetailScreen
 import com.linkedout.app.feature.search.SearchScreen
 import com.linkedout.app.feature.settings.SettingsScreen
+import com.linkedout.app.feature.storage.SavedMediaScreen
 import com.linkedout.app.feature.timeline.TimelineScreen
 import com.linkedout.app.ui.component.DockClearance
 import com.linkedout.app.ui.component.DockItem
@@ -120,7 +121,36 @@ fun LinkedOutApp() {
 private fun NavHostController.open(route: String) {
     val entry = currentBackStackEntry
     if (entry != null && !entry.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+    // The guard above only covers the arrival. Once the screen had settled,
+    // tapping the same name again pushed a second identical copy, and leaving
+    // then took one back gesture per copy, which reads as a back that is not
+    // responding. A name that will not load is exactly where people tap twice.
+    if (currentPath() == route.substringBefore('?')) return
     navigate(route)
+}
+
+/**
+ * The address of the screen on top, its pattern filled in with the values it
+ * was opened with, so it can be compared with one about to be opened.
+ *
+ * Only the path is compared. "feed/{handle}" filled in is what makes two taps
+ * on the same name the same screen, while the query part carries hints, the
+ * account kind or which cache to look in, and two of those are still one
+ * screen. Rebuilt from the live back stack rather than from a list kept here,
+ * because a system back gesture never passes through this file and any list
+ * of our own would drift out of step with the real stack.
+ */
+private fun NavHostController.currentPath(): String? {
+    val entry = currentBackStackEntry ?: return null
+    val pattern = entry.destination.route?.substringBefore('?') ?: return null
+    val arguments = entry.arguments
+    return pattern.split('/').joinToString("/") { segment ->
+        if (segment.startsWith("{") && segment.endsWith("}")) {
+            arguments?.getString(segment.removeSurrounding("{", "}")).orEmpty()
+        } else {
+            segment
+        }
+    }
 }
 
 /**
@@ -176,6 +206,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
             composable(Routes.MAIN) {
                 MainTabs(
                     onOpenDebugLog = { navController.open(Routes.DEBUG_LOG) },
+                    onOpenSavedMedia = { navController.open(Routes.SAVED_MEDIA) },
                     onOpenFeed = { handle, kind -> navController.open(Routes.feed(handle, kind)) },
                     onOpenPost = { post -> navController.open(Routes.post(post.id, post.cacheOwner())) },
                     onOpenSearch = { navController.open(Routes.SEARCH) }
@@ -192,6 +223,11 @@ private fun LinkedOutNavHost(navController: NavHostController) {
             composable(Routes.DEBUG_LOG) {
                 Readable {
                     DebugLogScreen(onBack = { navController.back() })
+                }
+            }
+            composable(Routes.SAVED_MEDIA) {
+                Readable {
+                    SavedMediaScreen(onBack = { navController.back() })
                 }
             }
             composable(
@@ -243,11 +279,15 @@ private fun LinkedOutNavHost(navController: NavHostController) {
 }
 
 /**
- * The account whose cache file holds this post. A repost is stored with the
- * account that reposted it, everything else with its author.
+ * The account whose cache file holds this post. A post someone passed on or
+ * reacted to is stored with that someone, everything else with its author.
  */
 private fun Post.cacheOwner(): String =
-    if (kind == PostKind.REPOST) relatedHandle ?: authorHandle else authorHandle
+    if (kind == PostKind.REPOST || kind == PostKind.REACTION) {
+        relatedHandle ?: authorHandle
+    } else {
+        authorHandle
+    }
 
 /**
  * The three tabs side by side in one pager. On a phone a swipe moves between
@@ -259,6 +299,7 @@ private fun Post.cacheOwner(): String =
 @Composable
 private fun MainTabs(
     onOpenDebugLog: () -> Unit,
+    onOpenSavedMedia: () -> Unit,
     onOpenFeed: (String, AccountKind) -> Unit,
     onOpenPost: (Post) -> Unit,
     onOpenSearch: () -> Unit
@@ -340,6 +381,7 @@ private fun MainTabs(
                         TopDestination.ACCOUNTS -> AccountsScreen(onOpenFeed = onOpenFeed)
                         TopDestination.SETTINGS -> SettingsScreen(
                             onOpenDebugLog = onOpenDebugLog,
+                            onOpenSavedMedia = onOpenSavedMedia,
                             onOpenWelcome = { showWelcome = true }
                         )
                     }

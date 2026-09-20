@@ -1,6 +1,8 @@
 package com.linkedout.app.feature.settings
 
 import com.linkedout.app.ui.component.LocalDockPadding
+import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.Zone
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -34,7 +36,6 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,15 +52,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.BuildConfig
+import com.linkedout.app.data.settings.AutoDownload
 import com.linkedout.app.data.settings.StartTab
 import com.linkedout.app.data.settings.ThemeMode
 import com.linkedout.app.ui.theme.TEXT_SCALES
 import com.linkedout.app.ui.theme.textScaleLabel
 import org.koin.androidx.compose.koinViewModel
 
-private enum class OpenDialog { NONE, THEME, TEXT_SIZE, KEEP, FREQUENCY, CLEAR, START_TAB, COOKIES }
+private enum class OpenDialog { NONE, THEME, TEXT_SIZE, KEEP, FREQUENCY, CLEAR, START_TAB, COOKIES, AUTO_DOWNLOAD }
 
 private val KEEP_DAYS = listOf(7, 30, 90, 365, 0)
 
@@ -79,11 +82,13 @@ private fun keepLabel(days: Int): String = when (days) {
 @Composable
 fun SettingsScreen(
     onOpenDebugLog: () -> Unit,
+    onOpenSavedMedia: () -> Unit,
     onOpenWelcome: () -> Unit,
     viewModel: SettingsViewModel = koinViewModel()
 ) {
     val settings by viewModel.settings.collectAsState()
     val storageBytes by viewModel.storageBytes.collectAsState()
+    val savedMedia by viewModel.savedMedia.collectAsState()
     val guestCookies by viewModel.guestCookies.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -114,6 +119,26 @@ fun SettingsScreen(
         notificationsAllowed = notifier.canNotify()
         onPauseOrDispose { }
     }
+    /**
+     * The progress bar shown while media is being saved is a notification
+     * like any other, so Android 13 and later want the same permission. Asked
+     * at the moment automatic downloads are turned on, and a refusal changes
+     * nothing to the downloads themselves, only to knowing how far they are.
+     */
+    val downloadNotificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { notificationsAllowed = notifier.canNotify() }
+
+    val askForDownloadNotifications: () -> Unit = {
+        if (!notifier.canNotify() &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            downloadNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     // Asked at the moment the reader turns notifications on, never before.
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -155,11 +180,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
     ) {
-        Text(
-            "Settings",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 4.dp)
-        )
+        ScreenBanner(title = "Settings")
 
         Section("Appearance") {
             SettingRow(
@@ -200,6 +221,11 @@ fun SettingsScreen(
         }
 
         Section("Media") {
+            SettingRow(
+                title = "Download media automatically",
+                summary = autoDownloadLabel(settings.autoDownloadMedia),
+                onClick = { dialog = OpenDialog.AUTO_DOWNLOAD }
+            )
             SwitchRow(
                 title = "Media on Wi-Fi only",
                 summary = "On mobile data, pictures and videos wait for a tap. Avatars still load.",
@@ -293,6 +319,18 @@ fun SettingsScreen(
                 onClick = { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
             )
             SettingRow(
+                title = "Saved media",
+                summary = savedMedia?.let { (count, bytes) ->
+                    if (count == 0) {
+                        "Nothing saved yet. Tap to see the folder."
+                    } else {
+                        "$count files, ${Formatter.formatShortFileSize(context, bytes)}. " +
+                            "Tap to browse and delete."
+                    }
+                } ?: "Measuring",
+                onClick = onOpenSavedMedia
+            )
+            SettingRow(
                 title = "Saved posts",
                 summary = storageBytes?.let {
                     "${Formatter.formatShortFileSize(context, it)} on this phone. Readable offline."
@@ -379,6 +417,16 @@ fun SettingsScreen(
             onSelect = viewModel::setTextScale,
             onDismiss = { dialog = OpenDialog.NONE }
         )
+        OpenDialog.AUTO_DOWNLOAD -> ChoiceDialog(
+            title = "Download media automatically",
+            options = AutoDownload.entries.map { it to autoDownloadLabel(it) },
+            selected = settings.autoDownloadMedia,
+            onSelect = { choice ->
+                viewModel.setAutoDownloadMedia(choice)
+                if (choice != AutoDownload.NEVER) askForDownloadNotifications()
+            },
+            onDismiss = { dialog = OpenDialog.NONE }
+        )
         OpenDialog.KEEP -> ChoiceDialog(
             title = "Keep posts",
             options = KEEP_DAYS.map { it to keepLabel(it) },
@@ -437,16 +485,20 @@ fun SettingsScreen(
 /** A titled group of rows on one rounded card, the Obtainium way. */
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
+    // Centred and one step larger than a label: it is the name of the zone
+    // underneath, not a row in it.
     Text(
         title,
-        style = MaterialTheme.typography.labelLarge,
+        style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 28.dp, end = 28.dp, top = 20.dp, bottom = 8.dp)
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 28.dp, end = 28.dp, top = 20.dp, bottom = 8.dp)
     )
-    Surface(
-        shape = RoundedCornerShape(24.dp),
+    Zone(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
     ) {
         Column(content = content)
     }
@@ -524,6 +576,17 @@ private fun <T> ChoiceDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+/**
+ * Three words each, because the row shows the answer and the dialog holds the
+ * choices. "Wi-Fi" means an unmetered network, which is what a reader means
+ * by it: a phone hotspot is Wi-Fi and costs data.
+ */
+private fun autoDownloadLabel(choice: AutoDownload): String = when (choice) {
+    AutoDownload.NEVER -> "Never. Pictures load as you read them, and need a connection."
+    AutoDownload.WIFI -> "On Wi-Fi. Kept for reading offline, never on mobile data."
+    AutoDownload.ALWAYS -> "On any network, mobile data included."
 }
 
 private fun startTabLabel(tab: StartTab): String = when (tab) {

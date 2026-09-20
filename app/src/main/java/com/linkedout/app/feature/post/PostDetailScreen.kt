@@ -2,7 +2,6 @@ package com.linkedout.app.feature.post
 
 import com.linkedout.app.ui.component.PostCard
 import com.linkedout.app.core.common.present
-import com.linkedout.app.core.common.ChallengeKind
 import com.linkedout.app.core.common.AppError
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.lazy.items
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,6 +63,9 @@ import com.linkedout.app.ui.component.NoteBlock
 import com.linkedout.app.ui.component.PollBlock
 import com.linkedout.app.ui.component.MediaBlock
 import com.linkedout.app.ui.component.QuoteBlock
+import com.linkedout.app.ui.component.InnerZoneShape
+import com.linkedout.app.ui.component.Zone
+import com.linkedout.app.ui.component.ZoneGap
 import com.linkedout.app.ui.component.compactCount
 import com.linkedout.app.ui.component.contextLine
 import com.linkedout.app.ui.icon.LinkedOutIcons
@@ -132,7 +133,6 @@ fun PostDetailScreen(
                     onOpenProfile = onOpenProfile,
                     onOpenPost = onOpenPost,
                     onRetry = viewModel::retryThread,
-                    onVerify = viewModel::verify,
                     shareLink = viewModel.shareLink(post)
                 )
                 state.missing -> {
@@ -166,7 +166,6 @@ private fun ConversationView(
     onOpenProfile: (String) -> Unit,
     onOpenPost: (Post) -> Unit,
     onRetry: () -> Unit,
-    onVerify: (AppError.ChallengeRequired) -> Unit,
     shareLink: String
 ) {
     val uriHandler = LocalUriHandler.current
@@ -256,10 +255,9 @@ private fun ConversationView(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
-                    val check = thread.error as? AppError.ChallengeRequired
-                    if (check != null && check.kind != ChallengeKind.WAF_BLOCK) {
-                        TextButton(onClick = { onVerify(check) }) { Text("Do the check") }
-                    } else if (gone == null) {
+                    // The wall is passed by the engine or not at all, so the
+                    // only thing left for a reader to do is ask again.
+                    if (gone == null) {
                         TextButton(onClick = onRetry) { Text("Try again") }
                     }
                 }
@@ -323,118 +321,125 @@ private fun PostBody(
     val uriHandler = LocalUriHandler.current
     val downloader: MediaDownloader = koinInject()
 
-    Column(
+    Zone(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 12.dp, vertical = ZoneGap)
     ) {
-        post.contextLine()?.let { ContextLine(it) }
-
-        Surface(
-            onClick = { onOpenProfile(post.authorHandle) },
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surface
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            post.contextLine()?.let { ContextLine(it) }
+
+            // Same fill as the zone it sits in, so the author row reads as a
+            // tappable line and not as a second box drawn inside the first.
+            Surface(
+                onClick = { onOpenProfile(post.authorHandle) },
+                shape = InnerZoneShape,
+                color = MaterialTheme.colorScheme.surfaceContainerLow
             ) {
-                Avatar(url = post.avatarUrl, name = post.authorName, size = 48.dp)
-                Column {
+                Row(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Avatar(url = post.avatarUrl, name = post.authorName, size = 48.dp)
+                    Column {
+                        Text(
+                            post.authorName.ifBlank { "@${post.authorHandle}" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            "@${post.authorHandle}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            if (post.text.isNotBlank()) {
+                val linkColor = MaterialTheme.colorScheme.primary
+                val annotated = remember(post.id, linkColor) {
+                    linkify(post.text, post.links, linkColor, onOpenProfile)
+                }
+                SelectionContainer {
                     Text(
-                        post.authorName.ifBlank { "@${post.authorHandle}" },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "@${post.authorHandle}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        annotated,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 27.sp)
                     )
                 }
             }
-        }
 
-        if (post.text.isNotBlank()) {
-            val linkColor = MaterialTheme.colorScheme.primary
-            val annotated = remember(post.id, linkColor) {
-                linkify(post.text, post.links, linkColor, onOpenProfile)
-            }
-            SelectionContainer {
-                Text(
-                    annotated,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp, lineHeight = 27.sp)
+            if (post.media.isNotEmpty()) {
+                MediaBlock(
+                    post = post,
+                    onDownload = { downloader.download(it, post.authorHandle) },
+                    onOpen = onOpenMedia
                 )
             }
-        }
 
-        if (post.media.isNotEmpty()) {
-            MediaBlock(
-                post = post,
-                onDownload = { downloader.download(it, post.authorHandle) },
-                onOpen = onOpenMedia
-            )
-        }
+            // Nitter's order: poll, link card, quote, then the note.
+            post.poll?.let { PollBlock(it) }
 
-        // Nitter's order: poll, link card, quote, then the note.
-        post.poll?.let { PollBlock(it) }
-
-        post.card?.let { card ->
-            LinkCardBlock(card = card, onClick = { card.url?.let(uriHandler::openUri) })
-        }
-
-        post.quoted?.let { quote ->
-            QuoteBlock(
-                handle = quote.handle,
-                name = quote.name,
-                text = quote.text,
-                avatarUrl = quote.avatarUrl,
-                note = quote.note,
-                onClick = { uriHandler.openUri(quote.permalink) }
-            )
-        }
-
-        post.note?.let { note ->
-            val noteLinkColor = MaterialTheme.colorScheme.primary
-            val noteText = remember(post.id, note, noteLinkColor) {
-                linkify(note.text, note.links, noteLinkColor, onOpenProfile)
+            post.card?.let { card ->
+                LinkCardBlock(card = card, onClick = { card.url?.let(uriHandler::openUri) })
             }
-            SelectionContainer { NoteBlock(note, text = noteText) }
-        }
 
-        fullDate(post.publishedAtMillis)?.let {
-            Text(
-                it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+            post.quoted?.let { quote ->
+                QuoteBlock(
+                    handle = quote.handle,
+                    name = quote.name,
+                    text = quote.text,
+                    avatarUrl = quote.avatarUrl,
+                    note = quote.note,
+                    onClick = { uriHandler.openUri(quote.permalink) }
+                )
+            }
 
-        post.stats?.takeIf { showCounts }?.let { stats ->
-            HorizontalDivider()
-            StatsLine(stats)
-            HorizontalDivider()
-        }
+            post.note?.let { note ->
+                val noteLinkColor = MaterialTheme.colorScheme.primary
+                val noteText = remember(post.id, note, noteLinkColor) {
+                    linkify(note.text, note.links, noteLinkColor, onOpenProfile)
+                }
+                SelectionContainer { NoteBlock(note, text = noteText) }
+            }
 
-        val url = postUrl(post)
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Straight to X or a browser. Through the app's own link handler
-            // this would land back on this screen.
-            FilledTonalButton(onClick = { LinkRouter.openOutside(context, url) }) { Text("Open on LinkedIn") }
-            // Share and copy follow the reader's choice, x.com or Nitter.
-            OutlinedButton(onClick = { share(context, shareLink) }) { Text("Share") }
-            OutlinedButton(onClick = { copy(context, shareLink) }) { Text("Copy link") }
+            fullDate(post.publishedAtMillis)?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            post.stats?.takeIf { showCounts }?.let { stats ->
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                StatsLine(stats)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+
+            val url = postUrl(post)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Straight to X or a browser. Through the app's own link handler
+                // this would land back on this screen.
+                FilledTonalButton(onClick = { LinkRouter.openOutside(context, url) }) { Text("Open on LinkedIn") }
+                // Share and copy follow the reader's choice, x.com or Nitter.
+                OutlinedButton(onClick = { share(context, shareLink) }) { Text("Share") }
+                OutlinedButton(onClick = { copy(context, shareLink) }) { Text("Copy link") }
+            }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHigh)
 }
 
 /** Every count the source gave, spelled out. Counts it did not give are not guessed. */

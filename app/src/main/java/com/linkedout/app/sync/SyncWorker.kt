@@ -83,12 +83,7 @@ class SyncWorker(
             val fresh = NewPosts.detect(
                 before = before,
                 after = after,
-                sinceMillis = current.notifySinceMillis,
-                filters = NewPosts.Filters(
-                    hideReplies = current.homeHideReplies,
-                    hideReposts = current.homeHideReposts,
-                    mediaOnly = current.homeMediaOnly
-                )
+                sinceMillis = current.notifySinceMillis
             )
             notifier.show(fresh)
         }

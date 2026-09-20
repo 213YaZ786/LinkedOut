@@ -22,8 +22,8 @@ android {
         applicationId = "com.linkedout.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 49
-        versionName = "0.6.22"
+        versionCode = 61
+        versionName = "0.6.34"
     }
 
     signingConfigs {
@@ -109,6 +109,8 @@ dependencies {
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+
+    implementation(libs.androidx.webkit)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
