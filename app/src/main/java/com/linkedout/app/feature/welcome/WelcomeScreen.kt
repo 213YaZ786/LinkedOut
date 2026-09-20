@@ -36,7 +36,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import com.linkedout.app.data.settings.AutoDownload
+import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.ui.icon.LinkedOutIcons
+import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
 
 private data class WelcomePage(
@@ -45,47 +59,68 @@ private data class WelcomePage(
     val intro: String,
     val points: List<String>,
     /** Shows a profile address with the part LinkedOut needs picked out. */
-    val showLinkExample: Boolean = false
+    val showLinkExample: Boolean = false,
+    /** The last page asks for a decision instead of explaining anything. */
+    val showMediaChoice: Boolean = false
 )
 
+/**
+ * Four pages, and every line in them is something the reader cannot work out
+ * on their own. What this reads, where the address is, how to follow, and the
+ * one decision that costs their data. Nothing about what the app is for and
+ * nothing it could show instead of saying.
+ */
 private val PAGES = listOf(
     WelcomePage(
         icon = LinkedOutIcons.Home,
-        title = "Welcome to LinkedOut",
-        intro = "Read public LinkedIn posts with no account, no tracking and no ads.",
+        title = "LinkedOut",
+        intro = "Public LinkedIn posts, without an account.",
         points = listOf(
-            "You choose who to follow. The list stays on this device.",
-            "Home gathers their newest posts in one timeline."
+            "The accounts you follow stay on this phone.",
+            "LinkedIn shows a guest a few profiles at a time. Some reads are refused, " +
+                "and trying again later works."
         )
     ),
     WelcomePage(
         icon = LinkedOutIcons.Person,
-        title = "Find a profile address",
-        intro = "LinkedIn has no @handle. A person is named by the last part of " +
-            "their profile address, after /in/.",
+        title = "An address, not a name",
+        intro = "LinkedIn has no @handle, and searching by name needs an account.",
         points = listOf(
-            "Open the page in a browser or in the LinkedIn app. The address is at the top.",
-            "LinkedOut wants the part in colour below. Pasting the whole address works too.",
-            "A person's name will not do: searching LinkedIn by name needs an account."
+            "Open the profile in a browser or in the LinkedIn app and copy its address.",
+            "Companies and schools work the same way, with /company/ or /school/."
         ),
         showLinkExample = true
     ),
     WelcomePage(
-        icon = LinkedOutIcons.Search,
-        title = "Follow someone",
-        intro = "Two ways to add a person.",
+        icon = LinkedOutIcons.Folder,
+        title = "Follow and file",
+        intro = "Paste the address in Accounts, then Follow.",
         points = listOf(
-            "In Accounts, paste the address or type the part after /in/, then tap Follow.",
-            "From the LinkedIn app or a browser, share a profile to LinkedOut, then tap Follow.",
-            "Company, school and showcase pages work the same way, with their own address."
+            "Sharing a profile from another app to LinkedOut does the same.",
+            "Folders in Accounts give one stream each. Home switches between them from its title."
         )
+    ),
+    WelcomePage(
+        icon = LinkedOutIcons.Download,
+        title = "Saving media",
+        intro = "Pictures and videos can be kept on the phone, so a post read once " +
+            "opens again with no connection.",
+        points = listOf(
+            "It costs space and, on mobile data, data.",
+            "Changeable at any time in Settings, under Media."
+        ),
+        showMediaChoice = true
     )
 )
 
 /**
- * A short guide shown on first launch, and again from Settings. Three pages:
- * what LinkedOut is, where a profile address is and which part of it counts,
- * and how to follow.
+ * The guide shown on first launch, and again from Settings.
+ *
+ * The last page asks for the media decision rather than explaining it, and
+ * the way out is that choice. It is the only setting that spends the reader's
+ * data without being asked again, so it is not left as a default they never
+ * saw. Skip still skips: someone reopening this from Settings is not made to
+ * answer twice.
  *
  * [onFinish] receives true when the reader asks to go to Accounts.
  */
@@ -94,6 +129,27 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
     val pager = rememberPagerState(pageCount = { PAGES.size })
     val scope = rememberCoroutineScope()
     val last = pager.currentPage == PAGES.lastIndex
+    val settings: SettingsStore = koinInject()
+    val context = LocalContext.current
+    var chosen by remember { mutableStateOf<AutoDownload?>(null) }
+    val askNotifications = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    val choose: (AutoDownload) -> Unit = { choice ->
+        chosen = choice
+        settings.update { it.copy(autoDownloadMedia = choice) }
+        // The progress of a download is a notification like any other, and
+        // Android 13 and later want the permission for it. Asked here because
+        // here is where the reader asked for downloads.
+        if (choice != AutoDownload.NEVER &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -103,7 +159,7 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
         HorizontalPager(
             state = pager,
             modifier = Modifier.weight(1f).fillMaxWidth()
-        ) { index -> PageContent(PAGES[index]) }
+        ) { index -> PageContent(page = PAGES[index], chosen = chosen, onChoose = choose) }
 
         Dots(count = PAGES.size, current = pager.currentPage)
 
@@ -118,6 +174,8 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
             }
             Spacer(Modifier.weight(1f))
             Button(
+                // The last page has no way forward until the choice is made.
+                enabled = !last || chosen != null,
                 onClick = {
                     if (last) onFinish(true) else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
                 }
@@ -127,7 +185,11 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
 }
 
 @Composable
-private fun PageContent(page: WelcomePage) {
+private fun PageContent(
+    page: WelcomePage,
+    chosen: AutoDownload?,
+    onChoose: (AutoDownload) -> Unit
+) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -158,12 +220,58 @@ private fun PageContent(page: WelcomePage) {
             textAlign = TextAlign.Center
         )
         if (page.showLinkExample) LinkExample()
+        if (page.showMediaChoice) MediaChoice(chosen = chosen, onChoose = onChoose)
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             page.points.forEach { Point(it) }
         }
+    }
+}
+
+/** Three rows, one of which has to be tapped before the guide can be left. */
+@Composable
+private fun MediaChoice(chosen: AutoDownload?, onChoose: (AutoDownload) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        MediaOption("Only when I open them", AutoDownload.NEVER, chosen, onChoose)
+        MediaOption("Save them on Wi-Fi", AutoDownload.WIFI, chosen, onChoose)
+        MediaOption("Save them on any network", AutoDownload.ALWAYS, chosen, onChoose)
+    }
+}
+
+@Composable
+private fun MediaOption(
+    label: String,
+    value: AutoDownload,
+    chosen: AutoDownload?,
+    onChoose: (AutoDownload) -> Unit
+) {
+    val picked = chosen == value
+    Surface(
+        onClick = { onChoose(value) },
+        shape = RoundedCornerShape(16.dp),
+        color = if (picked) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = if (picked) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
+        )
     }
 }
 

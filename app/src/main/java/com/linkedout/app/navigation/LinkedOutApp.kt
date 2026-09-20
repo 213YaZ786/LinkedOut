@@ -1,6 +1,12 @@
 package com.linkedout.app.navigation
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,11 +28,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavHostController
 import com.linkedout.app.core.link.LinkRouter
@@ -48,6 +49,7 @@ import com.linkedout.app.feature.welcome.WelcomeScreen
 import com.linkedout.app.data.settings.StartTab
 import com.linkedout.app.core.model.PostKind
 import com.linkedout.app.feature.accounts.AccountsScreen
+import com.linkedout.app.feature.accounts.FoldersScreen
 import com.linkedout.app.feature.debug.DebugLogScreen
 import com.linkedout.app.feature.feed.FeedScreen
 import com.linkedout.app.feature.post.PostDetailScreen
@@ -59,6 +61,8 @@ import com.linkedout.app.ui.component.DockClearance
 import com.linkedout.app.ui.component.DockItem
 import com.linkedout.app.ui.component.FloatingDock
 import com.linkedout.app.ui.component.LocalDockPadding
+import androidx.compose.animation.EnterExitState
+import com.linkedout.app.ui.component.DismissableScreen
 import com.linkedout.app.ui.component.LocalInlinePlaybackAllowed
 import com.linkedout.app.ui.component.SideDockClearance
 import kotlinx.coroutines.launch
@@ -164,6 +168,9 @@ private fun NavHostController.back() {
     popBackStack()
 }
 
+private const val ENTER_MS = 260
+private const val EXIT_MS = 180
+
 /**
  * How a screen arrives and leaves.
  *
@@ -174,8 +181,6 @@ private fun NavHostController.back() {
  * the popped screen slides back out the side it came in from so the gesture
  * and the picture agree.
  */
-private const val ENTER_MS = 260
-private const val EXIT_MS = 180
 
 @Composable
 private fun LinkedOutNavHost(navController: NavHostController) {
@@ -192,42 +197,67 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                 slideOutHorizontally(tween(EXIT_MS)) { full -> -full / 8 } +
                     fadeOut(tween(EXIT_MS))
             },
+            // No fade on the way back. A back gesture is seeked frame by frame
+            // under the thumb, and a fade over a whole screen makes the
+            // compositor render that screen into an off screen layer for every
+            // one of those frames. A slide moves a layer that already exists.
             popEnterTransition = {
-                slideInHorizontally(tween(ENTER_MS)) { full -> -full / 8 } +
-                    fadeIn(tween(ENTER_MS))
+                slideInHorizontally(tween(ENTER_MS)) { full -> -full / 8 }
             },
-            // Seekable, so a predictive back drag moves this one under the
-            // reader's thumb instead of playing after the thumb has gone.
             popExitTransition = {
-                slideOutHorizontally(tween(EXIT_MS)) { full -> full } +
-                    fadeOut(tween(EXIT_MS))
+                slideOutHorizontally(tween(EXIT_MS)) { full -> full }
             }
         ) {
             composable(Routes.MAIN) {
+                // True only when this screen is fully arrived and nothing is
+                // animating over it. It is what stops the inline video from
+                // going on playing under a screen that is sliding, and a
+                // back gesture is seeked frame by frame under the thumb: a
+                // video surface being composited inside a layer that moves
+                // every frame is the most expensive thing this app can do,
+                // and it is what made the dragged back feel heavy while the
+                // arrow, which animates on its own, did not.
+                val settled = transition.currentState == transition.targetState &&
+                    transition.targetState == EnterExitState.Visible
                 MainTabs(
+                    settled = settled,
                     onOpenDebugLog = { navController.open(Routes.DEBUG_LOG) },
                     onOpenSavedMedia = { navController.open(Routes.SAVED_MEDIA) },
                     onOpenFeed = { handle, kind -> navController.open(Routes.feed(handle, kind)) },
+                    onOpenFolders = { navController.open(Routes.FOLDERS) },
                     onOpenPost = { post -> navController.open(Routes.post(post.id, post.cacheOwner())) },
                     onOpenSearch = { navController.open(Routes.SEARCH) }
                 )
             }
             composable(Routes.SEARCH) {
+                DismissableScreen(onBack = { navController.back() }) {
                 Readable {
                     SearchScreen(
                         onBack = { navController.back() },
                         onOpenPost = { post -> navController.open(Routes.post(post.id, post.cacheOwner())) }
                     )
                 }
+                }
             }
             composable(Routes.DEBUG_LOG) {
+                DismissableScreen(onBack = { navController.back() }) {
                 Readable {
                     DebugLogScreen(onBack = { navController.back() })
                 }
+                }
             }
             composable(Routes.SAVED_MEDIA) {
+                DismissableScreen(onBack = { navController.back() }) {
                 Readable {
                     SavedMediaScreen(onBack = { navController.back() })
+                }
+                }
+            }
+            composable(Routes.FOLDERS) {
+                DismissableScreen(onBack = { navController.back() }) {
+                Readable {
+                    FoldersScreen(onBack = { navController.back() })
+                }
                 }
             }
             composable(
@@ -240,6 +270,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                     }
                 )
             ) { entry ->
+                DismissableScreen(onBack = { navController.back() }) {
                 Readable {
                     FeedScreen(
                         handle = entry.arguments?.getString("handle").orEmpty(),
@@ -251,6 +282,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                             navController.open(Routes.post(post.id, entry.arguments?.getString("handle").orEmpty()))
                         }
                     )
+                }
                 }
             }
             composable(
@@ -264,6 +296,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                     }
                 )
             ) { entry ->
+                DismissableScreen(onBack = { navController.back() }) {
                 Readable {
                     PostDetailScreen(
                         id = entry.arguments?.getString("id").orEmpty(),
@@ -272,6 +305,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                         onOpenProfile = { handle -> navController.open(Routes.feed(handle)) },
                         onOpenPost = { post -> navController.open(Routes.post(post.id, post.authorHandle)) }
                     )
+                }
                 }
             }
         }
@@ -298,8 +332,10 @@ private fun Post.cacheOwner(): String =
  */
 @Composable
 private fun MainTabs(
+    settled: Boolean,
     onOpenDebugLog: () -> Unit,
     onOpenSavedMedia: () -> Unit,
+    onOpenFolders: () -> Unit,
     onOpenFeed: (String, AccountKind) -> Unit,
     onOpenPost: (Post) -> Unit,
     onOpenSearch: () -> Unit
@@ -346,7 +382,18 @@ private fun MainTabs(
             }
         }
 
-        BackHandler(enabled = pager.currentPage != 0) { go(0) }
+        // Predictive, not plain. A plain BackHandler sitting above the
+        // navigation host answers the gesture without ever telling the system
+        // how far it has come, and a gesture with no progress is a gesture
+        // that animates nothing until it ends.
+        PredictiveBackHandler(enabled = pager.currentPage != 0) { progress ->
+            try {
+                progress.collect { }
+                go(0)
+            } catch (cancelled: CancellationException) {
+                // The thumb came back. Nothing to undo, nothing to report.
+            }
+        }
 
         fun closeWelcome(openAccounts: Boolean) {
             showWelcome = false
@@ -354,7 +401,14 @@ private fun MainTabs(
             if (openAccounts) go(TopDestination.ACCOUNTS.ordinal)
         }
         // Declared after the tab one, so back closes the guide first.
-        BackHandler(enabled = showWelcome) { closeWelcome(openAccounts = false) }
+        PredictiveBackHandler(enabled = showWelcome) { progress ->
+            try {
+                progress.collect { }
+                closeWelcome(openAccounts = false)
+            } catch (cancelled: CancellationException) {
+                // The thumb came back.
+            }
+        }
 
         val pages: @Composable (Modifier) -> Unit = { modifier ->
             HorizontalPager(
@@ -369,7 +423,7 @@ private fun MainTabs(
             ) { page ->
                 // Videos in a list play only while that list is the tab in
                 // sight. The pager keeps the others alive next to it.
-                val inSight = pager.settledPage == page && !showWelcome
+                val inSight = pager.settledPage == page && !showWelcome && settled
                 CompositionLocalProvider(LocalInlinePlaybackAllowed provides inSight) {
                 Readable {
                     when (tabs[page]) {
@@ -378,7 +432,10 @@ private fun MainTabs(
                             onOpenPost = onOpenPost,
                             onOpenSearch = onOpenSearch
                         )
-                        TopDestination.ACCOUNTS -> AccountsScreen(onOpenFeed = onOpenFeed)
+                        TopDestination.ACCOUNTS -> AccountsScreen(
+                            onOpenFeed = onOpenFeed,
+                            onOpenFolders = onOpenFolders
+                        )
                         TopDestination.SETTINGS -> SettingsScreen(
                             onOpenDebugLog = onOpenDebugLog,
                             onOpenSavedMedia = onOpenSavedMedia,

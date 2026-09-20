@@ -1,10 +1,13 @@
 package com.linkedout.app.feature.timeline
 
 import com.linkedout.app.ui.component.BannerAction
+import com.linkedout.app.ui.component.FolderDialog
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.LocalInlinePlaying
 import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.FloatingRoundButton
 import com.linkedout.app.ui.component.ScrollUpButton
+import com.linkedout.app.ui.component.rememberHaptics
 import com.linkedout.app.ui.component.rememberInlineTarget
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
@@ -88,10 +91,12 @@ fun TimelineScreen(
     val settings by settingsStore.settings.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     val readPosts: ReadPosts = koinInject()
     val read by readPosts.state.collectAsState()
     var viewing by remember { mutableStateOf<Pair<Post, Int>?>(null) }
     var showFailures by remember { mutableStateOf(false) }
+    var choosingFolder by remember { mutableStateOf(false) }
 
     // Saving media posts a progress notification, and Android can refuse it.
     // A download that runs with no way to say how far it is belongs in the
@@ -139,10 +144,14 @@ fun TimelineScreen(
     // on screen in this session.
     val seen = remember { mutableSetOf<String>() }
     LaunchedEffect(listState, state.posts) {
-        snapshotFlow {
-            listState.layoutInfo.visibleItemsInfo.map { it.key } to listState.firstVisibleItemIndex
-        }.collect { (keys, first) ->
-            keys.forEach { key -> if (key is String) seen.add(key) }
+        // Only the index is watched. Watching the list of visible keys built
+        // that list, and a pair around it, on every frame of every scroll and
+        // every transition, for a set that changes a handful of times a
+        // second. The keys are read once here instead, when the index moves.
+        snapshotFlow { listState.firstVisibleItemIndex }.collect { first ->
+            listState.layoutInfo.visibleItemsInfo.forEach { item ->
+                (item.key as? String)?.let(seen::add)
+            }
             val passed = first - 1
             if (passed > 0) {
                 val gone = state.posts.take(passed).map { it.id }.filter { it in seen }
@@ -151,9 +160,23 @@ fun TimelineScreen(
         }
     }
 
+    if (choosingFolder) {
+        FolderDialog(
+            title = "Show",
+            folders = state.folders,
+            selected = state.folder,
+            everything = "Everything",
+            onSelect = { name ->
+                choosingFolder = false
+                viewModel.showFolder(name)
+            },
+            onDismiss = { choosingFolder = false }
+        )
+    }
+
     val banner: @Composable () -> Unit = {
         ScreenBanner(
-            title = "Home",
+            title = state.folder ?: "Everything",
             subtitle = subtitle(state),
             leading = if (somethingWrong) {
                 {
@@ -200,7 +223,11 @@ fun TimelineScreen(
         // failed refresh at launch left Home stuck until a restart.
         state.isEmpty && state.errors.isNotEmpty() -> PullToRefreshBox(
             isRefreshing = state.loading,
-            onRefresh = viewModel::refresh,
+            onRefresh = {
+                // Firm: a pull is a thing begun, not a button pressed.
+                haptics.firm()
+                viewModel.refresh()
+            },
             modifier = Modifier.fillMaxSize()
         ) {
             // A list, because the pull gesture needs something scrollable.
@@ -219,7 +246,11 @@ fun TimelineScreen(
 
         else -> PullToRefreshBox(
             isRefreshing = state.loading,
-            onRefresh = viewModel::refresh,
+            onRefresh = {
+                // Firm: a pull is a thing begun, not a button pressed.
+                haptics.firm()
+                viewModel.refresh()
+            },
             modifier = Modifier.fillMaxSize()
         ) {
             // Prefetch a page before the reader actually hits the bottom,
@@ -266,17 +297,32 @@ fun TimelineScreen(
                 }
             }
 
+            // Both at the bottom right, in one column, above the dock. The
+            // folder switch never leaves: it is how the reader moves from one
+            // stream to another, and a control that only appears once you have
+            // scrolled is a control nobody finds. The way back to the top
+            // stacks above it and comes and goes.
             val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
-            ScrollUpButton(
-                visible = scrolled,
-                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(
                         end = 16.dp,
                         bottom = LocalDockPadding.current.coerceAtLeast(16.dp)
                     )
-            )
+            ) {
+                ScrollUpButton(
+                    visible = scrolled,
+                    onClick = { scope.launch { listState.animateScrollToItem(0) } }
+                )
+                FloatingRoundButton(
+                    icon = LinkedOutIcons.Folder,
+                    label = "Choose which folder to read",
+                    onClick = { choosingFolder = true }
+                )
+            }
         }
     }
 }

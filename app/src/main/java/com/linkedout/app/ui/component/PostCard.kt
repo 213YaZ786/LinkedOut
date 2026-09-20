@@ -35,7 +35,9 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import com.linkedout.app.core.media.OfflineMedia
+import com.linkedout.app.data.repository.VideoSources
 import com.linkedout.app.core.model.CommunityNote
 import com.linkedout.app.core.model.LinkCard
 import com.linkedout.app.core.model.MediaItem
@@ -233,6 +235,7 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
     val ratio = if (LocalDisplayPrefs.current.compact) 2f else 16f / 9f
     val hold = rememberMediaPolicy().hold
     val offline: OfflineMedia = koinInject()
+    val haptics = rememberHaptics()
     // Read here so the block redraws when a download lands under it.
     val saved by offline.names.collectAsState()
     // Only the first video or GIF of the post chosen by the list plays inline.
@@ -267,15 +270,30 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
                         contentScale = ContentScale.FillWidth,
                         modifier = Modifier.fillMaxWidth().aspectRatio(ratio)
                     )
-                    // A video with no source keeps its cover and its badge and
-                    // starts no player. Tapping it opens the post, where the
-                    // address exists.
-                    if (index == inlineIndex && item.playable) {
-                        InlineVideo(
-                            url = item.downloadUrl,
-                            onClick = { onOpen(index) },
-                            modifier = Modifier.matchParentSize()
-                        )
+                    if (index == inlineIndex) {
+                        // A profile page draws a cover and a play badge for
+                        // each video and carries no address for any of them.
+                        // The post's own page has it, so the one video the
+                        // list has chosen to play asks for it, and only that
+                        // one: reading a profile with eight videos used to
+                        // mean eight requests at once, against a host that
+                        // refuses when it has had enough, for films nobody
+                        // may watch. Answers are kept for the run, so
+                        // scrolling away and back costs nothing.
+                        val sources: VideoSources = koinInject()
+                        var source by remember(item.downloadUrl) {
+                            mutableStateOf(item.downloadUrl.takeIf { item.playable })
+                        }
+                        LaunchedEffect(post.id, item.playable) {
+                            if (source == null) source = sources.sourceFor(post.id)
+                        }
+                        source?.let { address ->
+                            InlineVideo(
+                                url = address,
+                                onClick = { onOpen(index) },
+                                modifier = Modifier.matchParentSize()
+                            )
+                        }
                     }
                 }
 
@@ -296,7 +314,12 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
                 }
 
                 IconButton(
-                    onClick = { onDownload(item) },
+                    onClick = {
+                        // The file will land somewhere the reader cannot see,
+                        // so the phone says it has been asked for.
+                        haptics.done()
+                        onDownload(item)
+                    },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)

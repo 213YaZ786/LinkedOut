@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.accounts.AccountStore
+import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.data.read.ReadPosts
+import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.data.repository.TimelineRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +30,10 @@ data class TimelineUiState(
      * gets a button instead. Retrying a rate limited host on a scroll gesture
      * is how a 429 turns into a fifteen minute ban.
      */
-    val pagingFailed: Boolean = false
+    val pagingFailed: Boolean = false,
+    /** Null is every account. The banner says so by showing "Home". */
+    val folder: String? = null,
+    val folders: List<String> = emptyList()
 ) {
     /**
      * The stream as it is read. There is no filtering left: the three Home
@@ -42,8 +47,12 @@ data class TimelineUiState(
 class TimelineViewModel(
     private val repository: TimelineRepository,
     private val accounts: AccountStore,
-    private val readPosts: ReadPosts
+    private val readPosts: ReadPosts,
+    private val settings: SettingsStore
 ) : ViewModel() {
+
+    /** The folder Home is showing, or null for everything. */
+    private var folder: String? = settings.current.homeFolder
 
     private val _state = MutableStateFlow(TimelineUiState())
     val state: StateFlow<TimelineUiState> = _state.asStateFlow()
@@ -68,12 +77,14 @@ class TimelineViewModel(
             // request goes out, then refresh over the top.
             work.withLock {
                 known = followedKeys()
-                val cached = repository.cached()
+                val cached = repository.cached(folder)
                 // The safety net. Everything already on disk at launch counts
                 // as read, so an outline can only mean "arrived while you were
                 // here" and never "still here from yesterday".
                 readPosts.mark(cached.posts.map { it.id })
                 _state.value = _state.value.copy(
+                    folder = folder,
+                    folders = folderNames(),
                     allPosts = cached.posts,
                     followedCount = known.size,
                     lastUpdatedMillis = cached.oldestFetchedAtMillis,
@@ -116,8 +127,18 @@ class TimelineViewModel(
         if (added.isEmpty() && removed.isEmpty()) return@withLock
         known = current
 
-        val cached = repository.cached()
+        // A folder that no longer exists would leave Home showing nothing at
+        // all, so it falls back to the whole stream rather than to an empty one.
+        val names = folderNames()
+        if (folder != null && folder !in names) {
+            folder = null
+            settings.update { it.copy(homeFolder = null) }
+        }
+
+        val cached = repository.cached(folder)
         _state.value = _state.value.copy(
+            folder = folder,
+            folders = names,
             allPosts = cached.posts,
             followedCount = current.size,
             canLoadMore = cached.canLoadMore,
@@ -136,7 +157,7 @@ class TimelineViewModel(
         val before = _state.value
         _state.value = before.copy(loading = true, followedCount = known.size)
 
-        val merged = repository.refresh(only)
+        val merged = repository.refresh(only, folder)
 
         val errors = if (only == null) {
             merged.errors
@@ -159,6 +180,39 @@ class TimelineViewModel(
             loadingMore = false,
             pagingFailed = false
         )
+    }
+
+    /** The folders that exist, which is to say the ones some account names. */
+    private fun folderNames(): List<String> =
+        (listOf(FollowedAccount.MAIN) + accounts.accounts.value.map { it.folder })
+            .distinct()
+            .sortedWith(compareBy({ it != FollowedAccount.MAIN }, { it.lowercase() }))
+
+    /**
+     * Switches Home to another folder. The stream is repainted from the cache
+     * at once and only then refreshed, so the change is instant and the
+     * network work is the folder's own accounts rather than everyone's.
+     */
+    fun showFolder(name: String?) {
+        if (folder == name) return
+        folder = name
+        settings.update { it.copy(homeFolder = name) }
+        viewModelScope.launch {
+            work.withLock {
+                known = followedKeys()
+                val cached = repository.cached(folder)
+                readPosts.mark(cached.posts.map { it.id })
+                _state.value = _state.value.copy(
+                    folder = folder,
+                    allPosts = cached.posts,
+                    followedCount = known.size,
+                    lastUpdatedMillis = cached.oldestFetchedAtMillis,
+                    canLoadMore = cached.canLoadMore,
+                    errors = emptyMap()
+                )
+                fetch(only = null)
+            }
+        }
     }
 
     private fun followedKeys(): Set<String> =

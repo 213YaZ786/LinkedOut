@@ -53,6 +53,9 @@ fun Zone(
     content: @Composable () -> Unit
 ) {
     val border = outline?.let { BorderStroke(outlineWidth, it) }
+    // Here rather than at each call site: a card, a quote, a link preview and
+    // an account row are all this one composable, so one tick covers them all.
+    val haptics = rememberHaptics()
     // Two calls rather than one with a null click: the clickable Surface is a
     // different overload, and giving it a no-op lambda would add a ripple and
     // a semantics node to a card that is not meant to be tapped.
@@ -66,7 +69,10 @@ fun Zone(
         )
     } else {
         Surface(
-            onClick = onClick,
+            onClick = {
+                haptics.tick()
+                onClick()
+            },
             modifier = modifier,
             shape = shape,
             color = color,

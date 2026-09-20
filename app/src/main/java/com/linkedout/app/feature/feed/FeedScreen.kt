@@ -60,6 +60,7 @@ import com.linkedout.app.ui.component.ScreenBanner
 import com.linkedout.app.ui.component.ScrollUpButton
 import com.linkedout.app.ui.component.Zone
 import com.linkedout.app.ui.component.ZoneGap
+import com.linkedout.app.ui.component.rememberHaptics
 import com.linkedout.app.ui.component.rememberInlineTarget
 import com.linkedout.app.ui.component.relativeTime
 import com.linkedout.app.ui.icon.LinkedOutIcons
@@ -95,6 +96,7 @@ fun FeedScreen(
     val settings by settingsStore.settings.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     var viewing by remember { mutableStateOf<Pair<List<MediaItem>, Int>?>(null) }
 
     val feed = state.feed
@@ -169,7 +171,12 @@ fun FeedScreen(
                         name = name,
                         feed = feed,
                         isFollowing = isFollowing,
-                        onToggleFollow = viewModel::toggleFollow,
+                        onToggleFollow = {
+                        // Following or dropping an account is a decision, and
+                        // it answers like one.
+                        haptics.done()
+                        viewModel.toggleFollow()
+                    },
                         onOpenAvatar = { small ->
                             viewing = listOf(
                                 MediaItem(

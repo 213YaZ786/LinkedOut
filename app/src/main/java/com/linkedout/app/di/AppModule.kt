@@ -74,7 +74,7 @@ val appModule = module {
         MediaDownloader(androidContext(), get(named("appScope"))) { id -> videos.sourceFor(id) }
     }
     single { OfflineMedia(androidContext()) }
-    single { MediaPrefetch(androidContext(), get(), get(), get(), get(named("appScope"))) }
+    single { MediaPrefetch(androidContext(), get(), get(), get(), get(), get(named("appScope"))) }
     single { AccountStore(androidContext()) }
     single { ReadPosts(androidContext(), get(named("appScope"))) }
     single { SettingsStore(androidContext()) }
@@ -84,7 +84,7 @@ val appModule = module {
     single { CompanyPageParser() }
     single { PostPageParser() }
     single { LinkedInSource(get(), get(), get(), get(), get(), get(), get()) }
-    single { FeedRepository(get()) }
+    single { FeedRepository(get(), get()) }
     single { VideoSources(get()) }
 
     single {
@@ -97,6 +97,6 @@ val appModule = module {
     viewModel { PostDetailViewModel(get(), get()) }
     viewModel { SearchViewModel(get()) }
     viewModel { FeedViewModel(get(), get(), get()) }
-    viewModel { TimelineViewModel(get(), get(), get()) }
+    viewModel { TimelineViewModel(get(), get(), get(), get()) }
     viewModel { SettingsViewModel(get(), get(), get(), get(), get(), get(), androidContext()) }
 }

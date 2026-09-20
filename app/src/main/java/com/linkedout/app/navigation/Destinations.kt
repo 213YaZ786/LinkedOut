@@ -23,6 +23,7 @@ object Routes {
     const val DEBUG_LOG = "debuglog"
     const val SEARCH = "search"
     const val SAVED_MEDIA = "savedmedia"
+    const val FOLDERS = "folders"
 
     const val POST_PATTERN = "post/{id}?from={from}"
 

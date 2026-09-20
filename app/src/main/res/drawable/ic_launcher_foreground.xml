@@ -13,25 +13,25 @@
 
         <path
             android:pathData="M60,279 a56,56 0 1,0 112,0 a56,56 0 1,0 -112,0"
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="@color/ic_launcher_foreground"
             android:strokeWidth="34"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
         <path
             android:pathData="M224,223 V286 A49,49 0 0,0 322,286 V223"
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="@color/ic_launcher_foreground"
             android:strokeWidth="34"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
         <path
             android:pathData="M414,177 V298 A37,37 0 0,0 451,335"
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="@color/ic_launcher_foreground"
             android:strokeWidth="34"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />
         <path
             android:pathData="M378,223 H448"
-            android:strokeColor="#FFFFFF"
+            android:strokeColor="@color/ic_launcher_foreground"
             android:strokeWidth="34"
             android:strokeLineCap="round"
             android:strokeLineJoin="round" />

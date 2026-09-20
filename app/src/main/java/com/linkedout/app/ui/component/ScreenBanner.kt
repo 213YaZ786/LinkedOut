@@ -32,6 +32,11 @@ import androidx.compose.ui.unit.dp
  *
  * Both sides reserve the same width whether or not they hold anything, so the
  * title is centred on the screen and not on what is left of the row.
+ *
+ * The title is a label and nothing else. Home's folder switch lived here for
+ * one version and nobody found it: a title that can be tapped still looks
+ * like a title. It is a floating button at the bottom right now, where the
+ * thumb is and where a control is expected.
  */
 @Composable
 fun ScreenBanner(
@@ -54,7 +59,7 @@ fun ScreenBanner(
                 leading?.invoke()
             }
             Column(
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
@@ -95,8 +100,12 @@ fun BannerAction(
     container: Color = MaterialTheme.colorScheme.secondaryContainer,
     tint: Color = MaterialTheme.colorScheme.onSecondaryContainer
 ) {
+    val haptics = rememberHaptics()
     Surface(
-        onClick = onClick,
+        onClick = {
+            haptics.tick()
+            onClick()
+        },
         shape = CircleShape,
         color = container
     ) {

@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -42,6 +43,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.ui.component.Avatar
+import com.linkedout.app.ui.component.BannerAction
+import com.linkedout.app.ui.component.FolderDialog
 import com.linkedout.app.ui.component.ScreenBanner
 import com.linkedout.app.ui.component.Zone
 import com.linkedout.app.ui.component.relativeTime
@@ -67,9 +70,26 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun AccountsScreen(
     onOpenFeed: (String, AccountKind) -> Unit,
+    onOpenFolders: () -> Unit,
     viewModel: AccountsViewModel = koinViewModel()
 ) {
     val rows by viewModel.rows.collectAsState()
+    val folders by viewModel.folders.collectAsState()
+    var filing by remember { mutableStateOf<AccountRow?>(null) }
+
+    filing?.let { row ->
+        FolderDialog(
+            title = row.name ?: row.handle,
+            folders = folders,
+            selected = row.folder,
+            everything = null,
+            onSelect = { name ->
+                viewModel.setFolder(row.handle, name.orEmpty())
+                filing = null
+            },
+            onDismiss = { filing = null }
+        )
+    }
     var query by rememberSaveable { mutableStateOf("") }
     var notice by remember { mutableStateOf<String?>(null) }
     val focus = LocalFocusManager.current
@@ -136,7 +156,14 @@ fun AccountsScreen(
     Column(Modifier.fillMaxSize()) {
         ScreenBanner(
             title = "Accounts",
-            subtitle = if (rows.isEmpty()) null else "${rows.size} followed"
+            subtitle = if (rows.isEmpty()) null else "${rows.size} followed",
+            trailing = {
+                BannerAction(
+                    icon = LinkedOutIcons.Folder,
+                    label = "Folders",
+                    onClick = onOpenFolders
+                )
+            }
         )
 
         TextField(
@@ -223,7 +250,11 @@ fun AccountsScreen(
             }
 
             items(visible, key = { it.handle }) { row ->
-                AccountCard(row = row, onClick = { open(row.handle, row.kind) })
+                AccountCard(
+                    row = row,
+                    onClick = { open(row.handle, row.kind) },
+                    onFile = { filing = row }
+                )
             }
 
             if (rows.isEmpty() && trimmed.isEmpty()) {
@@ -234,7 +265,7 @@ fun AccountsScreen(
 }
 
 @Composable
-private fun AccountCard(row: AccountRow, onClick: () -> Unit) {
+private fun AccountCard(row: AccountRow, onClick: () -> Unit, onFile: () -> Unit) {
     Zone(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -263,11 +294,23 @@ private fun AccountCard(row: AccountRow, onClick: () -> Unit) {
                     )
                 }
             }
-            Text(
-                row.lastPostMillis?.let(::relativeTime) ?: "Not read yet",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    row.lastPostMillis?.let(::relativeTime) ?: "Not read yet",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                // The folder is a control, not a label. Tapping the card opens
+                // the account, so filing it needs a target of its own.
+                TextButton(onClick = onFile, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                    Text(
+                        row.folder,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
     }
 }

@@ -71,6 +71,7 @@ fun FloatingDock(
     // No extra animation here: the pager already animates taps, and while
     // swiping the highlight must stay exactly under the finger.
     val animated = position
+    val haptics = rememberHaptics()
 
     Surface(
         shape = CircleShape,
@@ -102,7 +103,13 @@ fun FloatingDock(
                         modifier = Modifier
                             .size(itemWidth, itemHeight)
                             .clip(CircleShape)
-                            .clickable(onClickLabel = item.label, role = Role.Tab) { onSelect(index) },
+                            .clickable(onClickLabel = item.label, role = Role.Tab) {
+                                // Firm: moving to another tab is taking the
+                                // whole screen somewhere else, not pressing a
+                                // button on the one you are reading.
+                                haptics.firm()
+                                onSelect(index)
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(item.icon, contentDescription = item.label, tint = tint)

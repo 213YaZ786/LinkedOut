@@ -2,6 +2,7 @@ package com.linkedout.app.feature.settings
 
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.rememberHaptics
 import com.linkedout.app.ui.component.Zone
 import android.Manifest
 import android.content.Context
@@ -301,63 +302,59 @@ fun SettingsScreen(
             )
         }
 
-        Section("Data") {
+        // Three short sections instead of one long one. What is on the phone,
+        // what LinkedIn left here, and the list itself. The pairs that used to
+        // be "here is the size" followed by "here is the button" are one row
+        // each now: the size is the label and tapping it is the action.
+        Section("Storage") {
             SettingRow(
                 title = "Keep posts",
-                summary = keepLabel(settings.keepPostsDays) +
-                    ". Older posts can still be read by scrolling back.",
+                summary = keepLabel(settings.keepPostsDays),
                 onClick = { dialog = OpenDialog.KEEP }
             )
             SettingRow(
-                title = "Export accounts",
-                summary = "Save the accounts you follow to a file, to keep or to move to another phone.",
-                onClick = { exporter.launch("linkedout-accounts.json") }
-            )
-            SettingRow(
-                title = "Import accounts",
-                summary = "From a LinkedOut export, or a text file of profile addresses, one per line.",
-                onClick = { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
+                title = "Saved posts",
+                summary = storageBytes?.let {
+                    "${Formatter.formatShortFileSize(context, it)}. Tap to delete."
+                } ?: "Measuring",
+                onClick = { dialog = OpenDialog.CLEAR }
             )
             SettingRow(
                 title = "Saved media",
                 summary = savedMedia?.let { (count, bytes) ->
                     if (count == 0) {
-                        "Nothing saved yet. Tap to see the folder."
+                        "Nothing saved yet."
                     } else {
                         "$count files, ${Formatter.formatShortFileSize(context, bytes)}. " +
-                            "Tap to browse and delete."
+                            "Tap to browse."
                     }
                 } ?: "Measuring",
                 onClick = onOpenSavedMedia
             )
-            SettingRow(
-                title = "Saved posts",
-                summary = storageBytes?.let {
-                    "${Formatter.formatShortFileSize(context, it)} on this phone. Readable offline."
-                } ?: "Measuring",
-                onClick = null
-            )
-            SettingRow(
-                title = "Clear saved posts",
-                summary = "Frees space. The accounts you follow are kept.",
-                onClick = { dialog = OpenDialog.CLEAR }
-            )
+        }
+
+        Section("Privacy") {
             SettingRow(
                 title = "Browsing data",
                 summary = if (guestCookies == 0) {
-                    "None held. LinkedIn refuses some pages to a visitor it has never seen."
+                    "No cookies held."
                 } else {
-                    "$guestCookies cookies LinkedIn set for this phone, plus whatever the " +
-                        "browser engine kept while getting past the sign in wall. No account, " +
-                        "no advertising identifiers, never sent anywhere else."
+                    "$guestCookies cookies from LinkedIn. Tap to delete."
                 },
-                onClick = null
+                onClick = { dialog = OpenDialog.COOKIES }
+            )
+        }
+
+        Section("Your list") {
+            SettingRow(
+                title = "Export accounts",
+                summary = "To a file, to keep or to move to another phone.",
+                onClick = { exporter.launch("linkedout-accounts.json") }
             )
             SettingRow(
-                title = "Clear browsing data",
-                summary = "Erases both stores, the app's and the engine's. Start again as a " +
-                    "first time visitor. Some pages may stop loading.",
-                onClick = { dialog = OpenDialog.COOKIES }
+                title = "Import accounts",
+                summary = "An export, or one profile address per line.",
+                onClick = { importer.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
             )
         }
 
@@ -513,6 +510,7 @@ private fun SettingRow(
     trailing: (@Composable () -> Unit)? = null
 ) {
     val alpha = if (enabled) 1f else 0.38f
+    val haptics = rememberHaptics()
     ListItem(
         headlineContent = { Text(title, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha)) },
         supportingContent = summary?.let {
@@ -520,7 +518,16 @@ private fun SettingRow(
         },
         trailingContent = trailing,
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = if (onClick != null) Modifier.clickable(enabled = enabled, onClick = onClick) else Modifier
+        modifier = if (onClick == null) {
+            Modifier
+        } else {
+            // Every row of every section, and the switches with them, since a
+            // switch row is a setting row with a switch drawn on the end.
+            Modifier.clickable(enabled = enabled) {
+                haptics.tick()
+                onClick()
+            }
+        }
     )
 }
 

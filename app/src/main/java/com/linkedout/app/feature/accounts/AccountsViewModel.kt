@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -41,7 +42,8 @@ data class AccountRow(
     val kind: AccountKind,
     val name: String?,
     val avatarUrl: String?,
-    val lastPostMillis: Long?
+    val lastPostMillis: Long?,
+    val folder: String = FollowedAccount.MAIN
 )
 
 /**
@@ -58,6 +60,21 @@ class AccountsViewModel(
 
     private val summaries = MutableStateFlow<Map<String, Summary>>(emptyMap())
 
+    /** Every folder that exists, which is every folder some account names. */
+    val folders: StateFlow<List<String>> = store.accounts
+        .map { list ->
+            (listOf(FollowedAccount.MAIN) + list.map { it.folder })
+                .distinct()
+                .sortedWith(compareBy({ it != FollowedAccount.MAIN }, { it.lowercase() }))
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, listOf(FollowedAccount.MAIN))
+
+    fun setFolder(handle: String, folder: String) = store.setFolder(handle, folder)
+
+    fun deleteFolder(name: String) = store.deleteFolder(name)
+
+    fun renameFolder(from: String, to: String) = store.renameFolder(from, to)
+
     /** Sorted by name, because this list is for finding an account, not for reading. */
     val rows: StateFlow<List<AccountRow>> = combine(store.accounts, summaries) { accounts, known ->
         accounts.map { account ->
@@ -67,7 +84,8 @@ class AccountsViewModel(
                 kind = account.kind,
                 name = summary?.name ?: account.displayName,
                 avatarUrl = summary?.avatarUrl,
-                lastPostMillis = summary?.lastPostMillis
+                lastPostMillis = summary?.lastPostMillis,
+                folder = account.folder
             )
         }.sortedBy { (it.name ?: it.handle).lowercase() }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
