@@ -78,6 +78,13 @@ class TimelineViewModel(
     /** Set from a pull until it runs, so a second pull cannot queue a second pass. */
     private var fullRefreshQueued = false
 
+    /**
+     * True once a pass over every followed account, whatever its folder, has
+     * finished in this run. From then on switching folders is a repaint from
+     * disk and sends nothing. Touched only under [work].
+     */
+    private var everythingFetched = false
+
     init {
         viewModelScope.launch {
             // Paint from disk first so the timeline is readable before any
@@ -99,7 +106,7 @@ class TimelineViewModel(
                     canLoadMore = cached.canLoadMore
                 )
             }
-            refresh()
+            refresh(everything = true)
         }
 
         // Home follows the list live. Before 1.3.1 it read the list once at
@@ -144,7 +151,15 @@ class TimelineViewModel(
         }
     }
 
-    fun refresh() {
+    /**
+     * [everything] reads every followed account, whichever folder Home is
+     * showing. The launch does that, once, so every folder is fresh by the
+     * time the reader moves to it, rather than each switch starting its own
+     * round of requests. A pull reads only the folder on screen: it is what
+     * the reader asked for, and LinkedIn refuses a guest who asks for too many
+     * profiles in a row.
+     */
+    fun refresh(everything: Boolean = false) {
         if (_state.value.loading || fullRefreshQueued) return
         fullRefreshQueued = true
         viewModelScope.launch {
@@ -152,7 +167,7 @@ class TimelineViewModel(
                 fullRefreshQueued = false
                 known = followedKeys()
                 filed = filedIn()
-                fetch(only = null)
+                fetch(only = null, everything = everything)
             }
         }
     }
@@ -193,11 +208,26 @@ class TimelineViewModel(
      * Runs under [work]. [only] limits the network to those handles, and the
      * errors of every other account are kept, since they were not retried.
      */
-    private suspend fun fetch(only: Set<String>?) {
+    private suspend fun fetch(only: Set<String>?, everything: Boolean = false) {
         val before = _state.value
         _state.value = before.copy(loading = true, followedCount = known.size)
+        val asked = folder
 
-        val merged = repository.refresh(only, folder)
+        val network = repository.refresh(only, if (everything) null else asked)
+        if (everything && only == null) everythingFetched = true
+        // What goes on screen is the folder shown now. It differs from what
+        // was fetched after a pass over everything, and after a switch made
+        // while the requests were out, which is allowed so that a switch
+        // never waits for the network.
+        val merged = if (everything || folder != asked) {
+            val inFolder = accounts.accounts.value
+                .filter { folder == null || it.folder == folder }
+                .map { it.handle.lowercase() }
+                .toSet()
+            repository.cached(folder).copy(errors = network.errors.filterKeys { it.lowercase() in inFolder })
+        } else {
+            network
+        }
 
         val errors = if (only == null) {
             merged.errors
@@ -223,28 +253,35 @@ class TimelineViewModel(
     }
 
     /**
-     * Switches Home to another folder. The stream is repainted from the cache
-     * at once and only then refreshed, so the change is instant and the
-     * network work is the folder's own accounts rather than everyone's.
+     * Switches Home to another folder, from disk and at once. The launch has
+     * already read every folder, so there is nothing to ask for. Only when
+     * that pass never finished, the launch having been offline for instance,
+     * does the switch fetch the folder's own accounts.
+     *
+     * The repaint does not wait for [work]. Before 0.6.51 a switch made while
+     * the launch was still reading sat behind it, and the reader watched the
+     * old folder until every request had come back.
      */
     fun showFolder(name: String?) {
         if (folder == name) return
         folder = name
         settings.update { it.copy(homeFolder = name) }
         viewModelScope.launch {
+            val cached = repository.cached(name)
+            if (folder != name) return@launch
+            readPosts.mark(cached.posts.map { it.id })
+            _state.value = _state.value.copy(
+                folder = name,
+                allPosts = cached.posts,
+                lastUpdatedMillis = cached.oldestFetchedAtMillis,
+                canLoadMore = cached.canLoadMore,
+                errors = emptyMap()
+            )
+            if (_state.value.loading) return@launch
             work.withLock {
+                if (everythingFetched || folder != name) return@withLock
                 known = followedKeys()
                 filed = filedIn()
-                val cached = repository.cached(folder)
-                readPosts.mark(cached.posts.map { it.id })
-                _state.value = _state.value.copy(
-                    folder = folder,
-                    allPosts = cached.posts,
-                    followedCount = known.size,
-                    lastUpdatedMillis = cached.oldestFetchedAtMillis,
-                    canLoadMore = cached.canLoadMore,
-                    errors = emptyMap()
-                )
                 fetch(only = null)
             }
         }
