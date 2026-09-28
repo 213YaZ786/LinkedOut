@@ -35,13 +35,20 @@ jobs:
 
       # This repository has gradle/wrapper/gradle-wrapper.properties but no
       # gradlew script and no gradle-wrapper.jar, so there is no wrapper to
-      # validate and nothing to run. Gradle is installed instead, pinned to
-      # the same 9.7.1 the properties file names. AGP 9.4 refuses anything
-      # below 9.6.0, so the two have to move together.
+      # validate and nothing to run. Gradle is installed instead, at the
+      # version the properties file names. Read from there, never written
+      # here: Dependabot bumps the wrapper together with AGP, and a version
+      # pinned in this file stayed behind and failed its pull requests.
+      - name: Read the Gradle version
+        run: |
+          GRADLE_VERSION="$(grep -oP 'gradle-\K[0-9.]+(?=-bin\.zip)' gradle/wrapper/gradle-wrapper.properties)"
+          echo "Gradle $GRADLE_VERSION"
+          echo "GRADLE_VERSION=$GRADLE_VERSION" >> "$GITHUB_ENV"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: 9.7.1
+          gradle-version: ${{ env.GRADLE_VERSION }}
 
       - name: Read the version
         run: |
@@ -116,7 +123,12 @@ jobs:
       - name: Name the files and note their fingerprints
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk "release/LinkedOut-$VERSION.apk"
+          # Without the signing secrets, as on a pull request from Dependabot,
+          # the release build is left unsigned under another name. It is
+          # still named, hashed and checked, only never published.
+          RELEASE=app/build/outputs/apk/release/app-release.apk
+          [ -f "$RELEASE" ] || RELEASE=app/build/outputs/apk/release/app-release-unsigned.apk
+          cp "$RELEASE" "release/LinkedOut-$VERSION.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "release/LinkedOut-$VERSION-debug.apk"
           ( cd release && sha256sum ./*.apk > SHA256SUMS.txt )
           cat release/SHA256SUMS.txt
