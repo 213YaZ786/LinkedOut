@@ -231,7 +231,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
             }
             composable(Routes.SEARCH) {
                 DismissableScreen(onBack = { navController.back() }) {
-                Readable {
+                ReadableScroll {
                     SearchScreen(
                         onBack = { navController.back() },
                         onOpenPost = { post -> navController.open(Routes.post(post.id, post.cacheOwner())) }
@@ -241,21 +241,21 @@ private fun LinkedOutNavHost(navController: NavHostController) {
             }
             composable(Routes.DEBUG_LOG) {
                 DismissableScreen(onBack = { navController.back() }) {
-                Readable {
+                ReadableScroll {
                     DebugLogScreen(onBack = { navController.back() })
                 }
                 }
             }
             composable(Routes.SAVED_MEDIA) {
                 DismissableScreen(onBack = { navController.back() }) {
-                Readable {
+                ReadableScroll {
                     SavedMediaScreen(onBack = { navController.back() })
                 }
                 }
             }
             composable(Routes.FOLDERS) {
                 DismissableScreen(onBack = { navController.back() }) {
-                Readable {
+                ReadableScroll {
                     FoldersScreen(onBack = { navController.back() })
                 }
                 }
@@ -271,7 +271,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                 )
             ) { entry ->
                 DismissableScreen(onBack = { navController.back() }) {
-                Readable {
+                ReadableScroll {
                     FeedScreen(
                         handle = entry.arguments?.getString("handle").orEmpty(),
                         kind = runCatching {
@@ -297,7 +297,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                 )
             ) { entry ->
                 DismissableScreen(onBack = { navController.back() }) {
-                Readable {
+                ReadableScroll {
                     PostDetailScreen(
                         id = entry.arguments?.getString("id").orEmpty(),
                         from = entry.arguments?.getString("from"),
@@ -425,7 +425,7 @@ private fun MainTabs(
                 // sight. The pager keeps the others alive next to it.
                 val inSight = pager.settledPage == page && !showWelcome && settled
                 CompositionLocalProvider(LocalInlinePlaybackAllowed provides inSight) {
-                Readable {
+                ReadableScroll {
                     when (tabs[page]) {
                         TopDestination.TIMELINE -> TimelineScreen(
                             onOpenAccounts = { go(TopDestination.ACCOUNTS.ordinal) },

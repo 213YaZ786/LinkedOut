@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.post
 
+import androidx.compose.foundation.layout.PaddingValues
+import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.PostCard
 import com.linkedout.app.core.common.present
 import com.linkedout.app.core.common.AppError
@@ -109,6 +111,8 @@ fun PostDetailScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                // Over the reading column, like the content under it.
+                modifier = Modifier.padding(horizontal = LocalReadableInset.current),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Post") },
                 navigationIcon = {
@@ -199,7 +203,10 @@ private fun ConversationView(
         )
     }
 
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = LocalReadableInset.current)
+    ) {
         val ancestors = conversation?.ancestors.orEmpty()
         if (ancestors.isNotEmpty()) {
             item(key = "earlier") { SectionLabel("Earlier in the conversation") }

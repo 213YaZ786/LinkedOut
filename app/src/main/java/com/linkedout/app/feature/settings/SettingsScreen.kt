@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.settings
 
+import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.ScreenBanner
 import com.linkedout.app.ui.component.rememberHaptics
@@ -178,8 +179,13 @@ fun SettingsScreen(
         }
     }
 
+    // Scrolls at full width, rows pushed in by the readable inset, so the
+    // margins of a tablet scroll like the rest. See ReadableScroll.
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = LocalReadableInset.current)
     ) {
         ScreenBanner(title = "Settings")
 

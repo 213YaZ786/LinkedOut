@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.accounts
 
+import androidx.compose.foundation.layout.Box
+import com.linkedout.app.navigation.LocalReadableInset
 import android.content.ClipboardManager
 import com.linkedout.app.core.link.PastedText
 import com.linkedout.app.core.model.AccountKind
@@ -154,6 +156,7 @@ fun AccountsScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
+        Box(Modifier.padding(horizontal = LocalReadableInset.current)) {
         ScreenBanner(
             title = "Accounts",
             subtitle = if (rows.isEmpty()) null else "${rows.size} followed",
@@ -165,6 +168,7 @@ fun AccountsScreen(
                 )
             }
         )
+        }
 
         TextField(
             value = query,
@@ -206,7 +210,7 @@ fun AccountsScreen(
                     else -> focus.clearFocus()
                 }
             }),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + LocalReadableInset.current)
         )
 
         // Said under the field and not only in the empty screen, because the
@@ -219,13 +223,18 @@ fun AccountsScreen(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp + LocalReadableInset.current, vertical = 8.dp)
             )
         }
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 16.dp + LocalDockPadding.current),
+            contentPadding = PaddingValues(
+                start = 16.dp + LocalReadableInset.current,
+                top = 16.dp,
+                end = 16.dp + LocalReadableInset.current,
+                bottom = 16.dp + LocalDockPadding.current
+            ),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             notice?.let { message ->

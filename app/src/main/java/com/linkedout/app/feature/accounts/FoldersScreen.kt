@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -127,7 +128,11 @@ fun FoldersScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(
+            start = LocalReadableInset.current,
+            end = LocalReadableInset.current,
+            bottom = 24.dp
+        )
     ) {
         item(key = "banner") {
             ScreenBanner(

@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.debug
 
+import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -68,6 +69,8 @@ fun DebugLogScreen(onBack: () -> Unit) {
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
+                // Over the reading column, like the content under it.
+                modifier = Modifier.padding(horizontal = LocalReadableInset.current),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Activity log") },
                 navigationIcon = {
@@ -125,7 +128,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                     "Last page received: ${body.url}, ${body.text.length} characters.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp + LocalReadableInset.current, vertical = 4.dp)
                 )
             }
 
@@ -135,11 +138,16 @@ fun DebugLogScreen(onBack: () -> Unit) {
                         "come back here.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(24.dp)
+                    modifier = Modifier.padding(horizontal = 24.dp + LocalReadableInset.current, vertical = 24.dp)
                 )
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(12.dp),
+                    contentPadding = PaddingValues(
+                        start = 12.dp + LocalReadableInset.current,
+                        end = 12.dp + LocalReadableInset.current,
+                        top = 12.dp,
+                        bottom = 12.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(entries.reversed()) { entry ->

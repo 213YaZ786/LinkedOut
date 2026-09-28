@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.timeline
 
+import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
 import com.linkedout.app.ui.component.FolderDialog
 import com.linkedout.app.ui.component.LocalDockPadding
@@ -206,7 +207,7 @@ fun TimelineScreen(
     }
 
     when {
-        state.followedCount == 0 -> Column(Modifier.fillMaxSize()) {
+        state.followedCount == 0 -> Column(Modifier.fillMaxSize().padding(horizontal = LocalReadableInset.current)) {
             banner()
             // The weight gives it the rest of the screen, so it sits in the
             // middle of what is left under the banner rather than against it.
@@ -231,7 +232,10 @@ fun TimelineScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             // A list, because the pull gesture needs something scrollable.
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = LocalReadableInset.current)
+            ) {
                 item(key = "banner") { banner() }
                 item(key = "nothing") {
                     EmptyState(
@@ -274,7 +278,13 @@ fun TimelineScreen(
             CompositionLocalProvider(LocalInlinePlaying provides inline) {
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(bottom = LocalDockPadding.current),
+                    // Full width with the rows pushed in, so the margins of a
+                    // tablet scroll too. See ReadableScroll.
+                    contentPadding = PaddingValues(
+                        start = LocalReadableInset.current,
+                        end = LocalReadableInset.current,
+                        bottom = LocalDockPadding.current
+                    ),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     item(key = "banner") { banner() }
@@ -309,7 +319,8 @@ fun TimelineScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(
-                        end = 16.dp,
+                        // At the edge of the reading column, not of the window.
+                        end = 16.dp + LocalReadableInset.current,
                         bottom = LocalDockPadding.current.coerceAtLeast(16.dp)
                     )
             ) {

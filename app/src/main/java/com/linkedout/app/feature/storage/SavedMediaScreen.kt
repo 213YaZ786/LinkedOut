@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.storage
 
+import com.linkedout.app.navigation.LocalReadableInset
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -84,7 +85,11 @@ fun SavedMediaScreen(onBack: () -> Unit) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(
+            start = LocalReadableInset.current,
+            end = LocalReadableInset.current,
+            bottom = 24.dp
+        )
     ) {
         item(key = "banner") {
             ScreenBanner(

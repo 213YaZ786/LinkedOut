@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.search
 
+import androidx.compose.foundation.layout.PaddingValues
+import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -80,6 +82,8 @@ fun SearchScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                // Over the reading column, like the content under it.
+                modifier = Modifier.padding(horizontal = LocalReadableInset.current),
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -126,7 +130,10 @@ fun SearchScreen(
             else -> null
         }
 
-        LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(horizontal = LocalReadableInset.current)
+        ) {
             if (hint != null) {
                 item(key = "hint") {
                     Text(

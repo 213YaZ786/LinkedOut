@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.feed
 
+import androidx.compose.foundation.layout.PaddingValues
+import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.aspectRatio
@@ -135,7 +137,8 @@ fun FeedScreen(
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = LocalReadableInset.current)
             ) {
                 item(key = "banner") {
                     ScreenBanner(
@@ -250,7 +253,7 @@ fun FeedScreen(
                 onClick = { scope.launch { listState.animateScrollToItem(0) } },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp)
+                    .padding(end = 16.dp + LocalReadableInset.current, bottom = 16.dp)
             )
         }
     }
