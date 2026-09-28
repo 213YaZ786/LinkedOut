@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.ui.component.EmptyZone
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.layout.Box
@@ -269,7 +270,7 @@ fun AccountsScreen(
             }
 
             if (rows.isEmpty() && trimmed.isEmpty()) {
-                item(key = "empty") { EmptyState() }
+                item(key = "empty") { EmptyState(Modifier.fillParentMaxHeight(0.7f)) }
             }
         }
     }
@@ -390,27 +391,14 @@ private fun Hint(text: String) {
 }
 
 @Composable
-private fun EmptyState() {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 64.dp, start = 24.dp, end = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Icon(
-            LinkedOutIcons.Person,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(48.dp)
-        )
-        Text("No accounts yet", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "LinkedIn has no @handle. Open a profile or a company page in a browser and " +
-                "paste its address above, or type just the part after /in/. Reading it once " +
-                "is enough to follow it and build your timeline. Who you follow stays on this " +
-                "phone and is never sent anywhere but to linkedin.com itself.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-    }
+private fun EmptyState(modifier: Modifier = Modifier) {
+    EmptyZone(
+        title = "No accounts yet",
+        message = "LinkedIn has no @handle. Open a profile or a company page in a browser and " +
+            "paste its address above, or type just the part after /in/. Reading it once " +
+            "is enough to follow it and build your timeline. Who you follow stays on this " +
+            "phone and is never sent anywhere but to linkedin.com itself.",
+        icon = LinkedOutIcons.Person,
+        modifier = modifier
+    )
 }

@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.timeline
 
+import com.linkedout.app.ui.component.EmptyZone
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
@@ -243,7 +244,8 @@ fun TimelineScreen(
                         title = "Nothing could be loaded",
                         message = "None of the profiles you follow could be read just now. " +
                             "Pull down to try again.",
-                        modifier = Modifier.fillMaxWidth().padding(top = 48.dp)
+                        // Centred in what is left under the banner.
+                        modifier = Modifier.fillParentMaxHeight(0.7f)
                     )
                 }
             }
@@ -469,21 +471,13 @@ private fun EmptyState(
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null
 ) {
-    Column(
-        modifier = modifier.fillMaxWidth().padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(title, style = MaterialTheme.typography.headlineSmall)
-        Text(
-            message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
-        )
-        if (actionLabel != null && onAction != null) {
-            BoldButton(onClick = onAction) { Text(actionLabel) }
-        }
-    }
+    // A zone centred in the space, like every empty screen, so an empty
+    // Home still carries the wallpaper's colour.
+    EmptyZone(
+        title = title,
+        message = message,
+        actionLabel = actionLabel,
+        onAction = onAction,
+        modifier = modifier
+    )
 }

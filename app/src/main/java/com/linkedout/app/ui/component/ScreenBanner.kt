@@ -1,5 +1,6 @@
 package com.linkedout.app.ui.component
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -17,9 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.linkedout.app.ui.theme.zone
 
 /**
  * The zone a screen opens with: its name in the middle, one round action on
@@ -27,16 +31,15 @@ import androidx.compose.ui.unit.dp
  *
  * It is an item of the list, not a bar over it. It leaves when the reader
  * scrolls down and comes back only once they are back at the top. A bar that
- * reappears on the first upward flick steals the line being read, which is
- * why the enter-always behaviour this replaced was wrong.
+ * reappears on the first upward flick steals the line being read.
  *
  * Both sides reserve the same width whether or not they hold anything, so the
  * title is centred on the screen and not on what is left of the row.
  *
- * The title is a label and nothing else. Home's folder switch lived here for
- * one version and nobody found it: a title that can be tapped still looks
- * like a title. It is a floating button at the bottom right now, where the
- * thumb is and where a control is expected.
+ * The title is a label and nothing else: a title that can be tapped still
+ * looks like a title, and a control hidden in it is never found.
+ *
+ * Shared across the apps of this base: edit Modules/shared, then run sync.sh.
  */
 @Composable
 fun ScreenBanner(
@@ -46,10 +49,12 @@ fun ScreenBanner(
     leading: @Composable (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null
 ) {
-    Zone(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = ZoneGap)
+            .padding(horizontal = 12.dp, vertical = BannerGap),
+        shape = BannerShape,
+        color = MaterialTheme.colorScheme.zone
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
@@ -88,9 +93,6 @@ fun ScreenBanner(
     }
 }
 
-/** Both slots of the banner, so an empty one still holds the title centred. */
-private val BannerActionSize = 44.dp
-
 /** A round action in a banner slot. Filled, because a bare icon reads as decoration. */
 @Composable
 fun BannerAction(
@@ -100,10 +102,12 @@ fun BannerAction(
     container: Color = MaterialTheme.colorScheme.secondaryContainer,
     tint: Color = MaterialTheme.colorScheme.onSecondaryContainer
 ) {
-    val haptics = rememberHaptics()
+    // Through the view: the constant has existed far longer than the
+    // minimum version, and the system setting still decides.
+    val view = LocalView.current
     Surface(
         onClick = {
-            haptics.tick()
+            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             onClick()
         },
         shape = CircleShape,
@@ -116,3 +120,12 @@ fun BannerAction(
         }
     }
 }
+
+/** The corner of every standalone zone in these apps. */
+private val BannerShape = RoundedCornerShape(24.dp)
+
+/** Space the banner leaves around itself, so it never touches what follows. */
+private val BannerGap = 6.dp
+
+/** Both slots of the banner, so an empty one still holds the title centred. */
+private val BannerActionSize = 44.dp
