@@ -245,10 +245,10 @@ class LinkedInSource(
      * A referrer to arrive from, and the name that goes in the log when it is
      * the one that worked. Ordered by how well each is known to do.
      */
-    private enum class Arrival(val label: String, val referer: String?) {
-        SEARCH("from a search engine", LinkedInHost.REFERER),
-        LINKEDIN("from linkedin itself", LinkedInHost.BASE + "/"),
-        DIRECT("with no referrer", null)
+    private enum class Arrival(val label: String, val referer: String?, val fetchSite: String) {
+        SEARCH("from a search engine", LinkedInHost.REFERER, "cross-site"),
+        LINKEDIN("from linkedin itself", LinkedInHost.BASE + "/", "same-origin"),
+        DIRECT("with no referrer", null, "none")
     }
 
     /**
@@ -286,9 +286,30 @@ class LinkedInSource(
                     wall = attempt
                     break
                 }
-                attempt is Attempt.Failed && attempt.denial -> {
+                attempt is Attempt.Failed && attempt.denial && arrival == Arrival.SEARCH -> {
+                    // The second click. A browser refused on its first visit
+                    // to a profile is served when it comes back from the
+                    // results, because the refusal itself set the cookies
+                    // (__cf_bm, bscookie, trkInfo on top of the home page's)
+                    // that the second request carries. Measured on
+                    // 2026-09-28: first ask 999, same ask with those cookies
+                    // 200, same cookies with no referrer 999 again.
+                    val again = request(url, kind, arrival) ?: return Attempt.Failed(
+                        AppError.RateLimited(
+                            LinkedInHost.HOST,
+                            throttle.cooldownRemainingMs(LinkedInHost.HOST) / 1000
+                        )
+                    )
+                    if (again is Attempt.Body) {
+                        log.keepBody(url, again.text)
+                        return again
+                    }
                     // A denial repeated on another rung has never answered
                     // differently. Stop walking and spend the browser instead.
+                    denied = again as? Attempt.Failed ?: attempt
+                    break
+                }
+                attempt is Attempt.Failed && attempt.denial -> {
                     denied = attempt
                     break
                 }
@@ -584,14 +605,31 @@ class LinkedInSource(
      * A desktop browser, and an arrival. Both matter. LinkedIn serves a
      * stripped page with no activity at all to anything it reads as a phone,
      * and the wall to a visitor it cannot see arriving from anywhere.
+     *
+     * The Sec-Fetch and client hint headers are what make the arrival
+     * believable. Chrome sends them on every navigation, and a Referer from
+     * a search engine next to no Sec-Fetch-Site: cross-site is a pair no
+     * browser produces. Measured on 2026-09-28 with the same warm up and the
+     * same cookies: the 0.6.48 header set got 999 on a profile, this one 200.
      */
     private fun headers(arrival: Arrival): Map<String, String> = buildMap {
         put("User-Agent", LinkedInHost.USER_AGENT)
         put("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
         put("Accept-Language", "en-US,en;q=0.9")
         put("Upgrade-Insecure-Requests", "1")
+        put("Sec-Fetch-Dest", "document")
+        put("Sec-Fetch-Mode", "navigate")
+        put("Sec-Fetch-User", "?1")
+        put("Sec-Fetch-Site", arrival.fetchSite)
+        put("Sec-CH-UA", secChUa)
+        put("Sec-CH-UA-Mobile", if (LinkedInHost.CLIENT_HINTS.mobile) "?1" else "?0")
+        put("Sec-CH-UA-Platform", "\"${LinkedInHost.CLIENT_HINTS.platform}\"")
         arrival.referer?.let { put("Referer", it) }
     }
+
+    /** The low entropy brand list Chrome sends unasked, from the same hints as the string. */
+    private val secChUa: String = LinkedInHost.CLIENT_HINTS.brands
+        .joinToString(", ") { "\"${it.name}\";v=\"${it.majorVersion}\"" }
 
     /**
      * Classifies a body the parser refused. A wall that survived every rung, a
