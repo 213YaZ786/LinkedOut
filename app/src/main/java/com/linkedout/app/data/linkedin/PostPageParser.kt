@@ -9,6 +9,7 @@ import com.linkedout.app.core.model.PostId
 import com.linkedout.app.core.model.PostKind
 import com.linkedout.app.core.model.PostStats
 import com.linkedout.app.core.model.QuotedPost
+import com.linkedout.app.core.model.SharedDocument
 import com.linkedout.app.data.linkedin.Markup.attributeAfter
 import com.linkedout.app.data.linkedin.Markup.jsonLdBlocks
 import com.linkedout.app.data.linkedin.Markup.objectsOfType
@@ -16,6 +17,10 @@ import com.linkedout.app.data.linkedin.Markup.ownKey
 import com.linkedout.app.data.linkedin.Markup.ownNumber
 import com.linkedout.app.data.linkedin.Markup.ownString
 import com.linkedout.app.data.linkedin.Markup.textAfter
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Parses a LinkedIn guest post page into a [Conversation].
@@ -130,7 +135,8 @@ class PostPageParser {
             kind = if (RESHARE in card) PostKind.REPOST else PostKind.ORIGINAL,
             media = graph.mediaFromGraph(post).ifEmpty { card.mediaFromCard() },
             quoted = card.parseReshare(),
-            stats = graph.statsFromGraph(post) ?: card.statsFromCard()
+            stats = graph.statsFromGraph(post) ?: card.statsFromCard(),
+            document = card.document()
         )
     }
 
@@ -277,7 +283,8 @@ class PostPageParser {
 
     /** The rendered images, for a post whose graph said nothing about them. */
     private fun String.mediaFromCard(): List<MediaItem> {
-        document()?.let { return listOf(it) }
+        // A document's cover is drawn by its own block, see [document].
+        if (DOCUMENT in this) return emptyList()
         val at = indexOf(MEDIA_LIST).takeIf { it >= 0 } ?: return emptyList()
         val list = substring(at, indexOf("</ul>", at).takeIf { it > at } ?: length)
         return IMAGE.findAll(list)
@@ -290,15 +297,31 @@ class PostPageParser {
 
     /**
      * A shared PDF or slide deck. LinkedIn renders it as an iframe whose
-     * config attribute is a JSON blob with the cover pages in it, so the first
-     * cover stands in as the preview rather than showing nothing at all.
+     * config attribute is a JSON blob: title, page count, cover pages, and
+     * the manifest that leads to the file. 0.6.49 kept only the cover and
+     * showed it as a picture, so the document itself could not be reached.
      */
-    private fun String.document(): MediaItem? {
+    private fun String.document(): SharedDocument? {
         val at = indexOf(DOCUMENT).takeIf { it >= 0 } ?: return null
-        val config = Markup.decodeEntities(substring(at, minOf(at + 6000, length)))
-        val cover = COVER.find(config)?.groupValues?.get(1) ?: return null
-        return MediaItem(previewUrl = cover, downloadUrl = cover, type = MediaType.PHOTO)
+        val open = indexOf('"', at + DOCUMENT.length).takeIf { it >= 0 } ?: return null
+        val close = indexOf('"', open + 1).takeIf { it > open } ?: return null
+        // Entities only, the attribute cannot hold a raw quote.
+        val config = runCatching {
+            Json.parseToJsonElement(Markup.decodeEntities(substring(open + 1, close))) as? JsonObject
+        }.getOrNull()?.let { (it["doc"] as? JsonObject) ?: it } ?: return null
+        val manifest = config.text("manifestUrl") ?: config.text("url") ?: return null
+        val cover = (config["coverPages"] as? JsonArray)?.firstOrNull()
+            ?.let { ((it as? JsonObject)?.get("config") as? JsonObject)?.text("src") }
+        return SharedDocument(
+            title = config.text("title")?.trim()?.takeIf { it.isNotEmpty() } ?: "Document",
+            pageCount = (config["totalPageCount"] as? JsonPrimitive)?.content?.toIntOrNull(),
+            coverUrl = cover,
+            manifestUrl = manifest
+        )
     }
+
+    private fun JsonObject.text(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
 
     // ---- reshare -----------------------------------------------------------
 
@@ -456,5 +479,4 @@ class PostPageParser {
     private val AGE = Regex("""\b\d+\s*(?:mo|[smhdwy])\b""")
     private val REACTIONS = Regex("""[\d,]+""")
     private val IMAGE = Regex("""data-delayed-url="([^"]+)"""")
-    private val COVER = Regex(""""src"\s*:\s*"([^"]+)"""")
 }

@@ -58,6 +58,7 @@ import com.linkedout.app.core.model.PostStats
 import com.linkedout.app.feature.media.MediaViewer
 import com.linkedout.app.ui.component.Avatar
 import com.linkedout.app.ui.component.ContextLine
+import com.linkedout.app.ui.component.DocumentBlock
 import com.linkedout.app.ui.component.LinkCardBlock
 import com.linkedout.app.ui.component.NoteBlock
 import com.linkedout.app.ui.component.PollBlock
@@ -384,6 +385,8 @@ private fun PostBody(
                     onOpen = onOpenMedia
                 )
             }
+
+            post.document?.let { DocumentBlock(it, post.authorHandle) }
 
             // Nitter's order: poll, link card, quote, then the note.
             post.poll?.let { PollBlock(it) }

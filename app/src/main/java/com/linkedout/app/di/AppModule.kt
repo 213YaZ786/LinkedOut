@@ -6,6 +6,7 @@ import com.linkedout.app.core.link.LinkRouter
 import com.linkedout.app.core.media.MediaDownloader
 import com.linkedout.app.core.media.MediaPrefetch
 import com.linkedout.app.core.media.OfflineMedia
+import com.linkedout.app.core.media.SharedDocuments
 import com.linkedout.app.core.network.ConnectivityMonitor
 import com.linkedout.app.core.network.HostThrottle
 import com.linkedout.app.core.network.HttpClientFactory
@@ -74,6 +75,7 @@ val appModule = module {
         MediaDownloader(androidContext(), get(named("appScope"))) { id -> videos.sourceFor(id) }
     }
     single { OfflineMedia(androidContext()) }
+    single { SharedDocuments(androidContext(), get(), get(named("appScope")), get()) }
     single { MediaPrefetch(androidContext(), get(), get(), get(), get(), get(named("appScope"))) }
     single { AccountStore(androidContext()) }
     single { ReadPosts(androidContext(), get(named("appScope"))) }

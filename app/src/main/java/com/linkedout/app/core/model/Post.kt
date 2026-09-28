@@ -28,7 +28,9 @@ data class Post(
     val card: LinkCard? = null,
     val poll: Poll? = null,
     val note: CommunityNote? = null,
-    val stats: PostStats? = null
+    val stats: PostStats? = null,
+    /** A shared PDF or slide deck. Its pages are not media, see [SharedDocument]. */
+    val document: SharedDocument? = null
 ) {
     /**
      * The same post seen again, possibly from a richer source. x.com gives the
@@ -51,7 +53,8 @@ data class Post(
             card = fresh.card ?: card,
             poll = fresh.poll ?: poll,
             note = fresh.note ?: note,
-            stats = stats?.let { old -> fresh.stats?.let(old::mergedWith) ?: old } ?: fresh.stats
+            stats = stats?.let { old -> fresh.stats?.let(old::mergedWith) ?: old } ?: fresh.stats,
+            document = fresh.document ?: document
         )
         return if (merged == this) this else merged
     }
@@ -64,6 +67,23 @@ data class Post(
  * "Replying to" about someone who had not written a word.
  */
 enum class PostKind { ORIGINAL, REPOST, REPLY, QUOTE, REACTION }
+
+/**
+ * A PDF or slide deck attached to a post.
+ *
+ * Only the manifest address is kept, never the file's own. The page names the
+ * manifest with no expiry, and the manifest names the PDF with a signature
+ * that runs out after about ten days, so a cached PDF address would go dead
+ * while the manifest still answers. The file is looked up at the moment it is
+ * asked for, see [com.linkedout.app.core.media.SharedDocuments].
+ */
+@Serializable
+data class SharedDocument(
+    val title: String,
+    val pageCount: Int? = null,
+    val coverUrl: String? = null,
+    val manifestUrl: String
+)
 
 @Serializable
 enum class MediaType { PHOTO, VIDEO, GIF }

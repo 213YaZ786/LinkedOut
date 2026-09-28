@@ -45,6 +45,8 @@ import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.model.Poll
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.core.model.PostKind
+import com.linkedout.app.core.model.SharedDocument
+import com.linkedout.app.core.media.SharedDocuments
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.compose.koinInject
 import java.util.concurrent.TimeUnit
@@ -105,6 +107,8 @@ fun PostCard(
                     if (post.media.isNotEmpty()) {
                         MediaBlock(post = post, onDownload = onDownload, onOpen = onOpenMedia)
                     }
+
+                    post.document?.let { DocumentBlock(it, post.authorHandle) }
 
                     // Nitter's order: poll, link card, quote, then the note.
                     post.poll?.let { PollBlock(it) }
@@ -478,6 +482,79 @@ internal fun LinkCardBlock(card: LinkCard, onClick: () -> Unit) {
             }
         }
     }
+}
+
+/**
+ * A shared PDF or slide deck: its cover, its title and its length. A tap
+ * opens the file in whatever reads PDFs on the phone, the button beside it
+ * saves it to Downloads. Both look the file up at that moment, since its
+ * address expires and the manifest that leads to it does not.
+ */
+@Composable
+internal fun DocumentBlock(document: SharedDocument, authorHandle: String) {
+    val documents: SharedDocuments = koinInject()
+    val haptics = rememberHaptics()
+    val hold = rememberMediaPolicy().hold
+    var revealed by remember(document.coverUrl) { mutableStateOf(false) }
+    val cover = document.coverUrl
+
+    Zone(
+        onClick = {
+            haptics.tick()
+            documents.open(document)
+        },
+        shape = InnerZoneShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(width = 72.dp, height = 96.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            ) {
+                when {
+                    cover == null -> Unit
+                    hold && !revealed ->
+                        HeldCardImage(Modifier.matchParentSize().clickable { revealed = true }, short = true)
+                    else -> AsyncImage(
+                        model = cover,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                }
+            }
+            Column(
+                Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    document.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    documentLength(document.pageCount),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = {
+                haptics.done()
+                documents.save(document, authorHandle)
+            }) {
+                Icon(LinkedOutIcons.Download, contentDescription = "Save the document")
+            }
+        }
+    }
+}
+
+private fun documentLength(pages: Int?): String = when (pages) {
+    null -> "PDF"
+    1 -> "PDF · 1 page"
+    else -> "PDF · $pages pages"
 }
 
 @Composable
