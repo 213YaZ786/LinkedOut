@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.settings
 
+import com.linkedout.app.core.system.BatteryExemption
 import com.linkedout.app.ui.theme.zone
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.LocalDockPadding
@@ -278,7 +279,12 @@ fun SettingsScreen(
                 title = "Check for new posts",
                 summary = "Keeps Home up to date and saves new posts, even when the app is closed.",
                 checked = settings.backgroundSync,
-                onChange = viewModel::setBackgroundSync
+                onChange = { enabled ->
+                    viewModel.setBackgroundSync(enabled)
+                    // Asked here and nowhere else: the reader just asked for
+                    // work that runs with the app closed. See BatteryExemption.
+                    if (enabled) BatteryExemption.request(context)
+                }
             )
             SettingRow(
                 title = "Frequency",

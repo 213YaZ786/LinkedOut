@@ -34,8 +34,10 @@ those, since the name alone cannot say which kind of page it is.
 ## Privacy
 
 - No account, no sign in, no ads, no analytics, no crash reporting.
-- Three permissions: internet access, network status, and notifications, the
-  last one asked only if you turn notifications on.
+- Few permissions: internet access, network status, notifications (asked only
+  if you turn on new post alerts or automatic downloads), one that lets a batch
+  of downloads show a single progress line, and one that asks Android, when you
+  turn on background checks, to leave LinkedOut out of battery optimisation.
 - One outbound host, `www.linkedin.com`, over https only. **Settings >
   Connection check** names it.
 - Who you follow and the posts you saved never leave the phone.

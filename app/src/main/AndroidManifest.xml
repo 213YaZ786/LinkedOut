@@ -9,6 +9,12 @@
     -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!--
+        Install time, asks nothing by itself. Lets the app show Android's own
+        dialog to be left out of battery optimisation, only when the reader
+        turns background checks on. See BatteryExemption.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!--
         Required to hand DownloadManager a request with its own notification
         turned off. Without it every enqueue throws a SecurityException, which
         is what silently refused every automatic media download in 0.6.30.
