@@ -5,6 +5,7 @@ import com.linkedout.app.core.debug.RequestLog
 import com.linkedout.app.core.link.LinkRouter
 import com.linkedout.app.core.media.MediaDownloader
 import com.linkedout.app.core.media.MediaPrefetch
+import com.linkedout.app.core.media.MediaSavingNotice
 import com.linkedout.app.core.media.OfflineMedia
 import com.linkedout.app.core.media.SharedDocuments
 import com.linkedout.app.core.network.ConnectivityMonitor
@@ -76,7 +77,8 @@ val appModule = module {
     }
     single { OfflineMedia(androidContext()) }
     single { SharedDocuments(androidContext(), get(), get(named("appScope")), get()) }
-    single { MediaPrefetch(androidContext(), get(), get(), get(), get(), get(named("appScope"))) }
+    single { MediaSavingNotice(androidContext(), get(named("appScope"))) }
+    single { MediaPrefetch(androidContext(), get(), get(), get(), get(), get(named("appScope")), get()) }
     single { AccountStore(androidContext()) }
     single { ReadPosts(androidContext(), get(named("appScope"))) }
     single { SettingsStore(androidContext()) }
