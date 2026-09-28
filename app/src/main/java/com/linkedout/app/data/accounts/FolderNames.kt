@@ -7,7 +7,7 @@ import com.linkedout.app.core.model.FollowedAccount
  *
  * One rule matters above the others: two names that differ only in case are
  * one folder, and every account in it carries the exact spelling the list
- * shows. 0.6.51 deduplicated the list ignoring case but filed the
+ * shows. An earlier version deduplicated the list ignoring case but filed the
  * account under whatever was typed, so filing into "news" beside an existing
  * "News" left the account in a folder Home could not find, and the account
  * vanished from every folder but the full stream. [resolve] is what prevents

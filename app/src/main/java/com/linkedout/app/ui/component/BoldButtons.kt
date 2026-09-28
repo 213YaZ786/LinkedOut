@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
  * not as more text. Dialog buttons and the icons of a top bar keep Material's
  * plain style, where an edge on everything would leave nothing louder.
  *
- * Shared with MTGA, keep the two copies identical apart from the package.
+ * Shared across the apps of this base: edit Modules/shared, then run sync.sh.
  */
 val BoldEdge: Dp = 2.dp
 

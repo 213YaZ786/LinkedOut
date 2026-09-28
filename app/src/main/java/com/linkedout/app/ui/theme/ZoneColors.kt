@@ -20,7 +20,7 @@ import androidx.compose.ui.graphics.luminance
  * Text stays on onSurface: the mix sits between two tones Material already
  * pairs with it, so the contrast of every label is kept.
  *
- * Shared with MTGA, keep the two copies identical apart from the package.
+ * Shared across the apps of this base: edit Modules/shared, then run sync.sh.
  */
 val ColorScheme.zone: Color
     get() = lerp(surfaceContainerLow, primaryContainer, if (isDark) 0.22f else 0.30f)

@@ -16,16 +16,16 @@ import kotlinx.coroutines.launch
  * One notification for every automatic save in progress, instead of one per
  * file.
  *
- * The files themselves are hidden from the shade (see [MediaPrefetch]),
- * since twenty pictures would be twenty lines. This
+ * The files themselves are hidden from the shade by whoever enqueues them
+ * (VISIBILITY_HIDDEN, which needs DOWNLOAD_WITHOUT_NOTIFICATION in the
+ * manifest), since twenty pictures would be twenty lines. This
  * line says how many are left, so nobody has to guess whether it is safe to
  * leave the app, then what was saved and what failed.
  *
- * Batches are pooled. Up to 0.6.52 each batch was followed inside
- * MediaPrefetch while it held its lock, for up to ten minutes, so the next
- * batch was not even handed to DownloadManager until the previous one had
- * landed. Here [track] only adds ids, and a single watcher reports on all of
- * them. The same class runs in MTGA.
+ * Batches are pooled. Following each batch on its own let two close
+ * refreshes write over each other's counts, and following it under a lock
+ * held the next batch back for up to ten minutes. Here [track] only adds ids,
+ * and a single watcher reports on all of them.
  *
  * Polling rather than a broadcast receiver: a receiver would have to be
  * declared in the manifest and be woken with the app closed, which

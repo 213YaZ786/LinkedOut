@@ -1,12 +1,12 @@
 package com.linkedout.app.navigation
 
-import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -60,8 +60,7 @@ val LocalReadableInset = staticCompositionLocalOf { 0.dp }
  * Same readable column as [Readable], except the screen still owns the whole
  * width.
  *
- * A list narrowed to 720 dp leaves two dead margins on a tablet in landscape,
- * which is what LinkedOut did on every screen up to 0.6.53:
+ * A list narrowed to 720 dp leaves two dead margins on a tablet in landscape:
  * they look like part of the page and a finger dragged there does nothing.
  * Here the list fills the window and pushes its rows inwards with content
  * padding, so the margins scroll like everything else.
