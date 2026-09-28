@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.settings
 
+import com.linkedout.app.ui.theme.zone
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.ScreenBanner
@@ -500,7 +501,7 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
             .padding(start = 28.dp, end = 28.dp, top = 20.dp, bottom = 8.dp)
     )
     Zone(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.zone,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
     ) {
         Column(content = content)

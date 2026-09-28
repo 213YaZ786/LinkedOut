@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.ui.component.BoldButton
+import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.layout.Box
 import com.linkedout.app.navigation.LocalReadableInset
 import android.content.ClipboardManager
@@ -277,7 +279,7 @@ fun AccountsScreen(
 private fun AccountCard(row: AccountRow, onClick: () -> Unit, onFile: () -> Unit) {
     Zone(
         onClick = onClick,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.zone,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -356,7 +358,7 @@ private fun CandidateCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
-            FilledTonalButton(onClick = onFollow) { Text("Follow") }
+            BoldButton(onClick = onFollow, filled = true) { Text("Follow") }
         }
     }
 }

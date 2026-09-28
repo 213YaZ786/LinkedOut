@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -189,7 +190,7 @@ fun FoldersScreen(
                             )
                         }
                         if (name != FollowedAccount.MAIN) {
-                            TextButton(onClick = { renaming = name }) { Text("Rename") }
+                            BoldButton(onClick = { renaming = name }) { Text("Rename") }
                             IconButton(onClick = { deleting = name }) {
                                 Icon(
                                     LinkedOutIcons.Delete,
@@ -198,7 +199,7 @@ fun FoldersScreen(
                                 )
                             }
                         }
-                        TextButton(onClick = { open = if (open == name) null else name }) {
+                        BoldButton(onClick = { open = if (open == name) null else name }) {
                             Text(if (open == name) "Close" else "Open")
                         }
                     }

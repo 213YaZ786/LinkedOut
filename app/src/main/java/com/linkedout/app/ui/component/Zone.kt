@@ -1,5 +1,6 @@
 package com.linkedout.app.ui.component
 
+import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -14,7 +15,10 @@ import androidx.compose.ui.unit.dp
 /**
  * The one shape every surface in this app is cut from.
  *
- * A zone is a rounded container that stands out by its fill alone. Everything
+ * A zone is a rounded container that stands out by its fill alone. The fill
+ * is tinted from the dynamic palette, see ZoneColors: the neutral
+ * surfaceContainerLow it used before could hardly be told from the page and
+ * did not visibly follow the wallpaper. Everything
  * that holds content goes through here: post cards, quotes, link previews,
  * polls, notes, pictures, banners and the error panel. One knob, one look.
  *
@@ -45,7 +49,7 @@ val ZoneGap: Dp = 6.dp
 fun Zone(
     modifier: Modifier = Modifier,
     shape: Shape = ZoneShape,
-    color: Color = MaterialTheme.colorScheme.surfaceContainerLow,
+    color: Color = MaterialTheme.colorScheme.zone,
     /** Null, and the zone has no edge at all. */
     outline: Color? = null,
     outlineWidth: Dp = UnreadOutline,

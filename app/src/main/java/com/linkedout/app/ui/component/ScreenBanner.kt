@@ -107,7 +107,9 @@ fun BannerAction(
             onClick()
         },
         shape = CircleShape,
-        color = container
+        color = container,
+        // The edge every action carries, see BoldButtons.
+        border = boldBorder()
     ) {
         Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))

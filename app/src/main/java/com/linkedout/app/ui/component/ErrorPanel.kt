@@ -38,7 +38,7 @@ fun ErrorPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             when (presentation.action) {
-                ErrorAction.RETRY -> TextButton(onClick = onRetry) { Text("Try again") }
+                ErrorAction.RETRY -> BoldButton(onClick = onRetry) { Text("Try again") }
                 ErrorAction.NONE -> Unit
             }
         }

@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.timeline
 
+import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
 import com.linkedout.app.ui.component.FolderDialog
@@ -443,9 +444,9 @@ private fun TimelineFooter(state: TimelineUiState, onLoadMore: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
-                TextButton(onClick = onLoadMore) { Text("Try again") }
+                BoldButton(onClick = onLoadMore) { Text("Try again") }
             }
-            state.canLoadMore -> TextButton(onClick = onLoadMore) { Text("Load older posts") }
+            state.canLoadMore -> BoldButton(onClick = onLoadMore) { Text("Load older posts") }
             else -> Text(
                 "No older posts available.",
                 style = MaterialTheme.typography.bodySmall,
@@ -482,7 +483,7 @@ private fun EmptyState(
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp)
         )
         if (actionLabel != null && onAction != null) {
-            TextButton(onClick = onAction) { Text(actionLabel) }
+            BoldButton(onClick = onAction) { Text(actionLabel) }
         }
     }
 }

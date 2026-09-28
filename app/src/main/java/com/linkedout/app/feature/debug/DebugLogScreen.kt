@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.debug
 
+import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -92,12 +93,12 @@ fun DebugLogScreen(onBack: () -> Unit) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                TextButton(onClick = {
+                BoldButton(onClick = {
                     clipboard.setText(AnnotatedString(log.render()))
                     scope.launch { snackbar.showSnackbar("Log copied") }
                 }) { Text("Copy all") }
 
-                TextButton(onClick = {
+                BoldButton(onClick = {
                     scope.launch {
                         val name = "linkedout-log-${System.currentTimeMillis()}.txt"
                         exporter.exportText(name, log.render())
@@ -112,7 +113,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                 // app runs none of the page's script and a browser runs all of
                 // it.
                 lastBody?.let { body ->
-                    TextButton(onClick = {
+                    BoldButton(onClick = {
                         scope.launch {
                             val name = "linkedout-page-${System.currentTimeMillis()}.html"
                             exporter.exportText(name, body.text)

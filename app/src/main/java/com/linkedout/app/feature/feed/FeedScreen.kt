@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.feed
 
+import com.linkedout.app.ui.component.BoldButton
 import androidx.compose.foundation.layout.PaddingValues
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.clickable
@@ -234,7 +235,7 @@ fun FeedScreen(
                                 modifier = Modifier.size(24.dp),
                                 strokeWidth = 2.dp
                             )
-                            state.canLoadMore -> TextButton(onClick = { viewModel.loadMore(manual = true) }) {
+                            state.canLoadMore -> BoldButton(onClick = { viewModel.loadMore(manual = true) }) {
                                 Text(if (state.pagingFailed) "Try again" else "Load older posts")
                             }
                             else -> Text(
@@ -360,11 +361,11 @@ private fun ProfileZone(
             }
 
             if (isFollowing) {
-                OutlinedButton(onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
+                BoldButton(onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
                     Text("Following")
                 }
             } else {
-                FilledTonalButton(onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
+                BoldButton(filled = true, onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
                     Text("Follow")
                 }
             }

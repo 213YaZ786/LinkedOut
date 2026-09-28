@@ -71,6 +71,8 @@ fun FloatingRoundButton(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        // The edge every action carries, see BoldButtons.
+        border = boldBorder(),
         shadowElevation = 3.dp,
         modifier = modifier
     ) {

@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.post
 
+import com.linkedout.app.ui.component.BoldButton
+import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.layout.PaddingValues
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.PostCard
@@ -266,7 +268,7 @@ private fun ConversationView(
                     // The wall is passed by the engine or not at all, so the
                     // only thing left for a reader to do is ask again.
                     if (gone == null) {
-                        TextButton(onClick = onRetry) { Text("Try again") }
+                        BoldButton(onClick = onRetry) { Text("Try again") }
                     }
                 }
             }
@@ -295,7 +297,7 @@ private fun ConversationView(
                     }
                     item(key = "more") {
                         Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            TextButton(onClick = { LinkRouter.openOutside(context, postUrl(post)) }) {
+                            BoldButton(onClick = { LinkRouter.openOutside(context, postUrl(post)) }) {
                                 Text("See all comments on LinkedIn")
                             }
                         }
@@ -347,7 +349,7 @@ private fun PostBody(
             Surface(
                 onClick = { onOpenProfile(post.authorHandle) },
                 shape = InnerZoneShape,
-                color = MaterialTheme.colorScheme.surfaceContainerLow
+                color = MaterialTheme.colorScheme.zone
             ) {
                 Row(
                     modifier = Modifier.padding(vertical = 4.dp),
@@ -443,10 +445,10 @@ private fun PostBody(
             ) {
                 // Straight to X or a browser. Through the app's own link handler
                 // this would land back on this screen.
-                FilledTonalButton(onClick = { LinkRouter.openOutside(context, url) }) { Text("Open on LinkedIn") }
+                BoldButton(filled = true, onClick = { LinkRouter.openOutside(context, url) }) { Text("Open on LinkedIn") }
                 // Share and copy follow the reader's choice, x.com or Nitter.
-                OutlinedButton(onClick = { share(context, shareLink) }) { Text("Share") }
-                OutlinedButton(onClick = { copy(context, shareLink) }) { Text("Copy link") }
+                BoldButton(onClick = { share(context, shareLink) }) { Text("Share") }
+                BoldButton(onClick = { copy(context, shareLink) }) { Text("Copy link") }
             }
         }
     }

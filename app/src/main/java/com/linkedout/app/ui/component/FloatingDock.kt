@@ -1,5 +1,6 @@
 package com.linkedout.app.ui.component
 
+import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -75,7 +76,10 @@ fun FloatingDock(
 
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        // Tinted like every zone, with the edge the buttons carry, so the
+        // dock reads as the row of actions it is.
+        color = MaterialTheme.colorScheme.zone,
+        border = boldBorder(),
         shadowElevation = 8.dp,
         tonalElevation = 2.dp,
         modifier = modifier

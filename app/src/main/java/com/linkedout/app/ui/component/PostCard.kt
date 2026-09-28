@@ -1,5 +1,6 @@
 package com.linkedout.app.ui.component
 
+import com.linkedout.app.ui.theme.innerZone
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -353,7 +354,7 @@ internal fun QuoteBlock(
     Zone(
         onClick = onClick,
         shape = InnerZoneShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = MaterialTheme.colorScheme.innerZone,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -432,7 +433,7 @@ internal fun LinkCardBlock(card: LinkCard, onClick: () -> Unit) {
     Zone(
         onClick = onClick,
         shape = InnerZoneShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = MaterialTheme.colorScheme.innerZone,
         modifier = Modifier.fillMaxWidth()
     ) {
         if (card.large || image == null) {
@@ -504,7 +505,7 @@ internal fun DocumentBlock(document: SharedDocument, authorHandle: String) {
             documents.open(document)
         },
         shape = InnerZoneShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = MaterialTheme.colorScheme.innerZone,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -541,7 +542,7 @@ internal fun DocumentBlock(document: SharedDocument, authorHandle: String) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            IconButton(onClick = {
+            BoldIconButton(onClick = {
                 haptics.done()
                 documents.save(document, authorHandle)
             }) {
