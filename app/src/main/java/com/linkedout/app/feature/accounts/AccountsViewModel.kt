@@ -7,6 +7,7 @@ import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.cache.FeedCache
+import com.linkedout.app.data.settings.SettingsStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -52,7 +53,8 @@ data class AccountRow(
  */
 class AccountsViewModel(
     private val store: AccountStore,
-    private val cache: FeedCache
+    private val cache: FeedCache,
+    private val settings: SettingsStore
 ) : ViewModel() {
 
     private data class Summary(val name: String?, val avatarUrl: String?, val lastPostMillis: Long?)
@@ -73,7 +75,16 @@ class AccountsViewModel(
 
     fun deleteFolder(name: String) = store.deleteFolder(name)
 
-    fun renameFolder(from: String, to: String) = store.renameFolder(from, to)
+    /**
+     * Returns the folder's new name. When Home was showing it, Home moves to
+     * the new name with it. Before 0.6.52 Home lost the folder on a rename
+     * and fell back to every account.
+     */
+    fun renameFolder(from: String, to: String): String? {
+        val renamed = store.renameFolder(from, to) ?: return null
+        if (settings.current.homeFolder == from) settings.update { it.copy(homeFolder = renamed) }
+        return renamed
+    }
 
     /** Sorted by name, because this list is for finding an account, not for reading. */
     val rows: StateFlow<List<AccountRow>> = combine(store.accounts, summaries) { accounts, known ->

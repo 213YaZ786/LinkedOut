@@ -134,13 +134,15 @@ class TimelineViewModel(
     private suspend fun onFolders(names: List<String>) = work.withLock {
         val lost = folder != null && folder !in names
         if (lost) {
-            // Home would otherwise show nothing at all, so it falls back to
-            // the whole stream rather than to an empty one.
-            folder = null
-            settings.update { it.copy(homeFolder = null) }
-            val cached = repository.cached(null)
+            // A rename is followed: the screen that renames moves the Home
+            // setting to the new name first. A delete falls back to the whole
+            // stream rather than to an empty one.
+            val target = settings.current.homeFolder?.takeIf { it in names }
+            folder = target
+            settings.update { it.copy(homeFolder = target) }
+            val cached = repository.cached(target)
             _state.value = _state.value.copy(
-                folder = null,
+                folder = target,
                 folders = names,
                 allPosts = cached.posts,
                 lastUpdatedMillis = cached.oldestFetchedAtMillis,
@@ -309,7 +311,7 @@ class TimelineViewModel(
         viewModelScope.launch {
             try {
                 val before = current.allPosts.size
-                val merged = repository.loadMore()
+                val merged = repository.loadMore(folder)
                 _state.value = _state.value.copy(
                     allPosts = merged.posts,
                     loadingMore = false,

@@ -1,5 +1,6 @@
 package com.linkedout.app.data.accounts
 
+import com.linkedout.app.core.common.writeTextAtomically
 import android.content.Context
 import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.FollowedAccount
@@ -55,20 +56,7 @@ class AccountStore(context: Context) {
         // The names the accounts carry are folded in, so an install that had
         // folders before this file existed keeps every one of them without the
         // reader doing anything. Nothing is written until something changes.
-        return ordered(stored + _accounts.value.map { it.folder })
-    }
-
-    /**
-     * Main first, then the rest by name, with no blanks and no two names that
-     * differ only in case. The first spelling of a name wins, which is the one
-     * the reader typed first.
-     */
-    private fun ordered(names: List<String>): List<String> {
-        val kept = LinkedHashMap<String, String>()
-        names.map { it.trim() }
-            .filter { it.isNotEmpty() && !it.equals(FollowedAccount.MAIN, ignoreCase = true) }
-            .forEach { kept.putIfAbsent(it.lowercase(), it) }
-        return listOf(FollowedAccount.MAIN) + kept.values.sortedBy { it.lowercase() }
+        return FolderNames.ordered(stored + _accounts.value.map { it.folder })
     }
 
     /**
@@ -79,6 +67,7 @@ class AccountStore(context: Context) {
      * other. That is a deliberate limit rather than an oversight: the rest of
      * the app keys caches and routes on the name alone.
      */
+    @Synchronized
     fun add(rawHandle: String, kind: AccountKind = AccountKind.PERSON): Boolean {
         val handle = FollowedAccount.normalise(rawHandle) ?: return false
         if (_accounts.value.any { it.handle.equals(handle, ignoreCase = true) }) return false
@@ -97,6 +86,7 @@ class AccountStore(context: Context) {
      * how many were new. Used by import, where fifty separate writes would
      * also mean fifty separate list updates for Home to react to.
      */
+    @Synchronized
     fun addAll(entries: List<SubscriptionFormat.Entry>): Int {
         val known = _accounts.value.map { it.handle.lowercase() }.toMutableSet()
         val now = System.currentTimeMillis()
@@ -109,9 +99,11 @@ class AccountStore(context: Context) {
         return fresh.size
     }
 
+    @Synchronized
     fun remove(handle: String) =
         persist(_accounts.value.filterNot { it.handle.equals(handle, ignoreCase = true) })
 
+    @Synchronized
     fun updateDisplayName(handle: String, displayName: String) {
         // Sources that cannot tell send a blank or the handle itself. Neither
         // should overwrite a real name learned earlier.
@@ -135,6 +127,7 @@ class AccountStore(context: Context) {
      * the real page says so here, once, and the next refresh goes straight
      * to the right address.
      */
+    @Synchronized
     fun updateKind(handle: String, kind: AccountKind) {
         val current = _accounts.value.firstOrNull { it.handle.equals(handle, ignoreCase = true) } ?: return
         if (current.kind == kind) return
@@ -146,36 +139,35 @@ class AccountStore(context: Context) {
     }
 
     /**
-     * Creates a folder and returns its name. A name already taken is not
-     * created twice: the existing one is returned, with its own spelling, so
-     * the caller can open the folder the reader meant. Null means the name was
-     * blank.
+     * Creates a folder and returns its name. A name already taken, whatever
+     * its case, is not created twice: the existing one is returned so the
+     * caller opens the folder the reader meant. Null for a blank name.
      */
+    @Synchronized
     fun createFolder(name: String): String? {
-        val clean = name.trim()
-        if (clean.isEmpty()) return null
-        val existing = _folders.value.firstOrNull { it.equals(clean, ignoreCase = true) }
-        if (existing != null) return existing
-        persistFolders(_folders.value + clean)
-        return clean
+        if (name.isBlank()) return null
+        val resolved = FolderNames.resolve(name, _folders.value)
+        if (_folders.value.none { it == resolved }) persistFolders(_folders.value + resolved)
+        return resolved
     }
 
-    /** Files an account. A blank name means the main folder. */
+    /**
+     * Files an account. A blank name means the main folder.
+     *
+     * The name goes through [FolderNames.resolve]. Before 0.6.52 filing into
+     * "news" beside an existing "News" kept one folder in the list but filed
+     * the account under "news", which Home could not match, so the account
+     * vanished from every folder but the full stream.
+     */
+    @Synchronized
     fun setFolder(handle: String, folder: String) {
-        val clean = folder.trim().takeIf { it.isNotEmpty() } ?: FollowedAccount.MAIN
+        val resolved = FolderNames.resolve(folder, _folders.value)
         val current = _accounts.value.firstOrNull { it.handle.equals(handle, ignoreCase = true) } ?: return
-        // An account can be filed into a folder that is not in the list yet,
-        // for instance from a subscription file written elsewhere. Filing it
-        // makes the folder exist rather than losing it.
-        if (!clean.equals(FollowedAccount.MAIN, ignoreCase = true) &&
-            _folders.value.none { it == clean }
-        ) {
-            persistFolders(_folders.value + clean)
-        }
-        if (current.folder == clean) return
+        if (_folders.value.none { it == resolved }) persistFolders(_folders.value + resolved)
+        if (current.folder == resolved) return
         persist(
             _accounts.value.map {
-                if (it.handle.equals(handle, ignoreCase = true)) it.copy(folder = clean) else it
+                if (it.handle.equals(handle, ignoreCase = true)) it.copy(folder = resolved) else it
             }
         )
     }
@@ -187,6 +179,7 @@ class AccountStore(context: Context) {
      *
      * The main folder cannot be deleted, it is where everything lands.
      */
+    @Synchronized
     fun deleteFolder(name: String) {
         if (name == FollowedAccount.MAIN) return
         if (_folders.value.none { it == name }) return
@@ -201,35 +194,35 @@ class AccountStore(context: Context) {
     }
 
     /**
-     * Renames a folder, in the list and on every account that carries it.
-     * Renaming onto a name that already exists merges the two, since two
-     * folders with one name would be indistinguishable in Home.
+     * Renames a folder, in the list and on every account that carries it, and
+     * returns the name it now has, or null when nothing changed. Renaming
+     * onto a name already in use, whatever its case, merges the two under
+     * that name's spelling, since two folders with one name would be
+     * indistinguishable in Home. Main is neither renamed nor a target.
      */
-    fun renameFolder(from: String, to: String) {
-        val clean = to.trim()
-        if (from == FollowedAccount.MAIN || clean.isEmpty() || clean == from) return
-        // Renaming to "Main" would file accounts under a name that only looks
-        // like the main folder. Sending them there is what delete is for.
-        if (clean.equals(FollowedAccount.MAIN, ignoreCase = true)) return
-        if (_folders.value.none { it == from }) return
-        persistFolders(_folders.value.filterNot { it == from } + clean)
+    @Synchronized
+    fun renameFolder(from: String, to: String): String? {
+        if (from == FollowedAccount.MAIN || to.isBlank() || _folders.value.none { it == from }) return null
+        val others = _folders.value.filterNot { it == from }
+        val target = FolderNames.resolve(to, others)
+        if (target == FollowedAccount.MAIN || target == from) return null
+        persistFolders(others + target)
         if (_accounts.value.any { it.folder == from }) {
-            persist(
-                _accounts.value.map { if (it.folder == from) it.copy(folder = clean) else it }
-            )
+            persist(_accounts.value.map { if (it.folder == from) it.copy(folder = target) else it })
         }
+        return target
     }
 
     private fun persist(updated: List<FollowedAccount>) {
         _accounts.value = updated
-        runCatching { file.writeText(json.encodeToString(updated)) }
+        runCatching { file.writeTextAtomically(json.encodeToString(updated)) }
     }
 
     private fun persistFolders(names: List<String>) {
-        val list = ordered(names)
+        val list = FolderNames.ordered(names)
         _folders.value = list
         // Main is always first and always implicit, so it is dropped rather
         // than stored. A file that somehow held it would load the same way.
-        runCatching { foldersFile.writeText(json.encodeToString(list.drop(1))) }
+        runCatching { foldersFile.writeTextAtomically(json.encodeToString(list.drop(1))) }
     }
 }

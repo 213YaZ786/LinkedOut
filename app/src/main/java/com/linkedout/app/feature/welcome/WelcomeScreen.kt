@@ -131,7 +131,13 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
     val last = pager.currentPage == PAGES.lastIndex
     val settings: SettingsStore = koinInject()
     val context = LocalContext.current
-    var chosen by remember { mutableStateOf<AutoDownload?>(null) }
+    // Blank on first launch, so the one setting that spends data is a choice
+    // the reader made. Reopened from Settings, the current choice is shown:
+    // before 0.6.52 it started blank every time and locked the last button
+    // for a reader who had already chosen.
+    var chosen by remember {
+        mutableStateOf(settings.current.takeIf { it.welcomeSeen }?.autoDownloadMedia)
+    }
     val askNotifications = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }

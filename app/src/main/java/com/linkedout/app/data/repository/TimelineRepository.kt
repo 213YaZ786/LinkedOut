@@ -149,8 +149,10 @@ class TimelineRepository(
      * would waste requests on accounts that already reach back weeks, and with
      * one fragile instance in the pool, wasted requests are the scarce resource.
      */
-    suspend fun loadMore(): Merged = coroutineScope {
-        val handles = accounts.accounts.value.map { it.handle }
+    suspend fun loadMore(folder: String? = null): Merged = coroutineScope {
+        // Only the folder on screen is paged. Before 0.6.52 every account was,
+        // which spent requests on posts the reader was not looking at.
+        val handles = accounts.accounts.value.inFolder(folder).map { it.handle }
         if (handles.isEmpty()) return@coroutineScope Merged()
 
         val cached = handles.mapNotNull { cache.read(it) }

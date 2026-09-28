@@ -1,5 +1,6 @@
 package com.linkedout.app.data.settings
 
+import com.linkedout.app.core.common.writeTextAtomically
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -105,6 +106,6 @@ class SettingsStore(context: Context) {
     fun update(transform: (Settings) -> Settings) {
         val updated = transform(_settings.value)
         _settings.value = updated
-        runCatching { file.writeText(json.encodeToString(updated)) }
+        runCatching { file.writeTextAtomically(json.encodeToString(updated)) }
     }
 }

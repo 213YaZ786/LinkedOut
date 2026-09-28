@@ -22,8 +22,8 @@ android {
         applicationId = "com.linkedout.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 78
-        versionName = "0.6.51"
+        versionCode = 79
+        versionName = "0.6.52"
     }
 
     signingConfigs {

@@ -54,8 +54,7 @@ fun FolderDialog(
             ) {
                 if (creating) {
                     Text(
-                        "A folder exists as long as an account is filed in it, and " +
-                            "disappears when the last one leaves.",
+                        "An empty folder stays until you delete it in Accounts, Folders.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp)

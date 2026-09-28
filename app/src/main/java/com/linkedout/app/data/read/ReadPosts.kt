@@ -1,5 +1,6 @@
 package com.linkedout.app.data.read
 
+import com.linkedout.app.core.common.writeTextAtomically
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -77,7 +78,7 @@ class ReadPosts(context: Context, private val scope: CoroutineScope) {
                     // The cap is the only case that has to rewrite, because
                     // the head of the file is what just went away.
                     if (capped.size < merged.size) {
-                        file.writeText(capped.joinToString("\n"))
+                        file.writeTextAtomically(capped.joinToString("\n"))
                     } else {
                         file.appendText(fresh.joinToString("\n", postfix = "\n"))
                     }

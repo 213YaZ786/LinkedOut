@@ -42,10 +42,9 @@ data class FollowedAccount(
      * been put nowhere is in [MAIN], which is why old files load with every
      * name in the main folder, where they were.
      *
-     * A folder is its own name and nothing else. There is no list of folders
-     * anywhere, the folders that exist are the ones some account names, so
-     * renaming one is renaming it on each of its accounts and deleting one is
-     * sending them back to [MAIN].
+     * The list of folders, empty ones included, is kept by AccountStore in
+     * its own file. Membership lives here only, so renaming a folder renames
+     * it on each of its accounts and deleting one sends them back to [MAIN].
      */
     val folder: String = MAIN,
     val addedAtMillis: Long = 0L

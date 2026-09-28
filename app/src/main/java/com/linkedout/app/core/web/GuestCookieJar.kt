@@ -1,5 +1,6 @@
 package com.linkedout.app.core.web
 
+import com.linkedout.app.core.common.writeTextAtomically
 import android.content.Context
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -90,7 +91,7 @@ class FileCookieStorage(context: Context) : GuestCookies.Storage {
 
     override fun write(text: String) {
         runCatching {
-            if (text.isBlank()) file.delete() else file.writeText(text)
+            if (text.isBlank()) file.delete() else file.writeTextAtomically(text)
         }
     }
 }

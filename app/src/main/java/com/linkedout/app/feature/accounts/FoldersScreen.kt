@@ -88,8 +88,10 @@ fun FoldersScreen(
             initial = from,
             confirm = "Rename",
             onConfirm = { name ->
-                viewModel.renameFolder(from, name)
-                if (open == from) open = name.trim()
+                // The store answers with the name the folder really has now,
+                // which after a merge is the other folder's spelling.
+                val renamed = viewModel.renameFolder(from, name)
+                if (open == from && renamed != null) open = renamed
                 renaming = null
             },
             onDismiss = { renaming = null }
