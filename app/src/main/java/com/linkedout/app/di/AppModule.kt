@@ -1,5 +1,8 @@
 package com.linkedout.app.di
 
+import com.linkedout.app.data.linkedin.JobsSource
+import com.linkedout.app.feature.jobs.JobDetailViewModel
+import com.linkedout.app.feature.jobs.JobsViewModel
 import com.linkedout.app.core.debug.LogExporter
 import com.linkedout.app.core.debug.RequestLog
 import com.linkedout.app.core.link.LinkRouter
@@ -76,6 +79,7 @@ val appModule = module {
         MediaDownloader(androidContext(), get(named("appScope"))) { id -> videos.sourceFor(id) }
     }
     single { OfflineMedia(androidContext()) }
+    single { JobsSource(get(), get(), get()) }
     single { SharedDocuments(androidContext(), get(), get(named("appScope")), get()) }
     single { MediaSavingNotice(androidContext(), get(named("appScope"))) }
     single { MediaPrefetch(androidContext(), get(), get(), get(), get(), get(named("appScope")), get()) }
@@ -98,6 +102,8 @@ val appModule = module {
     single { TimelineRepository(get(), get(), get(), get()) }
 
     viewModel { AccountsViewModel(get(), get(), get()) }
+    viewModel { JobsViewModel(get(), get()) }
+    viewModel { JobDetailViewModel(get()) }
     viewModel { PostDetailViewModel(get(), get()) }
     viewModel { SearchViewModel(get()) }
     viewModel { FeedViewModel(get(), get(), get()) }

@@ -12,6 +12,7 @@ enum class TopDestination(
 ) {
     TIMELINE("timeline", "Home", LinkedOutIcons.Home),
     ACCOUNTS("accounts", "Accounts", LinkedOutIcons.Person),
+    JOBS("jobs", "Jobs", LinkedOutIcons.Work),
     SETTINGS("settings", "Settings", LinkedOutIcons.Settings)
 }
 
@@ -24,6 +25,9 @@ object Routes {
     const val SEARCH = "search"
     const val SAVED_MEDIA = "savedmedia"
     const val FOLDERS = "folders"
+    const val JOB_PATTERN = "job/{id}"
+
+    fun job(id: String): String = "job/$id"
 
     const val POST_PATTERN = "post/{id}?from={from}"
 

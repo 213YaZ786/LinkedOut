@@ -76,7 +76,10 @@ data class Settings(
      * The first launch guide was closed. It is only offered when nothing is
      * followed yet, so an update never shows it to someone already set up.
      */
-    val welcomeSeen: Boolean = false
+    val welcomeSeen: Boolean = false,
+    /** The last job search, so the Jobs tab opens where it was left. */
+    val jobKeywords: String = "",
+    val jobLocation: String = ""
 )
 
 /**

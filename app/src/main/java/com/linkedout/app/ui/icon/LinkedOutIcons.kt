@@ -77,6 +77,14 @@ object LinkedOutIcons {
         )
     }
 
+    val Work: ImageVector by lazy {
+        build(
+            "Work",
+            "M20,6h-4V4c0,-1.11 -0.89,-2 -2,-2h-4C8.89,2 8,2.89 8,4v2H4c-1.11,0 -1.99,0.89 -1.99,2L2,19" +
+                "c0,1.11 0.89,2 2,2h16c1.11,0 2,-0.89 2,-2V8c0,-1.11 -0.89,-2 -2,-2zM14,6h-4V4h4v2z"
+        )
+    }
+
     val ArrowBack: ImageVector by lazy {
         build("ArrowBack", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z")
     }

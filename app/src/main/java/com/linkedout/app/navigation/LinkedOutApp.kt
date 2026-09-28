@@ -1,5 +1,8 @@
 package com.linkedout.app.navigation
 
+import com.linkedout.app.core.model.JobCard
+import com.linkedout.app.feature.jobs.JobDetailScreen
+import com.linkedout.app.feature.jobs.JobsScreen
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -225,6 +228,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                     onOpenSavedMedia = { navController.open(Routes.SAVED_MEDIA) },
                     onOpenFeed = { handle, kind -> navController.open(Routes.feed(handle, kind)) },
                     onOpenFolders = { navController.open(Routes.FOLDERS) },
+                    onOpenJob = { job -> navController.open(Routes.job(job.id)) },
                     onOpenPost = { post -> navController.open(Routes.post(post.id, post.cacheOwner())) },
                     onOpenSearch = { navController.open(Routes.SEARCH) }
                 )
@@ -250,6 +254,19 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                 DismissableScreen(onBack = { navController.back() }) {
                 ReadableScroll {
                     SavedMediaScreen(onBack = { navController.back() })
+                }
+                }
+            }
+            composable(
+                route = Routes.JOB_PATTERN,
+                arguments = listOf(navArgument("id") { type = NavType.StringType })
+            ) { entry ->
+                DismissableScreen(onBack = { navController.back() }) {
+                ReadableScroll {
+                    JobDetailScreen(
+                        id = entry.arguments?.getString("id").orEmpty(),
+                        onBack = { navController.back() }
+                    )
                 }
                 }
             }
@@ -336,6 +353,7 @@ private fun MainTabs(
     onOpenDebugLog: () -> Unit,
     onOpenSavedMedia: () -> Unit,
     onOpenFolders: () -> Unit,
+    onOpenJob: (JobCard) -> Unit,
     onOpenFeed: (String, AccountKind) -> Unit,
     onOpenPost: (Post) -> Unit,
     onOpenSearch: () -> Unit
@@ -436,6 +454,7 @@ private fun MainTabs(
                             onOpenFeed = onOpenFeed,
                             onOpenFolders = onOpenFolders
                         )
+                        TopDestination.JOBS -> JobsScreen(onOpenJob = onOpenJob)
                         TopDestination.SETTINGS -> SettingsScreen(
                             onOpenDebugLog = onOpenDebugLog,
                             onOpenSavedMedia = onOpenSavedMedia,
