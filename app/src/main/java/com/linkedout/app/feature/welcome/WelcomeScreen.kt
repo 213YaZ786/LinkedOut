@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.welcome
 
+import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.glass.glassZone
 import com.linkedout.app.ui.glass.LocalGlass
 import com.linkedout.app.ui.component.BoldButton
@@ -24,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -162,7 +162,7 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
 
     Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = { onFinish(false) }) { Text(if (last) "Close" else "Skip") }
+            QuietButton(onClick = { onFinish(false) }) { Text(if (last) "Close" else "Skip") }
         }
 
         HorizontalPager(
@@ -177,7 +177,7 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (pager.currentPage > 0) {
-                TextButton(onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }) {
+                QuietButton(onClick = { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }) {
                     Text("Back")
                 }
             }

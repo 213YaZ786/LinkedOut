@@ -13,6 +13,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedIconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -69,6 +70,30 @@ fun BoldButton(
         enabled = enabled,
         colors = if (filled) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.outlinedButtonColors(),
         border = boldBorder(enabled),
+        content = content
+    )
+}
+
+/**
+ * A quiet action beside a louder one, Skip or Back next to Next: a text
+ * button, and in glass a small pane of glass like every other button, so no
+ * control floats bare over the ambient light.
+ */
+@Composable
+fun QuietButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit
+) {
+    val glass = LocalGlass.current
+    val shape = ButtonDefaults.textShape
+    TextButton(
+        onClick = onClick,
+        modifier = if (glass == null) modifier else modifier.glassZone(shape, glass, lens = 1f),
+        enabled = enabled,
+        shape = shape,
+        contentPadding = if (glass == null) ButtonDefaults.TextButtonContentPadding else ButtonDefaults.ContentPadding,
         content = content
     )
 }
