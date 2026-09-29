@@ -1,5 +1,6 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.foundation.combinedClickable
 import com.linkedout.app.ui.theme.innerZone
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -74,15 +75,18 @@ fun PostCard(
     modifier: Modifier = Modifier
 ) {
     val compact = LocalDisplayPrefs.current.compact
-    Box(modifier) {
+    // A tap opens the post, a long press the pill of actions, see PostActions.
+    val tap = rememberHaptics()
+    val actions = rememberPostActions(post, onDownload)
+    Box(modifier.then(actions.tracker)) {
     Zone(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = ZoneGap),
-        onClick = onClick
+            .padding(horizontal = 12.dp, vertical = ZoneGap)
     ) {
         Column(
             Modifier
+                .combinedClickable(onClick = { tap.tick(); onClick() }, onLongClick = actions::open)
                 .padding(horizontal = 16.dp, vertical = if (compact) 10.dp else 14.dp),
             verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)
         ) {
@@ -137,6 +141,7 @@ fun PostCard(
     }
     // Arrived since the last visit and not yet scrolled past, see NewDot.
     NewDot(unread, Modifier.align(Alignment.TopEnd).padding(top = if (compact) 11.dp else 13.dp, end = 22.dp))
+    PostActionsOverlay(actions)
     }
 }
 

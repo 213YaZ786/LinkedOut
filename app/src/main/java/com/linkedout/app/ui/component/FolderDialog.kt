@@ -38,7 +38,9 @@ fun FolderDialog(
     /** The "no folder at all" row, or null when every choice is a folder. */
     everything: String?,
     onSelect: (String?) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    /** Views offered after the folders, never created or deleted here. */
+    extras: List<String> = emptyList()
 ) {
     var creating by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
@@ -70,6 +72,7 @@ fun FolderDialog(
                     folders.forEach { folder ->
                         Choice(folder, selected == folder) { onSelect(folder) }
                     }
+                    extras.forEach { extra -> Choice(extra, selected == extra) { onSelect(extra) } }
                     TextButton(onClick = { creating = true }) { Text("New folder") }
                 }
             }

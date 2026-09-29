@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.welcome
 
+import androidx.compose.foundation.layout.systemBarsPadding
 import com.linkedout.app.core.update.UpdateMode
 import com.linkedout.app.core.update.Updates
 import com.linkedout.app.feature.settings.SettingsViewModel
@@ -214,7 +215,8 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 16.dp)) {
+    // Drawn over the whole window, so it keeps clear of the system bars itself.
+    Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 24.dp, vertical = 16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             QuietButton(onClick = { onFinish(false) }) { Text(if (last) "Close" else "Skip") }
         }

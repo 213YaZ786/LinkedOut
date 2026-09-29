@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.timeline
 
+import com.linkedout.app.data.marks.PostMarks
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.linkedout.app.ui.glass.LocalGlassBackdrop
 import com.linkedout.app.ui.glass.LocalGlass
 import com.linkedout.app.ui.glass.glassSource
@@ -96,7 +98,20 @@ fun TimelineScreen(
     onOpenSearch: () -> Unit,
     viewModel: TimelineViewModel = koinViewModel()
 ) {
-    val state by viewModel.state.collectAsState()
+    val loaded by viewModel.state.collectAsState()
+    // Liked and Archived are views picked from Home's folder menu, not
+    // folders: their posts come from PostMarks, and archived posts leave the
+    // other views.
+    val postMarks: PostMarks = koinInject()
+    val marked by postMarks.marks.collectAsState()
+    var special by rememberSaveable { mutableStateOf<String?>(null) }
+    val state = remember(loaded, marked, special) {
+        when (special) {
+            LIKED -> loaded.copy(allPosts = marked.liked.sortedByDescending { it.publishedAtMillis }, folder = LIKED, canLoadMore = false)
+            ARCHIVED -> loaded.copy(allPosts = marked.archived.sortedByDescending { it.publishedAtMillis }, folder = ARCHIVED, canLoadMore = false)
+            else -> if (marked.archived.isEmpty()) loaded else loaded.copy(allPosts = loaded.allPosts.filterNot { marked.isArchived(it.id) })
+        }
+    }
     // The threshold is felt in the indicator itself; this answers the end of
     // a refresh the reader pulled: done, or a refusal when nothing came.
     val askedRefresh = rememberRefreshHaptics(
@@ -185,9 +200,15 @@ fun TimelineScreen(
             everything = "Everything",
             onSelect = { name ->
                 choosingFolder = false
-                viewModel.showFolder(name)
+                if (name == LIKED || name == ARCHIVED) {
+                    special = name
+                } else {
+                    special = null
+                    viewModel.showFolder(name)
+                }
             },
-            onDismiss = { choosingFolder = false }
+            onDismiss = { choosingFolder = false },
+            extras = listOf(LIKED, ARCHIVED)
         )
     }
 
@@ -524,3 +545,6 @@ private fun EmptyState(
         modifier = modifier
     )
 }
+
+private const val LIKED = "Liked"
+private const val ARCHIVED = "Archived"
