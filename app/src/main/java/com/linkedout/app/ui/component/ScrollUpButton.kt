@@ -1,5 +1,9 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.ui.graphics.Color
+import com.linkedout.app.ui.glass.glassFloating
+import com.linkedout.app.ui.glass.LocalGlassBackdrop
+import com.linkedout.app.ui.glass.LocalGlass
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -61,18 +65,22 @@ fun FloatingRoundButton(
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
+    // In glass, it bends what scrolls under it, the icon in the accent, and
+    // no edge nor shadow; otherwise filled, with the edge every action carries.
+    val look = LocalGlass.current
+    val backdrop = LocalGlassBackdrop.current
+    val glass = look != null && backdrop != null
     Surface(
         onClick = {
             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             onClick()
         },
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        // The edge every action carries, see BoldButtons.
-        border = boldBorder(),
-        shadowElevation = 3.dp,
-        modifier = modifier
+        color = if (glass) Color.Transparent else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = if (glass) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer,
+        border = if (glass) null else boldBorder(),
+        shadowElevation = if (glass) 0.dp else 3.dp,
+        modifier = if (glass) modifier.glassFloating(backdrop!!, CircleShape, look!!) else modifier
     ) {
         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = label, modifier = Modifier.size(24.dp))

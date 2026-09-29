@@ -1,5 +1,7 @@
 package com.linkedout.app.ui.component
 
+import com.linkedout.app.ui.glass.glassZone
+import com.linkedout.app.ui.glass.LocalGlass
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +25,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.linkedout.app.ui.theme.zone
 
 /**
  * The zone a screen opens with: its name in the middle, one round action on
@@ -49,12 +50,11 @@ fun ScreenBanner(
     leading: @Composable (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null
 ) {
-    Surface(
+    ZoneSurface(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = BannerGap),
-        shape = BannerShape,
-        color = MaterialTheme.colorScheme.zone
+        shape = BannerShape
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
@@ -105,18 +105,21 @@ fun BannerAction(
     // Through the view: the constant has existed far longer than the
     // minimum version, and the system setting still decides.
     val view = LocalView.current
+    // In glass, a small pane of its own on the banner's glass, the icon in
+    // the accent; otherwise filled, with the edge every action carries.
+    val glass = LocalGlass.current
     Surface(
         onClick = {
             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             onClick()
         },
         shape = CircleShape,
-        color = container,
-        // The edge every action carries, see BoldButtons.
-        border = boldBorder()
+        color = if (glass == null) container else Color.Transparent,
+        border = if (glass == null) boldBorder() else null,
+        modifier = if (glass == null) Modifier else Modifier.glassZone(CircleShape, glass, lens = 1f)
     ) {
         Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = label, tint = if (glass == null) tint else MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
         }
     }
 }

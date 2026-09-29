@@ -1,5 +1,9 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.ui.graphics.Color
+import com.linkedout.app.ui.glass.glassFloating
+import com.linkedout.app.ui.glass.LocalGlassBackdrop
+import com.linkedout.app.ui.glass.LocalGlass
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -52,11 +56,15 @@ fun PullIndicator(state: PullToRefreshState, isRefreshing: Boolean, modifier: Mo
             alpha = if (isRefreshing) 1f else (fraction * 2f).coerceIn(0f, 1f)
         }
     ) {
+        // In glass, the disc bends the list under it, with no shadow.
+        val look = LocalGlass.current
+        val backdrop = LocalGlassBackdrop.current
+        val glass = look != null && backdrop != null
         Surface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shadowElevation = 3.dp,
-            modifier = Modifier.size(56.dp)
+            color = if (glass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = if (glass) 0.dp else 3.dp,
+            modifier = if (glass) Modifier.size(56.dp).glassFloating(backdrop!!, CircleShape, look!!) else Modifier.size(56.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 LoadingMark(size = 44.dp, running = isRefreshing, progress = fraction.coerceIn(0f, 1f))

@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.linkedout.app.ui.theme.zone
 
 /**
  * What a screen shows when it has nothing yet: a zone in the middle of the
@@ -43,9 +42,8 @@ fun EmptyZone(
     onAction: (() -> Unit)? = null
 ) {
     Box(modifier.fillMaxWidth().padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-        Surface(
+        ZoneSurface(
             shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.zone,
             modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth()
         ) {
             Column(

@@ -1,5 +1,9 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.shape.CircleShape
+import com.linkedout.app.ui.glass.glassZone
+import com.linkedout.app.ui.glass.LocalGlass
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.ButtonDefaults
@@ -57,6 +61,20 @@ fun BoldIconButton(
     edge: Color = MaterialTheme.colorScheme.primary,
     content: @Composable () -> Unit
 ) {
+    // In glass, the ordinary round action is a small pane of glass with its
+    // icon in the accent, and no edge. One that signals a problem, with an
+    // edge other than the accent, keeps its fill so it is still noticed.
+    val glass = LocalGlass.current
+    if (glass != null && edge == MaterialTheme.colorScheme.primary) {
+        IconButton(
+            onClick = onClick,
+            modifier = modifier.glassZone(CircleShape, glass, lens = 1f),
+            enabled = enabled,
+            colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+            content = content
+        )
+        return
+    }
     OutlinedIconButton(
         onClick = onClick,
         modifier = modifier,
