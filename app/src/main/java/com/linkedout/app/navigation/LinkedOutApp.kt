@@ -1,10 +1,5 @@
 package com.linkedout.app.navigation
 
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.EnterTransition
-import androidx.activity.BackEventCompat
 import com.linkedout.app.core.model.JobCard
 import com.linkedout.app.feature.jobs.JobDetailScreen
 import com.linkedout.app.feature.jobs.JobsScreen
@@ -178,8 +173,6 @@ private fun NavHostController.back() {
 private const val ENTER_MS = 260
 private const val EXIT_MS = 180
 
-/** The back gesture's transition, seeked under the thumb and finished after it. */
-private const val PREDICTIVE_MS = 300
 
 /**
  * How a screen arrives and leaves.
@@ -216,27 +209,6 @@ private fun LinkedOutNavHost(navController: NavHostController) {
             },
             popExitTransition = {
                 slideOutHorizontally(tween(EXIT_MS)) { full -> full }
-            },
-            // The back gesture has transitions of its own, and without these
-            // the library's defaults played: a shrink to 70% on a slow spring
-            // with no fade, so the page hung small over the one behind and
-            // then vanished in a single frame (seen frame by frame in a
-            // screencast and again on the emulator). Now the page follows the
-            // thumb, shrinking to 85% and drifting the way the thumb goes, the
-            // screen behind is simply there, and the fade only starts half way
-            // through, which in practice is after the thumb lets go: no
-            // off screen layer while the page is being dragged.
-            predictivePopEnterTransition = { EnterTransition.None },
-            // Decelerating: the page moves most in the first millimetres of
-            // the drag, so it is seen to follow the thumb at once. The default
-            // ease in left it still for the first 150 ms, and linear barely
-            // moved it while the gesture's progress was still small.
-            predictivePopExitTransition = { edge ->
-                scaleOut(targetScale = 0.85f, animationSpec = tween(PREDICTIVE_MS, easing = LinearOutSlowInEasing)) +
-                    slideOutHorizontally(tween(PREDICTIVE_MS, easing = LinearOutSlowInEasing)) { full ->
-                        if (edge == BackEventCompat.EDGE_RIGHT) -full / 6 else full / 6
-                    } +
-                    fadeOut(tween(PREDICTIVE_MS / 2, delayMillis = PREDICTIVE_MS / 2, easing = LinearEasing))
             }
         ) {
             composable(Routes.MAIN) {
