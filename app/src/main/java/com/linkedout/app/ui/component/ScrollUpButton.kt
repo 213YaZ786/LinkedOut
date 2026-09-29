@@ -1,5 +1,6 @@
 package com.linkedout.app.ui.component
 
+import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -15,24 +16,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import com.linkedout.app.ui.icon.LinkedOutIcons
 
 /**
  * Back to the top of the list.
  *
- * The banner is an item of the list now, so it only comes back when the
- * reader has scrolled all the way up. On a stream that is hundreds of posts
- * long that is a lot of thumb, and this is the way back in one tap. It sits
- * at the bottom right above the folder switch, both above the dock, where a
- * thumb already is.
+ * On a stream that is hundreds of posts long that is a lot of thumb, and this
+ * is the way back in one tap. It sits at the bottom right above the folder
+ * switch, both above the dock, where a thumb already is.
  *
  * It fades and scales rather than appearing, because something that pops into
  * a corner while you read pulls the eye away from the text.
+ *
+ * Shared across the apps of this base: edit Modules/shared, then run sync.sh.
  */
 @Composable
 fun ScrollUpButton(
     visible: Boolean,
+    icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -42,11 +44,7 @@ fun ScrollUpButton(
         exit = fadeOut() + scaleOut(targetScale = 0.8f),
         modifier = modifier
     ) {
-        FloatingRoundButton(
-            icon = LinkedOutIcons.ArrowUp,
-            label = "Back to the top",
-            onClick = onClick
-        )
+        FloatingRoundButton(icon = icon, label = "Back to the top", onClick = onClick)
     }
 }
 
@@ -62,10 +60,10 @@ fun FloatingRoundButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val haptics = rememberHaptics()
+    val view = LocalView.current
     Surface(
         onClick = {
-            haptics.tick()
+            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             onClick()
         },
         shape = CircleShape,

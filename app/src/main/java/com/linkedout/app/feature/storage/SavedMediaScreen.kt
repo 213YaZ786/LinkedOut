@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.storage
 
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.navigation.LocalReadableInset
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
@@ -88,7 +90,8 @@ fun SavedMediaScreen(onBack: () -> Unit) {
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,
-            bottom = 24.dp
+            top = statusBarTop(),
+            bottom = 24.dp + navigationBarBottom()
         )
     ) {
         item(key = "banner") {

@@ -72,7 +72,6 @@ fun DebugLogScreen(onBack: () -> Unit) {
             TopAppBar(
                 // Over the reading column, like the content under it.
                 modifier = Modifier.padding(horizontal = LocalReadableInset.current),
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Activity log") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -87,7 +86,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
@@ -147,7 +146,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
                         start = 12.dp + LocalReadableInset.current,
                         end = 12.dp + LocalReadableInset.current,
                         top = 12.dp,
-                        bottom = 12.dp
+                        bottom = 12.dp + padding.calculateBottomPadding()
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

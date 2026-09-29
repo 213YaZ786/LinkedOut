@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.feed
 
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.BoldButton
 import androidx.compose.foundation.layout.PaddingValues
 import com.linkedout.app.navigation.LocalReadableInset
@@ -139,7 +141,12 @@ fun FeedScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = LocalReadableInset.current)
+                contentPadding = PaddingValues(
+                    start = LocalReadableInset.current,
+                    end = LocalReadableInset.current,
+                    top = statusBarTop(),
+                    bottom = navigationBarBottom()
+                )
             ) {
                 item(key = "banner") {
                     ScreenBanner(
@@ -251,10 +258,11 @@ fun FeedScreen(
             val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
             ScrollUpButton(
                 visible = scrolled,
+                icon = LinkedOutIcons.ArrowUp,
                 onClick = { scope.launch { listState.animateScrollToItem(0) } },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp + LocalReadableInset.current, bottom = 16.dp)
+                    .padding(end = 16.dp + LocalReadableInset.current, bottom = 16.dp + navigationBarBottom())
             )
         }
     }

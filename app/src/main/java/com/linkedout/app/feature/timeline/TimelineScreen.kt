@@ -1,5 +1,9 @@
 package com.linkedout.app.feature.timeline
 
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.EmptyZone
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
@@ -208,8 +212,11 @@ fun TimelineScreen(
         )
     }
 
+    val pull = rememberPullToRefreshState()
     when {
-        state.followedCount == 0 -> Column(Modifier.fillMaxSize().padding(horizontal = LocalReadableInset.current)) {
+        state.followedCount == 0 -> Column(
+            Modifier.fillMaxSize().padding(start = LocalReadableInset.current, end = LocalReadableInset.current, top = statusBarTop())
+        ) {
             banner()
             // The weight gives it the rest of the screen, so it sits in the
             // middle of what is left under the banner rather than against it.
@@ -231,12 +238,26 @@ fun TimelineScreen(
                 haptics.firm()
                 viewModel.refresh()
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            state = pull,
+            // Under the status bar, where the list starts, not behind it.
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pull,
+                    isRefreshing = state.loading,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = statusBarTop())
+                )
+            }
         ) {
             // A list, because the pull gesture needs something scrollable.
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = LocalReadableInset.current)
+                contentPadding = PaddingValues(
+                    start = LocalReadableInset.current,
+                    end = LocalReadableInset.current,
+                    top = statusBarTop(),
+                    bottom = LocalDockPadding.current
+                )
             ) {
                 item(key = "banner") { banner() }
                 item(key = "nothing") {
@@ -258,7 +279,16 @@ fun TimelineScreen(
                 haptics.firm()
                 viewModel.refresh()
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            state = pull,
+            // Under the status bar, where the list starts, not behind it.
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pull,
+                    isRefreshing = state.loading,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = statusBarTop())
+                )
+            }
         ) {
             // Prefetch a page before the reader actually hits the bottom,
             // so scrolling stays continuous instead of stalling.
@@ -283,9 +313,11 @@ fun TimelineScreen(
                     state = listState,
                     // Full width with the rows pushed in, so the margins of a
                     // tablet scroll too. See ReadableScroll.
+                    // The list starts under the status bar and scrolls beneath it.
                     contentPadding = PaddingValues(
                         start = LocalReadableInset.current,
                         end = LocalReadableInset.current,
+                        top = statusBarTop(),
                         bottom = LocalDockPadding.current
                     ),
                     modifier = Modifier.fillMaxSize()
@@ -329,6 +361,7 @@ fun TimelineScreen(
             ) {
                 ScrollUpButton(
                     visible = scrolled,
+                    icon = LinkedOutIcons.ArrowUp,
                     onClick = { scope.launch { listState.animateScrollToItem(0) } }
                 )
                 FloatingRoundButton(

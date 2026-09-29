@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.jobs
 
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,7 +53,12 @@ fun JobDetailScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = LocalReadableInset.current, end = LocalReadableInset.current, bottom = 24.dp)
+        contentPadding = PaddingValues(
+            start = LocalReadableInset.current,
+            end = LocalReadableInset.current,
+            top = statusBarTop(),
+            bottom = 24.dp + navigationBarBottom()
+        )
     ) {
         item(key = "banner") {
             ScreenBanner(

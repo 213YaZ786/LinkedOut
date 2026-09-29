@@ -1,5 +1,8 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.ui.component.statusBarTop
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.layout
 import com.linkedout.app.ui.component.EmptyZone
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.theme.zone
@@ -143,7 +146,7 @@ fun AccountsScreen(
             ?.coerceToText(context)
             ?.toString()
             .orEmpty()
-        val text = PastedText.query(clip)
+        val text = PastedText.query(clip) { "linkedin.com/" in it || "lnkd.in/" in it }
         if (text.isEmpty()) {
             notice = "Nothing to paste. Open a profile in your browser and copy its address."
             return
@@ -158,88 +161,94 @@ fun AccountsScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
-        Box(Modifier.padding(horizontal = LocalReadableInset.current)) {
-        ScreenBanner(
-            title = "Accounts",
-            subtitle = if (rows.isEmpty()) null else "${rows.size} followed",
-            trailing = {
-                BannerAction(
-                    icon = LinkedOutIcons.Folder,
-                    label = "Folders",
-                    onClick = onOpenFolders
-                )
-            }
-        )
-        }
-
-        TextField(
-            value = query,
-            onValueChange = {
-                query = it
-                notice = null
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(28.dp),
-            placeholder = { Text("Paste a full profile address") },
-            leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
-            trailingIcon = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (query.isNotEmpty()) {
-                        IconButton(onClick = {
-                            query = ""
-                            notice = null
-                        }) {
-                            Icon(LinkedOutIcons.Close, contentDescription = "Clear")
-                        }
-                    }
-                    IconButton(onClick = { paste() }) {
-                        Icon(LinkedOutIcons.Paste, contentDescription = "Paste an address")
-                    }
-                }
-            },
-            colors = TextFieldDefaults.colors(
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = {
-                when {
-                    candidate != null && !alreadyFollowed -> open(candidate, candidateKind)
-                    visible.size == 1 -> open(visible.first().handle, visible.first().kind)
-                    else -> focus.clearFocus()
-                }
-            }),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + LocalReadableInset.current)
-        )
-
-        // Said under the field and not only in the empty screen, because the
-        // rule is the opposite of every other social app: there is no handle
-        // to guess here, "@chu-nantes" is not an address and never resolves.
-        if (trimmed.isEmpty()) {
-            Text(
-                "LinkedIn has no @handle. Paste the whole address, " +
-                    "linkedin.com/in/name or linkedin.com/company/name.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp + LocalReadableInset.current, vertical = 8.dp)
-            )
-        }
-
+    Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 16.dp + LocalReadableInset.current,
-                top = 16.dp,
+                top = statusBarTop(),
                 end = 16.dp + LocalReadableInset.current,
                 bottom = 16.dp + LocalDockPadding.current
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // The banner, the field and the line under it are the first row of
+            // the list, so the whole screen scrolls, under the status bar too.
+            // The row undoes the list's side padding and keeps its own margins.
+            item(key = "header") {
+                Column(Modifier.fullBleed(16.dp + LocalReadableInset.current).padding(bottom = 8.dp)) {
+                Box(Modifier.padding(horizontal = LocalReadableInset.current)) {
+                ScreenBanner(
+                    title = "Accounts",
+                    subtitle = if (rows.isEmpty()) null else "${rows.size} followed",
+                    trailing = {
+                        BannerAction(
+                            icon = LinkedOutIcons.Folder,
+                            label = "Folders",
+                            onClick = onOpenFolders
+                        )
+                    }
+                )
+                }
+
+                TextField(
+                    value = query,
+                    onValueChange = {
+                        query = it
+                        notice = null
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(28.dp),
+                    placeholder = { Text("Paste a full profile address") },
+                    leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
+                    trailingIcon = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    query = ""
+                                    notice = null
+                                }) {
+                                    Icon(LinkedOutIcons.Close, contentDescription = "Clear")
+                                }
+                            }
+                            IconButton(onClick = { paste() }) {
+                                Icon(LinkedOutIcons.Paste, contentDescription = "Paste an address")
+                            }
+                        }
+                    },
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        when {
+                            candidate != null && !alreadyFollowed -> open(candidate, candidateKind)
+                            visible.size == 1 -> open(visible.first().handle, visible.first().kind)
+                            else -> focus.clearFocus()
+                        }
+                    }),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + LocalReadableInset.current)
+                )
+
+                // Said under the field and not only in the empty screen, because the
+                // rule is the opposite of every other social app: there is no handle
+                // to guess here, "@chu-nantes" is not an address and never resolves.
+                if (trimmed.isEmpty()) {
+                    Text(
+                        "LinkedIn has no @handle. Paste the whole address, " +
+                            "linkedin.com/in/name or linkedin.com/company/name.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp + LocalReadableInset.current, vertical = 8.dp)
+                    )
+                }
+                }
+            }
             notice?.let { message ->
                 item(key = "notice") { Hint(message) }
             }
@@ -401,4 +410,16 @@ private fun EmptyState(modifier: Modifier = Modifier) {
         icon = LinkedOutIcons.Person,
         modifier = modifier
     )
+}
+
+/**
+ * Undoes the list's side padding for a row that brings its own margins, so the
+ * header keeps exactly the layout it had above the list.
+ */
+private fun Modifier.fullBleed(side: Dp) = layout { measurable, constraints ->
+    val extra = side.roundToPx()
+    val placeable = measurable.measure(
+        constraints.copy(minWidth = constraints.minWidth + 2 * extra, maxWidth = constraints.maxWidth + 2 * extra)
+    )
+    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
 }

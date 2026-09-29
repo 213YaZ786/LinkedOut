@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.post
 
+import com.linkedout.app.ui.component.plus
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.layout.PaddingValues
@@ -115,7 +116,6 @@ fun PostDetailScreen(
             TopAppBar(
                 // Over the reading column, like the content under it.
                 modifier = Modifier.padding(horizontal = LocalReadableInset.current),
-                windowInsets = WindowInsets(0, 0, 0, 0),
                 title = { Text("Post") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -132,9 +132,10 @@ fun PostDetailScreen(
             )
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+        Box(Modifier.fillMaxSize()) {
             when {
                 post != null -> ConversationView(
+                    contentPadding = padding,
                     post = post,
                     thread = state.thread,
                     onOpenProfile = onOpenProfile,
@@ -168,6 +169,7 @@ fun PostDetailScreen(
  */
 @Composable
 private fun ConversationView(
+    contentPadding: PaddingValues,
     post: Post,
     thread: ThreadState,
     onOpenProfile: (String) -> Unit,
@@ -207,7 +209,7 @@ private fun ConversationView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = LocalReadableInset.current)
+        contentPadding = PaddingValues(horizontal = LocalReadableInset.current).plus(contentPadding)
     ) {
         val ancestors = conversation?.ancestors.orEmpty()
         if (ancestors.isNotEmpty()) {

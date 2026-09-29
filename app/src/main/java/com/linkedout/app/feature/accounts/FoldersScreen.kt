@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.animation.AnimatedVisibility
@@ -132,7 +134,8 @@ fun FoldersScreen(
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,
-            bottom = 24.dp
+            top = statusBarTop(),
+            bottom = 24.dp + navigationBarBottom()
         )
     ) {
         item(key = "banner") {

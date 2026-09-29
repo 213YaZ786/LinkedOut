@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.jobs
 
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -70,6 +72,7 @@ fun JobsScreen(
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,
+            top = statusBarTop(),
             bottom = LocalDockPadding.current + 16.dp
         )
     ) {
