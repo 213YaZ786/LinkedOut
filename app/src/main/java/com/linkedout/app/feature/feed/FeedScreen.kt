@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.feed
 
+import com.linkedout.app.ui.component.ZoneAlertDialog
+import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.component.RejectOnFailure
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.navigationBarBottom
@@ -104,6 +106,21 @@ fun FeedScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val haptics = rememberHaptics()
+    var confirmUnfollow by remember { mutableStateOf(false) }
+    if (confirmUnfollow) {
+        ZoneAlertDialog(
+            onDismissRequest = { confirmUnfollow = false },
+            title = { Text("Unfollow?") },
+            confirmButton = {
+                QuietButton(onClick = {
+                    confirmUnfollow = false
+                    haptics.done()
+                    viewModel.toggleFollow()
+                }) { Text("Unfollow") }
+            },
+            dismissButton = { QuietButton(onClick = { confirmUnfollow = false }) { Text("Cancel") } }
+        )
+    }
     var viewing by remember { mutableStateOf<Pair<List<MediaItem>, Int>?>(null) }
 
     val feed = state.feed
@@ -182,10 +199,14 @@ fun FeedScreen(
                         feed = feed,
                         isFollowing = isFollowing,
                         onToggleFollow = {
-                        // Following or dropping an account is a decision, and
-                        // it answers like one.
-                        haptics.done()
-                        viewModel.toggleFollow()
+                        // Following answers at once; unfollowing asks first, a stray
+                        // tap on "Following" must not drop an account.
+                        if (isFollowing) {
+                            confirmUnfollow = true
+                        } else {
+                            haptics.done()
+                            viewModel.toggleFollow()
+                        }
                     },
                         onOpenAvatar = { small ->
                             viewing = listOf(
