@@ -77,8 +77,14 @@ class ProfilePageParser {
 
         val name = extractName(html) ?: person?.let { graph.ownString("name", it) } ?: return null
         val fromGraph = graph.postsFromGraph(person)
-        val posts = extractCards(html, handle)
-            .map { card -> fromGraph[card.id]?.let { exact -> card.withExact(exact) } ?: card }
+        val cards = extractCards(html, handle)
+        // Some profiles show a guest no Activity section at all, while their
+        // graph still lists their own posts: those are shown from the graph
+        // alone, text, time and reactions, their media coming with the post's
+        // own page when it is opened.
+        val covered = cards.map { it.id }.toSet()
+        val graphOnly = fromGraph.values.filter { it.id !in covered }.map { it.copy(authorHandle = handle) }
+        val posts = (cards.map { card -> fromGraph[card.id]?.let { exact -> card.withExact(exact) } ?: card } + graphOnly)
             .sortedByDescending { it.publishedAtMillis }
 
         return Feed(
