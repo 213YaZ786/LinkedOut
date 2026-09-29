@@ -59,9 +59,8 @@ import java.util.concurrent.TimeUnit
  * like this and burying it in a long press is hostile.
  *
  * The card is a [Zone], so it has its own fill and its own rounded corners,
- * and the list needs no rule between two posts. It carries no outline: the
- * only one in the app is [unread], a post that arrived since the last visit,
- * and it goes away as soon as the reader has scrolled past it.
+ * and the list needs no rule between two posts. A post that arrived since
+ * the last visit wears a small dot until the reader has scrolled past it.
  */
 @Composable
 fun PostCard(
@@ -75,11 +74,11 @@ fun PostCard(
     modifier: Modifier = Modifier
 ) {
     val compact = LocalDisplayPrefs.current.compact
+    Box(modifier) {
     Zone(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = ZoneGap),
-        outline = if (unread) MaterialTheme.colorScheme.primary else null,
         onClick = onClick
     ) {
         Column(
@@ -135,6 +134,9 @@ fun PostCard(
                 }
             }
         }
+    }
+    // Arrived since the last visit and not yet scrolled past, see NewDot.
+    NewDot(unread, Modifier.align(Alignment.TopEnd).padding(top = if (compact) 11.dp else 13.dp, end = 22.dp))
     }
 }
 

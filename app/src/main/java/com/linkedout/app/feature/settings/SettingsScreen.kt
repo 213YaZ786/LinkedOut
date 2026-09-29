@@ -617,14 +617,13 @@ private fun <T> ChoiceDialog(
 }
 
 /**
- * Three words each, because the row shows the answer and the dialog holds the
- * choices. "Wi-Fi" means an unmetered network, which is what a reader means
- * by it: a phone hotspot is Wi-Fi and costs data.
+ * A few words each: the row's title already says what is chosen. "Wi-Fi"
+ * means an unmetered network, which is what a reader means by it.
  */
 private fun autoDownloadLabel(choice: AutoDownload): String = when (choice) {
-    AutoDownload.NEVER -> "Never. Pictures load as you read them, and need a connection."
-    AutoDownload.WIFI -> "On Wi-Fi. Kept for reading offline, never on mobile data."
-    AutoDownload.ALWAYS -> "On any network, mobile data included."
+    AutoDownload.NEVER -> "Never"
+    AutoDownload.WIFI -> "On Wi-Fi only"
+    AutoDownload.ALWAYS -> "On Wi-Fi or mobile data"
 }
 
 private fun startTabLabel(tab: StartTab): String = when (tab) {
