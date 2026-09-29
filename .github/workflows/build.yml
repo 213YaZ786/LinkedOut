@@ -1,9 +1,10 @@
 # Builds on every push and pull request, and publishes a release for every
 # green build on main.
 #
-# Action versions are the ones the previous workflow was already running
-# green: actions/checkout v7, actions/setup-java v6, actions/upload-artifact
-# v7, gradle/actions v6.
+# Action versions: actions/checkout v7, actions/setup-java v6,
+# actions/upload-artifact v7, gradle/actions v6. Dependabot moves them.
+#
+# Shared across the apps of this base: edit Modules/shared, then run sync.sh.
 name: Build
 
 on:
@@ -110,9 +111,8 @@ jobs:
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
       # One command, so a failing test stops the release like a failing
-      # compile does. There are no unit tests in this repository yet and the
-      # task then does nothing, which is the point of leaving it here: the day
-      # one is written it is already enforced.
+      # compile does. The unit tests are pure Kotlin with no Android
+      # dependency, so a red one here is a real failure and not flake.
       - name: Build and test
         run: gradle --stacktrace assembleDebug assembleRelease testDebugUnitTest
 
@@ -133,8 +133,8 @@ jobs:
           ( cd release && sha256sum ./*.apk > SHA256SUMS.txt )
           cat release/SHA256SUMS.txt
 
-      # LinkedOut declares four permissions and depends on libraries that
-      # declare a few of their own, WorkManager above all. Anything outside
+      # The app declares a handful of permissions and depends on libraries
+      # that declare a few of their own, WorkManager above all. Anything outside
       # this list fails the build, which is the point: a new dependency that
       # wants the camera should stop the release rather than ship quietly.
       - name: Check release permissions

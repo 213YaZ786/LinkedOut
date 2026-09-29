@@ -10,16 +10,14 @@ kotlin = "2.4.20"
 coreKtx = "1.19.1"
 lifecycle = "2.9.4"
 activityCompose = "1.11.0"
-# Compose that compiles against API 37. Moved by Dependabot, so the exact
-# Compose version behind the bill of materials is whatever it resolved.
+# Compose that compiles against API 37. Moved by Dependabot.
 composeBom = "2026.09.00"
 navigation = "2.10.2"
 koin = "4.2.2"
 ktor = "3.6.0"
 coil = "3.6.3"
 media3 = "1.11.1"
-# Client hints override for the offscreen engine, see ChallengeDriver.
-# 1.17.0 is the stable release of August 2026, minSdk 24, well under ours.
+# The browser engine library, used by the apps that need one.
 webkit = "1.17.0"
 junit = "4.13.2"
 
@@ -47,6 +45,8 @@ coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp"
 androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version = "2.12.0" }
 media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
+# HLS playlists, for the networks that serve their videos that way.
+media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls", version.ref = "media3" }
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 
