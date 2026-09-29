@@ -40,6 +40,8 @@ data class Settings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     /** True black instead of dark grey in dark mode. */
     val pureBlack: Boolean = false,
+    /** Zones and floating controls in liquid glass, over a soft light in the wallpaper's colours. */
+    val glass: Boolean = true,
     /** Reply, repost, like and view counts under posts. */
     val showCounts: Boolean = true,
     /** Multiplier on every text style, one of the steps in ui.theme.TEXT_SCALES. */

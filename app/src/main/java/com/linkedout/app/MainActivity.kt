@@ -1,5 +1,10 @@
 package com.linkedout.app
 
+import com.linkedout.app.ui.glass.LocalGlass
+import com.linkedout.app.ui.glass.glassGround
+import com.linkedout.app.ui.glass.rememberGlassLook
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import android.content.Intent
 import android.graphics.Color
 import android.widget.Toast
@@ -63,12 +68,22 @@ class MainActivity : ComponentActivity() {
                     squareAvatars = settings.squareAvatars
                 )
             ) {
-                Box(Modifier.fillMaxSize()) {
-                    // Order matters. The check runs underneath the app, which
-                    // hides it and takes every touch, and its status sits on top.
-                    ChallengeBackstage()
-                    LinkedOutApp()
-                    ChallengeOverlay()
+                // Glass over Material You: the look for this theme, or none
+                // when the reader turned it off.
+                val look = rememberGlassLook(MaterialTheme.colorScheme, settings.glass)
+                CompositionLocalProvider(LocalGlass provides look) {
+                    Box(Modifier.fillMaxSize()) {
+                        // Order matters. The check runs underneath the app, which
+                        // hides it and takes every touch, and its status sits on top.
+                        // The page's ground is painted on the app, not under the
+                        // check: the screens are see through so the ambient light
+                        // shows, and the ground is what keeps the check hidden.
+                        ChallengeBackstage()
+                        Box(Modifier.fillMaxSize().glassGround(look, MaterialTheme.colorScheme.background)) {
+                            LinkedOutApp()
+                        }
+                        ChallengeOverlay()
+                    }
                 }
             }
         }

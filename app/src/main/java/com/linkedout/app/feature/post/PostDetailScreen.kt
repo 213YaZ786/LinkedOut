@@ -1,5 +1,9 @@
 package com.linkedout.app.feature.post
 
+import com.linkedout.app.ui.glass.LocalGlass
+import com.linkedout.app.ui.glass.groundHere
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.TopAppBarDefaults
 import com.linkedout.app.ui.component.RejectOnFailure
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.plus
@@ -109,6 +113,9 @@ fun PostDetailScreen(
     val post = state.post
 
     Scaffold(
+        // The page's ground is painted under the whole app, see MainActivity.
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         // The NavHost's own Scaffold already stands clear of the status and
         // navigation bars. A nested Scaffold applies them a second time, and a
         // TopAppBar a third, which is where the empty band above and below the
@@ -116,8 +123,10 @@ fun PostDetailScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                // The page's ground where the bar sits, ambient light included.
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
                 // Over the reading column, like the content under it.
-                modifier = Modifier.padding(horizontal = LocalReadableInset.current),
+                modifier = Modifier.groundHere(LocalGlass.current, MaterialTheme.colorScheme.background).padding(horizontal = LocalReadableInset.current),
                 title = { Text("Post") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -353,7 +362,10 @@ private fun PostBody(
             Surface(
                 onClick = { onOpenProfile(post.authorHandle) },
                 shape = InnerZoneShape,
-                color = MaterialTheme.colorScheme.zone
+                // See through: this is a tap target on the zone, not a second
+                // card inside the first one.
+                color = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onSurface
             ) {
                 Row(
                     modifier = Modifier.padding(vertical = 4.dp),

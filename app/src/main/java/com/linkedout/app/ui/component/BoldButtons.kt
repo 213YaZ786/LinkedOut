@@ -1,5 +1,6 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.foundation.background
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.shape.CircleShape
 import com.linkedout.app.ui.glass.glassZone
@@ -41,6 +42,27 @@ fun BoldButton(
     filled: Boolean = false,
     content: @Composable RowScope.() -> Unit
 ) {
+    // In glass, a pane of glass with its label in the accent and no edge;
+    // the main action of a place keeps a wash of the accent inside.
+    val glass = LocalGlass.current
+    if (glass != null) {
+        val shape = ButtonDefaults.outlinedShape
+        OutlinedButton(
+            onClick = onClick,
+            modifier = modifier
+                .glassZone(shape, glass, lens = 1f)
+                .then(if (filled && enabled) Modifier.background(glass.accentTint.copy(alpha = 0.45f), shape) else Modifier),
+            enabled = enabled,
+            shape = shape,
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.Transparent,
+                contentColor = if (filled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+            ),
+            border = null,
+            content = content
+        )
+        return
+    }
     OutlinedButton(
         onClick = onClick,
         modifier = modifier,

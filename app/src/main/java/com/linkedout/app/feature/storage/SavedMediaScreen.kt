@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.storage
 
+import com.linkedout.app.ui.component.ZoneAlertDialog
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.navigation.LocalReadableInset
@@ -14,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,7 +63,7 @@ fun SavedMediaScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) { reload() }
 
     if (confirmAll) {
-        AlertDialog(
+        ZoneAlertDialog(
             onDismissRequest = { confirmAll = false },
             title = { Text("Delete every saved file?") },
             text = {

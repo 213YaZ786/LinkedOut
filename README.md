@@ -13,7 +13,7 @@ Read public LinkedIn posts on Android, with no account, no tracking and no ads.
 - **Open shared documents**: a PDF or slide deck in a post opens in your PDF reader or saves to Downloads.
 - **Search job offers** in the Jobs tab, by title and place, and read each offer in full before applying on LinkedIn. What you search is sent to LinkedIn, as on its own site.
 - **Read offline.** Posts you have seen are saved on the phone and stay readable without a connection.
-- **Choose your look**: light, dark, pure black, text size, compact posts, square avatars.
+- **Choose your look**: light, dark, pure black, text size, compact posts, square avatars, and liquid glass zones you can turn off.
 
 ## How to name someone
 

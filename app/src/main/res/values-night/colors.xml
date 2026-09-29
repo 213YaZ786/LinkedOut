@@ -1,0 +1,4 @@
+<resources>
+    <!-- By night the ground is a deep neutral, the letters keep their tone. -->
+    <color name="ic_launcher_background">@android:color/system_neutral1_800</color>
+</resources>

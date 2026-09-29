@@ -1,5 +1,11 @@
 package com.linkedout.app.navigation
 
+import com.linkedout.app.ui.glass.LocalGlassBackdrop
+import com.linkedout.app.ui.glass.glassSource
+import com.linkedout.app.ui.glass.rememberGlassBackdrop
+import androidx.compose.ui.graphics.Color
+import com.linkedout.app.ui.glass.LocalGlass
+import com.linkedout.app.ui.glass.glassGround
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.core.model.JobCard
@@ -189,7 +195,9 @@ private const val EXIT_MS = 180
 
 @Composable
 private fun LinkedOutNavHost(navController: NavHostController) {
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { innerPadding ->
+    // Transparent: the page's ground, with its ambient light when glass is
+    // on, is painted once under the whole app, see MainActivity.
+    Scaffold(containerColor = Color.Transparent) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = Routes.MAIN,
@@ -460,6 +468,13 @@ private fun MainTabs(
         // The screens draw under the navigation bar, so what sits at the
         // bottom of them clears it on top of the dock.
         val navigationBar = navigationBarBottom()
+        // In glass, the tabs are recorded as they are drawn, for the dock
+        // floating over them to bend them. Only the dock is given them: a
+        // screen's own floating controls use their screen's backdrop.
+        val look = LocalGlass.current
+        val tabsBackdrop = rememberGlassBackdrop()
+        val tabsSource = if (look != null) Modifier.glassSource(tabsBackdrop, look) else Modifier
+        val dockBackdrop = tabsBackdrop.takeIf { look != null }
         if (side) {
             // Where the margins around the 720 dp column are wide enough, the
             // pill sits in the left one and the column stays centred on the
@@ -471,37 +486,47 @@ private fun MainTabs(
                     pages(
                         Modifier
                             .fillMaxSize()
+                            .then(tabsSource)
                             .padding(start = if (clearsPill) 0.dp else SideDockClearance)
                     )
                 }
 
-                FloatingDock(
-                    items = tabs.map { DockItem(it.icon, it.label) },
-                    position = pager.currentPage + pager.currentPageOffsetFraction,
-                    onSelect = ::go,
-                    vertical = true,
-                    modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp)
-                )
+                CompositionLocalProvider(LocalGlassBackdrop provides dockBackdrop) {
+                    FloatingDock(
+                        items = tabs.map { DockItem(it.icon, it.label) },
+                        position = pager.currentPage + pager.currentPageOffsetFraction,
+                        onSelect = ::go,
+                        vertical = true,
+                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp)
+                    )
+                }
             }
         } else {
             Box(Modifier.fillMaxSize()) {
                 CompositionLocalProvider(LocalDockPadding provides DockClearance + navigationBar) {
-                    pages(Modifier.fillMaxSize())
+                    pages(Modifier.fillMaxSize().then(tabsSource))
                 }
 
-                FloatingDock(
-                    items = tabs.map { DockItem(it.icon, it.label) },
-                    position = pager.currentPage + pager.currentPageOffsetFraction,
-                    onSelect = ::go,
-                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
-                )
+                CompositionLocalProvider(LocalGlassBackdrop provides dockBackdrop) {
+                    FloatingDock(
+                        items = tabs.map { DockItem(it.icon, it.label) },
+                        position = pager.currentPage + pager.currentPageOffsetFraction,
+                        onSelect = ::go,
+                        modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
+                    )
+                }
             }
         }
 
         // Above the tabs and the dock. A Surface also stops touches from
         // reaching the screen underneath.
         if (showWelcome) {
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            // Opaque over the app, with the page's ground and its ambient light.
+            Surface(
+                Modifier.fillMaxSize().glassGround(LocalGlass.current, MaterialTheme.colorScheme.background),
+                color = Color.Transparent,
+                contentColor = MaterialTheme.colorScheme.onBackground
+            ) {
                 Readable { WelcomeScreen(onFinish = ::closeWelcome) }
             }
         }

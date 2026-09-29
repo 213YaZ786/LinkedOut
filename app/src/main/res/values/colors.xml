@@ -1,22 +1,10 @@
 <resources>
     <!--
-        The launcher icon's background follows the wallpaper. The glyph does
-        not: it stays white, which is what the icon has always looked like and
-        what keeps it recognisable whatever the palette does.
-
-        accent1_400 is a light tone of the wallpaper palette, and it is the
-        lightest one white strokes still sit on. Going up to 300 or 200 starts
-        losing the glyph on a pale wallpaper, so this is the light end rather
-        than the middle.
-
-        An absolute tone, not a theme colour, so the icon looks the same
-        whether the phone is in light or dark mode, which is right for
-        something that lives on the home screen.
-
-        No values-v31 copy: minSdk is 31, so there is no device here without
-        these resources, and a second file would only be a second place to
-        forget.
+        The launcher icon follows the wallpaper: the letters take a light tone
+        of the accent, 300, which their grey body shades and their white
+        highlights brighten; the ground is the palest tone of the accent by
+        day and a deep neutral by night, as for the other apps.
     -->
-    <color name="ic_launcher_background">@android:color/system_accent1_400</color>
-    <color name="ic_launcher_foreground">#FFFFFF</color>
+    <color name="ic_launcher_background">@android:color/system_accent1_50</color>
+    <color name="ic_launcher_letters">@android:color/system_accent1_300</color>
 </resources>

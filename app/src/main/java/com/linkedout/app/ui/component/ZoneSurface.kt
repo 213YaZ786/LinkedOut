@@ -4,6 +4,7 @@ import com.linkedout.app.ui.glass.LocalGlass
 import com.linkedout.app.ui.glass.glassZone
 import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.contentColorFor
@@ -32,17 +33,27 @@ fun ZoneSurface(
     tonalElevation: Dp = 0.dp,
     shadowElevation: Dp = 0.dp,
     onClick: (() -> Unit)? = null,
+    /** A chosen option: in glass, a wash of the accent over the glass, as [color] gives without glass. */
+    accent: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val glass = LocalGlass.current
-    val look = if (glass == null) modifier else modifier.glassZone(shape, glass)
+    val look = when {
+        glass == null -> modifier
+        accent -> modifier.glassZone(shape, glass).background(glass.accentTint, shape)
+        else -> modifier.glassZone(shape, glass)
+    }
     val fill = if (glass == null) color else Color.Transparent
     val edge = if (glass == null) border else null
     val tonal = if (glass == null) tonalElevation else 0.dp
     val shadow = if (glass == null) shadowElevation else 0.dp
     // A transparent fill has no text colour of its own, and Material would
     // fall back to black: the glass carries the page's text colour instead.
-    val text = if (glass == null) contentColorFor(color) else MaterialTheme.colorScheme.onSurface
+    val text = when {
+        glass == null -> contentColorFor(color)
+        accent -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
     if (onClick == null) {
         Surface(look, shape, fill, text, tonal, shadow, edge, content)
     } else {

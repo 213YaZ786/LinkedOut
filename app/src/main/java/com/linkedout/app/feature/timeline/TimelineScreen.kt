@@ -1,5 +1,10 @@
 package com.linkedout.app.feature.timeline
 
+import com.linkedout.app.ui.glass.LocalGlassBackdrop
+import com.linkedout.app.ui.glass.LocalGlass
+import com.linkedout.app.ui.glass.glassSource
+import com.linkedout.app.ui.glass.rememberGlassBackdrop
+import com.linkedout.app.ui.component.ZoneAlertDialog
 import com.linkedout.app.ui.component.rememberRefreshHaptics
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.PullIndicator
@@ -29,7 +34,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -219,6 +223,11 @@ fun TimelineScreen(
     }
 
     val pull = rememberPullToRefreshState()
+    // In glass, the list is recorded as it scrolls, for the controls that
+    // float over it (the refresh disc, the folder and back to top buttons)
+    // to bend it.
+    val look = LocalGlass.current
+    val listBackdrop = rememberGlassBackdrop()
     when {
         state.followedCount == 0 -> Column(
             Modifier.fillMaxSize().padding(start = LocalReadableInset.current, end = LocalReadableInset.current, top = statusBarTop())
@@ -277,7 +286,7 @@ fun TimelineScreen(
             }
         }
 
-        else -> PullToRefreshBox(
+        else -> CompositionLocalProvider(LocalGlassBackdrop provides listBackdrop.takeIf { look != null }) { PullToRefreshBox(
             isRefreshing = state.loading,
             onRefresh = {
                 askedRefresh()
@@ -324,7 +333,7 @@ fun TimelineScreen(
                         top = statusBarTop(),
                         bottom = LocalDockPadding.current
                     ),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize().then(if (look != null) Modifier.glassSource(listBackdrop, look) else Modifier)
                 ) {
                     item(key = "banner") { banner() }
 
@@ -374,7 +383,7 @@ fun TimelineScreen(
                     onClick = { choosingFolder = true }
                 )
             }
-        }
+        } }
     }
 }
 
@@ -402,7 +411,7 @@ private fun FailureDialog(
     onRetry: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    ZoneAlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(

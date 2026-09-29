@@ -1,5 +1,12 @@
 package com.linkedout.app.ui.component
 
+import kotlin.math.sin
+import kotlin.math.floor
+import kotlin.math.PI
+import androidx.compose.ui.graphics.Color
+import com.linkedout.app.ui.glass.glassFloating
+import com.linkedout.app.ui.glass.LocalGlassBackdrop
+import com.linkedout.app.ui.glass.LocalGlass
 import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -72,28 +79,46 @@ fun FloatingDock(
     // No extra animation here: the pager already animates taps, and while
     // swiping the highlight must stay exactly under the finger.
     val animated = position
-    val haptics = rememberHaptics()
 
+    // In glass, the dock bends the tabs under it, with no edge nor shadow,
+    // and the chosen tab is a drop of glass in the accent that stretches as
+    // it slides from one tab to the next.
+    val haptics = rememberHaptics()
+    val look = LocalGlass.current
+    val backdrop = LocalGlassBackdrop.current
+    val glass = look != null && backdrop != null
     Surface(
         shape = CircleShape,
         // Tinted like every zone, with the edge the buttons carry, so the
         // dock reads as the row of actions it is.
-        color = MaterialTheme.colorScheme.zone,
-        border = boldBorder(),
-        shadowElevation = 8.dp,
-        tonalElevation = 2.dp,
-        modifier = modifier
+        color = if (glass) Color.Transparent else MaterialTheme.colorScheme.zone,
+        border = if (glass) null else boldBorder(),
+        shadowElevation = if (glass) 0.dp else 8.dp,
+        tonalElevation = if (glass) 0.dp else 2.dp,
+        modifier = if (glass) modifier.glassFloating(backdrop!!, CircleShape, look!!) else modifier
     ) {
         Box(Modifier.padding(8.dp)) {
+            // Half way between two tabs the drop is at its longest.
+            val stretch = if (glass) sin(PI.toFloat() * (animated - floor(animated))) * 0.35f else 0f
+            val along = if (vertical) itemHeight else itemWidth
+            val extraPx = with(LocalDensity.current) { (along * stretch).toPx() }
             Box(
                 Modifier
                     .offset {
-                        val step = (animated * stepPx).roundToInt()
+                        val step = (animated * stepPx - extraPx / 2f).roundToInt()
                         if (vertical) IntOffset(0, step) else IntOffset(step, 0)
                     }
-                    .size(itemWidth, itemHeight)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .size(
+                        if (vertical) itemWidth else itemWidth * (1f + stretch),
+                        if (vertical) itemHeight * (1f + stretch) else itemHeight
+                    )
+                    .then(
+                        if (glass) {
+                            Modifier.glassFloating(backdrop!!, CircleShape, look!!, tint = look.accentTint, lens = 1.6f)
+                        } else {
+                            Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer)
+                        }
+                    )
             )
             val buttons: @Composable () -> Unit = {
                 items.forEachIndexed { index, item ->

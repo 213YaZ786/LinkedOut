@@ -1,5 +1,8 @@
 package com.linkedout.app.feature.search
 
+import com.linkedout.app.ui.glass.LocalGlass
+import com.linkedout.app.ui.glass.groundHere
+import androidx.compose.material3.TopAppBarDefaults
 import com.linkedout.app.ui.component.plus
 import androidx.compose.foundation.layout.PaddingValues
 import com.linkedout.app.navigation.LocalReadableInset
@@ -76,6 +79,9 @@ fun SearchScreen(
     }
 
     Scaffold(
+        // The page's ground is painted under the whole app, see MainActivity.
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         // The NavHost's own Scaffold already stands clear of the status and
         // navigation bars. A nested Scaffold applies them a second time, and a
         // TopAppBar a third, which is where the empty band above and below the
@@ -83,8 +89,10 @@ fun SearchScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
+                // The page's ground where the bar sits, ambient light included.
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
                 // Over the reading column, like the content under it.
-                modifier = Modifier.padding(horizontal = LocalReadableInset.current),
+                modifier = Modifier.groundHere(LocalGlass.current, MaterialTheme.colorScheme.background).padding(horizontal = LocalReadableInset.current),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(LinkedOutIcons.ArrowBack, contentDescription = "Back")

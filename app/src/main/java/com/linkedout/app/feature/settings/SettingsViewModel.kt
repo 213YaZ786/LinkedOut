@@ -136,6 +136,8 @@ class SettingsViewModel(
 
     fun setPureBlack(enabled: Boolean) = store.update { it.copy(pureBlack = enabled) }
 
+    fun setGlass(enabled: Boolean) = store.update { it.copy(glass = enabled) }
+
     fun setShowCounts(enabled: Boolean) = store.update { it.copy(showCounts = enabled) }
 
     fun setTextScale(scale: Float) = store.update { it.copy(textScale = scale) }

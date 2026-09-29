@@ -1,11 +1,16 @@
 package com.linkedout.app.feature.connection
 
+import com.linkedout.app.ui.glass.LocalGlass
+import com.linkedout.app.ui.glass.groundHere
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.linkedout.app.ui.component.ZoneSurface
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,8 +47,14 @@ fun ConnectionScreen(onBack: () -> Unit) {
     val cooldownMs = throttle.cooldownRemainingMs(LinkedInHost.HOST)
 
     Scaffold(
+        // The page's ground is painted under the whole app, see MainActivity.
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
             TopAppBar(
+                // The page's ground where the bar sits, ambient light included.
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
+                modifier = Modifier.groundHere(LocalGlass.current, MaterialTheme.colorScheme.background),
                 title = { Text("Connection") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -57,7 +68,7 @@ fun ConnectionScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(Modifier.fillMaxWidth()) {
+            ZoneSurface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -44,7 +43,7 @@ fun FolderDialog(
     var creating by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
 
-    AlertDialog(
+    ZoneAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

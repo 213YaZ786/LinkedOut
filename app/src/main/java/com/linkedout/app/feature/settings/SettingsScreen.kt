@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.settings
 
+import com.linkedout.app.ui.component.ZoneAlertDialog
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsTopHeight
@@ -38,7 +39,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -208,6 +208,12 @@ fun SettingsScreen(
                 checked = settings.pureBlack,
                 enabled = settings.themeMode != ThemeMode.LIGHT,
                 onChange = viewModel::setPureBlack
+            )
+            SwitchRow(
+                title = "Glass effects",
+                summary = "Zones and floating buttons in liquid glass, over a soft light in your wallpaper's colours.",
+                checked = settings.glass,
+                onChange = viewModel::setGlass
             )
             SwitchRow(
                 title = "Show counts",
@@ -456,7 +462,7 @@ fun SettingsScreen(
             onSelect = viewModel::setInterval,
             onDismiss = { dialog = OpenDialog.NONE }
         )
-        OpenDialog.CLEAR -> AlertDialog(
+        OpenDialog.CLEAR -> ZoneAlertDialog(
             onDismissRequest = { dialog = OpenDialog.NONE },
             title = { Text("Clear saved posts?") },
             text = {
@@ -472,7 +478,7 @@ fun SettingsScreen(
                 TextButton(onClick = { dialog = OpenDialog.NONE }) { Text("Cancel") }
             }
         )
-        OpenDialog.COOKIES -> AlertDialog(
+        OpenDialog.COOKIES -> ZoneAlertDialog(
             onDismissRequest = { dialog = OpenDialog.NONE },
             title = { Text("Clear browsing data?") },
             text = {
@@ -581,7 +587,7 @@ private fun <T> ChoiceDialog(
     onSelect: (T) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    ZoneAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {

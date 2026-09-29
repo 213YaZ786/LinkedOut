@@ -1,39 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="512"
-    android:viewportHeight="512">
-
-    <group
-        android:pivotX="256"
-        android:pivotY="256"
-        android:scaleX="0.73"
-        android:scaleY="0.73">
-
-        <path
-            android:pathData="M60,279 a56,56 0 1,0 112,0 a56,56 0 1,0 -112,0"
-            android:strokeColor="@color/ic_launcher_foreground"
-            android:strokeWidth="34"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M224,223 V286 A49,49 0 0,0 322,286 V223"
-            android:strokeColor="@color/ic_launcher_foreground"
-            android:strokeWidth="34"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M414,177 V298 A37,37 0 0,0 451,335"
-            android:strokeColor="@color/ic_launcher_foreground"
-            android:strokeWidth="34"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-        <path
-            android:pathData="M378,223 H448"
-            android:strokeColor="@color/ic_launcher_foreground"
-            android:strokeWidth="34"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round" />
-    </group>
-</vector>
+<!-- LinkedOut's launcher glyph: "out" in glossy bubble letters.
+     A grey body, lit as a round tube, multiplied by a light tone of the
+     wallpaper's accent, then the white highlights over it, untinted. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <bitmap
+            android:src="@drawable/lo_body"
+            android:tint="@color/ic_launcher_letters"
+            android:tintMode="multiply" />
+    </item>
+    <item android:drawable="@drawable/lo_shine" />
+</layer-list>

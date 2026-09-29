@@ -60,6 +60,19 @@ fun Zone(
     // Here rather than at each call site: a card, a quote, a link preview and
     // an account row are all this one composable, so one tick covers them all.
     val haptics = rememberHaptics()
+    // A zone standing on the page goes through ZoneSurface, glass when glass
+    // is on. A zone nested inside a card, in its own tint, stays a plain fill:
+    // glass inside glass would be a second pane with a tight rim.
+    if (color == MaterialTheme.colorScheme.zone) {
+        ZoneSurface(
+            modifier = modifier,
+            shape = shape,
+            border = border,
+            onClick = onClick?.let { click -> { haptics.tick(); click() } },
+            content = content
+        )
+        return
+    }
     // Two calls rather than one with a null click: the clickable Surface is a
     // different overload, and giving it a no-op lambda would add a ripple and
     // a semantics node to a card that is not meant to be tapped.

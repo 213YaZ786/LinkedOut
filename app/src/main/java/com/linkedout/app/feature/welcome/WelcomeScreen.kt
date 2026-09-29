@@ -1,5 +1,9 @@
 package com.linkedout.app.feature.welcome
 
+import com.linkedout.app.ui.glass.glassZone
+import com.linkedout.app.ui.glass.LocalGlass
+import com.linkedout.app.ui.component.BoldButton
+import com.linkedout.app.ui.component.ZoneSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,7 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -179,7 +182,8 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
                 }
             }
             Spacer(Modifier.weight(1f))
-            Button(
+            BoldButton(
+                filled = true,
                 // The last page has no way forward until the choice is made.
                 enabled = !last || chosen != null,
                 onClick = {
@@ -204,7 +208,7 @@ private fun PageContent(
         Box(
             modifier = Modifier
                 .size(80.dp)
-                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                .accentDisc(),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -257,7 +261,7 @@ private fun MediaOption(
     onChoose: (AutoDownload) -> Unit
 ) {
     val picked = chosen == value
-    Surface(
+    ZoneSurface(
         onClick = { onChoose(value) },
         shape = RoundedCornerShape(16.dp),
         color = if (picked) {
@@ -265,17 +269,14 @@ private fun MediaOption(
         } else {
             MaterialTheme.colorScheme.surfaceContainerHigh
         },
+        accent = picked,
         modifier = Modifier.fillMaxWidth()
     ) {
+        // The text takes the zone's own colour, which knows whether it is picked.
         Text(
             label,
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
-            color = if (picked) {
-                MaterialTheme.colorScheme.onPrimary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
             modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)
         )
     }
@@ -284,7 +285,7 @@ private fun MediaOption(
 @Composable
 private fun LinkExample() {
     val handleStyle = SpanStyle(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-    Surface(
+    ZoneSurface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
@@ -340,5 +341,16 @@ private fun Dots(count: Int, current: Int) {
                     )
             )
         }
+    }
+}
+
+/** The page's icon on a disc of the accent: a drop of glass in the accent when glass is on. */
+@Composable
+private fun Modifier.accentDisc(): Modifier {
+    val glass = LocalGlass.current
+    return if (glass == null) {
+        background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+    } else {
+        glassZone(CircleShape, glass, lens = 1f).background(glass.accentTint, CircleShape)
     }
 }
