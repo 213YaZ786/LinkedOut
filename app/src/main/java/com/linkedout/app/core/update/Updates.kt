@@ -40,6 +40,8 @@ object Updates {
     private const val REPO = "213YaZ786/LinkedOut"
     private const val ACTION_STATUS = "com.linkedout.app.UPDATE_STATUS"
     private const val TIMEOUT_MS = 15_000
+    internal const val PREFS = "updates"
+    internal const val INSTALLING = "installing"
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -110,6 +112,8 @@ object Updates {
             }
             val app = context.applicationContext
             listenForConfirmation(app)
+            // Lets UpdatedReceiver tell this update from one installed by hand.
+            app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(INSTALLING, true).apply()
             val installer = app.packageManager.packageInstaller
             val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
                 setAppPackageName(app.packageName)

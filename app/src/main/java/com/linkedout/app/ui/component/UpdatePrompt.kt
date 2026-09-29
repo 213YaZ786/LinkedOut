@@ -28,7 +28,8 @@ private enum class Step { ASK, DOWNLOADING, FAILED }
 /**
  * Asks GitHub once, when the app opens, whether a newer version is out, and
  * says so in a dialog. [mode] NOTIFY offers the release page; INSTALL
- * downloads, checks and installs it, Android asking the reader to confirm.
+ * downloads, checks and installs it without a dialog, Android confirming
+ * only when it must (see UpdatedReceiver for what follows).
  * Nothing is shown when the app is up to date or GitHub cannot be reached.
  */
 @Composable
@@ -42,7 +43,18 @@ fun UpdatePrompt(mode: UpdateMode, currentVersion: String) {
     LaunchedEffect(Unit) {
         if (checkedThisLaunch) return@LaunchedEffect
         checkedThisLaunch = true
-        Updates.latest()?.takeIf { Updates.isNewer(it.version, currentVersion) }?.let { release = it }
+        val newer = Updates.latest()?.takeIf { Updates.isNewer(it.version, currentVersion) } ?: return@LaunchedEffect
+        // Install mode asks nothing: the update downloads and installs by
+        // itself, Android confirming only when it must. The dialog shows
+        // only when installing cannot go ahead, or failed.
+        if (mode == UpdateMode.INSTALL && newer.apk != null && Updates.canInstall(context)) {
+            if (!Updates.install(context, newer)) {
+                step = Step.FAILED
+                release = newer
+            }
+        } else {
+            release = newer
+        }
     }
 
     val shown = release ?: return
