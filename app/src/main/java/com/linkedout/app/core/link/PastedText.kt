@@ -29,7 +29,9 @@ object PastedText {
         val text = raw.trim()
         if (text.isEmpty()) return ""
 
-        URL.find(text)?.value?.let { return trimWrappers(it) }
+        // A detour through a search engine or another site is unwrapped to
+        // the page it stands for, and tracking is dropped, see LinkCleaner.
+        URL.find(text)?.value?.let { return LinkCleaner.clean(trimWrappers(it)) }
 
         // No scheme. The address bar on some browsers hides it, and people
         // type the address without it too.

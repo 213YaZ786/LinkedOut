@@ -1,5 +1,6 @@
 package com.linkedout.app.di
 
+import com.linkedout.app.core.link.RedirectResolver
 import com.linkedout.app.data.linkedin.JobsSource
 import com.linkedout.app.feature.jobs.JobDetailViewModel
 import com.linkedout.app.feature.jobs.JobsViewModel
@@ -58,6 +59,7 @@ val appModule = module {
     single(named("appScope")) { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
 
     single { RequestLog() }
+    single { RedirectResolver() }
     single { LogExporter(androidContext()) }
     single { HostThrottle() }
     single { WebSession() }

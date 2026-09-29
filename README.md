@@ -24,8 +24,9 @@ named by the last part of their profile address:
 linkedin.com/in/jane-doe-5b19a2
 ```
 
-In Accounts, type that part or paste the whole address. Sharing a profile to
-LinkedOut from a browser or from the LinkedIn app works too.
+In Accounts, type that part or paste the whole address. A link copied from a
+Google search works too, so you never have to open LinkedIn to find someone.
+Sharing a profile to LinkedOut from a browser or from the LinkedIn app works too.
 
 Company, school and showcase pages work the same way, with `/company/`,
 `/school/` or `/showcase/` in place of `/in/`. Paste the whole address for
@@ -34,6 +35,10 @@ those, since the name alone cannot say which kind of page it is.
 ## Privacy
 
 - No account, no sign in, no ads, no analytics, no crash reporting.
+- A link copied from a search engine or another site is cleaned on your phone,
+  so it leads straight to the page. Google's own result links hide the address:
+  for those only, the app asks Google once where the link leads, without
+  cookies, and opens nothing there.
 - Few permissions: internet access, network status, notifications (asked only
   if you turn on new post alerts or automatic downloads), one that lets a batch
   of downloads show a single progress line, and one that asks Android, when you

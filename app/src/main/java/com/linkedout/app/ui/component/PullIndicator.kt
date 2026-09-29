@@ -56,10 +56,10 @@ fun PullIndicator(state: PullToRefreshState, isRefreshing: Boolean, modifier: Mo
             shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shadowElevation = 3.dp,
-            modifier = Modifier.size(44.dp)
+            modifier = Modifier.size(56.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                LoadingMark(size = 30.dp, running = isRefreshing, progress = fraction.coerceIn(0f, 1f))
+                LoadingMark(size = 44.dp, running = isRefreshing, progress = fraction.coerceIn(0f, 1f))
             }
         }
     }

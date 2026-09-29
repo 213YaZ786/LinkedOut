@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.core.link.LinkCleaner
+import com.linkedout.app.ui.component.CleanLinkEffect
 import com.linkedout.app.ui.component.rememberHaptics
 import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.ui.unit.Dp
@@ -133,6 +135,26 @@ fun AccountsScreen(
         onOpenFeed(handle, kind)
     }
 
+    // A detour link in the field, from a search engine or another site,
+    // becomes the address it stands for; a pasted one then opens like any
+    // other paste.
+    var openWhenClean by remember { mutableStateOf(false) }
+    CleanLinkEffect(
+        text = query,
+        onClean = { clean ->
+            query = clean
+            if (openWhenClean) {
+                openWhenClean = false
+                (AccountsViewModel.classify(clean) as? QueryKind.Profile)?.let { open(it.handle, it.kind) }
+            }
+        },
+        onUnreadable = {
+            openWhenClean = false
+            haptics.reject()
+            notice = "Google did not say where this link leads. Open it and copy the page address."
+        }
+    )
+
     /**
      * One tap: read the clipboard, put what it holds in the field, and open
      * the account it names. The clipboard often holds a sentence with the
@@ -156,6 +178,12 @@ fun AccountsScreen(
         }
         notice = null
         query = text
+        if (LinkCleaner.needsResolving(text)) {
+            // Opened once Google has said where it leads, see CleanLinkEffect.
+            openWhenClean = true
+            focus.clearFocus()
+            return
+        }
         val found = AccountsViewModel.classify(text) as? QueryKind.Profile
         if (found != null) {
             open(found.handle, found.kind)
