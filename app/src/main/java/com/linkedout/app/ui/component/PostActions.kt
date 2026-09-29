@@ -35,12 +35,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.translate
-import androidx.compose.ui.graphics.drawscope.scale
+import com.linkedout.app.R
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -253,7 +253,7 @@ private fun PillButton(
 }
 
 /**
- * Glossy hearts rising from where the pill was, each on its own sway, a
+ * Glass hearts rising from where the pill was, each on its own sway, a
  * little larger as they rise and fading at the top.
  */
 @Composable
@@ -277,7 +277,7 @@ private fun FloatingHearts(onEnd: () -> Unit) {
         delay(16)
         onEnd()
     }
-    val heart = remember { PathParser().parsePathString(HEART_PATH).toPath() }
+    val heart = ImageBitmap.imageResource(R.drawable.heart_glass)
     Canvas(Modifier.size(width = 200.dp, height = 300.dp)) {
         val unit = 1.dp.toPx()
         hearts.forEach { h ->
@@ -291,21 +291,13 @@ private fun FloatingHearts(onEnd: () -> Unit) {
                 p > 0.65f -> (1f - p) / 0.35f
                 else -> 1f
             }
-            translate(x - side / 2, y - side) {
-                scale(side / 24f, side / 24f, pivot = Offset.Zero) {
-                    drawPath(
-                        heart,
-                        brush = Brush.radialGradient(
-                            listOf(HEART_LIGHT, HEART_PINK, HEART_DEEP),
-                            center = Offset(8.5f, 7.5f),
-                            radius = 15f
-                        ),
-                        alpha = alpha
-                    )
-                    drawPath(heart, SolidColor(HEART_EDGE), alpha = alpha * 0.8f, style = Stroke(width = 0.6f))
-                    drawOval(Color.White, topLeft = Offset(5.2f, 5.6f), size = androidx.compose.ui.geometry.Size(4.2f, 2.8f), alpha = alpha * 0.55f)
-                }
-            }
+            drawImage(
+                heart,
+                dstOffset = IntOffset((x - side / 2).toInt(), (y - side).toInt()),
+                dstSize = IntSize(side.toInt(), side.toInt()),
+                alpha = alpha,
+                filterQuality = FilterQuality.High
+            )
         }
     }
 }
@@ -340,10 +332,7 @@ private class AtPoint(val point: IntOffset, val fx: Float, val fy: Float, val ma
 
 private const val HEARTS = 9
 private const val HEARTS_MS = 1800
-private val HEART_LIGHT = Color(0xFFFFB3CE)
 private val HEART_PINK = Color(0xFFEC4F86)
-private val HEART_DEEP = Color(0xFFC72C63)
-private val HEART_EDGE = Color(0xFFA8234F)
 private const val HEART_PATH =
     "M12,21.35l-1.45,-1.32C5.4,15.36 2,12.28 2,8.5 2,5.42 4.42,3 7.5,3c1.74,0 3.41,0.81 4.5,2.09" +
         "C13.09,3.81 14.76,3 16.5,3 19.58,3 22,5.42 22,8.5c0,3.78 -3.4,6.86 -8.55,11.54L12,21.35z"
