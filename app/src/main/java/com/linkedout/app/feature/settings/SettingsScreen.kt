@@ -1,5 +1,7 @@
 package com.linkedout.app.feature.settings
 
+import com.linkedout.app.core.update.UpdateMode
+import com.linkedout.app.core.update.Updates
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.component.ZoneSurface
@@ -72,7 +74,7 @@ import com.linkedout.app.ui.theme.TEXT_SCALES
 import com.linkedout.app.ui.theme.textScaleLabel
 import org.koin.androidx.compose.koinViewModel
 
-private enum class OpenDialog { NONE, THEME, TEXT_SIZE, KEEP, FREQUENCY, CLEAR, START_TAB, COOKIES, AUTO_DOWNLOAD }
+private enum class OpenDialog { NONE, THEME, TEXT_SIZE, KEEP, FREQUENCY, CLEAR, START_TAB, COOKIES, AUTO_DOWNLOAD, UPDATES }
 
 private val KEEP_DAYS = listOf(7, 30, 90, 365, 0)
 
@@ -395,6 +397,11 @@ fun SettingsScreen(
 
         Section("About") {
             SettingRow(
+                title = "Updates",
+                summary = updatesLabel(settings.updates),
+                onClick = { dialog = OpenDialog.UPDATES }
+            )
+            SettingRow(
                 title = "LinkedOut ${BuildConfig.VERSION_NAME}",
                 summary = "Read public LinkedIn posts with no account, no tracking and no ads.",
                 onClick = null
@@ -452,6 +459,17 @@ fun SettingsScreen(
             options = TEXT_SCALES.map { it to textScaleLabel(it) },
             selected = settings.textScale,
             onSelect = viewModel::setTextScale,
+            onDismiss = { dialog = OpenDialog.NONE }
+        )
+        OpenDialog.UPDATES -> ChoiceDialog(
+            title = "Updates",
+            options = UpdateMode.entries.map { it to updatesLabel(it) },
+            selected = settings.updates,
+            onSelect = { mode ->
+                viewModel.setUpdates(mode)
+                // Installing needs Android's leave, asked when chosen.
+                if (mode == UpdateMode.INSTALL && !Updates.canInstall(context)) Updates.allowInstalls(context)
+            },
             onDismiss = { dialog = OpenDialog.NONE }
         )
         OpenDialog.AUTO_DOWNLOAD -> ChoiceDialog(
@@ -630,6 +648,12 @@ private fun <T> ChoiceDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+private fun updatesLabel(mode: UpdateMode): String = when (mode) {
+    UpdateMode.OFF -> "Off"
+    UpdateMode.NOTIFY -> "Notify me"
+    UpdateMode.INSTALL -> "Install"
 }
 
 /**

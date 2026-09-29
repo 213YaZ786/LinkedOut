@@ -145,6 +145,7 @@ jobs:
             | grep -v "android.permission.INTERNET" \
             | grep -v "android.permission.ACCESS_NETWORK_STATE" \
             | grep -v "android.permission.POST_NOTIFICATIONS" \
+            | grep -v "android.permission.REQUEST_INSTALL_PACKAGES" \
             | grep -v "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" \
             | grep -v "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" \
             | grep -v "android.permission.WAKE_LOCK" \

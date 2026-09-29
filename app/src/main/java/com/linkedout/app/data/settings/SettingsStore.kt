@@ -1,5 +1,6 @@
 package com.linkedout.app.data.settings
 
+import com.linkedout.app.core.update.UpdateMode
 import com.linkedout.app.core.common.writeTextAtomically
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,8 @@ enum class AutoDownload { NEVER, WIFI, ALWAYS }
 
 @Serializable
 data class Settings(
+    /** What happens when a newer version is out, checked once when the app opens. */
+    val updates: UpdateMode = UpdateMode.NOTIFY,
     /** Poll followed accounts in the background so history accumulates. */
     val backgroundSync: Boolean = false,
     val syncIntervalMinutes: Int = 60,

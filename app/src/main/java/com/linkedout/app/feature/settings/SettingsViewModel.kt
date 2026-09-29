@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.settings
 
+import com.linkedout.app.core.update.UpdateMode
 import android.content.Context
 import android.net.Uri
 import java.io.ByteArrayOutputStream
@@ -219,6 +220,8 @@ class SettingsViewModel(
         }
         _guestCookies.value = cookies.count()
     }
+
+    fun setUpdates(mode: UpdateMode) = store.update { it.copy(updates = mode) }
 
     fun setAutoDownloadMedia(choice: AutoDownload) =
         store.update { it.copy(autoDownloadMedia = choice) }
