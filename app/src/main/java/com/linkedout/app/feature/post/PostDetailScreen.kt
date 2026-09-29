@@ -392,7 +392,7 @@ private fun PostBody(
 
             if (post.text.isNotBlank()) {
                 val linkColor = MaterialTheme.colorScheme.primary
-                val annotated = remember(post.id, linkColor) {
+                val annotated = remember(post.id, post.text, post.links, linkColor) {
                     linkify(post.text, post.links, linkColor, onOpenProfile)
                 }
                 SelectionContainer {
