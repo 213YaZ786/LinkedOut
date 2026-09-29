@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.post
 
+import com.linkedout.app.ui.component.RejectOnFailure
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.plus
 import com.linkedout.app.ui.component.BoldButton
@@ -100,6 +101,7 @@ fun PostDetailScreen(
     viewModel: PostDetailViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    RejectOnFailure((state.thread as? ThreadState.Failed)?.error)
     val context = LocalContext.current
 
     LaunchedEffect(id) { viewModel.load(id, from) }

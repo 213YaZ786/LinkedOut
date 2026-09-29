@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.ui.component.rememberHaptics
 import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.layout.layout
@@ -102,6 +103,7 @@ fun AccountsScreen(
     var notice by remember { mutableStateOf<String?>(null) }
     val focus = LocalFocusManager.current
     val context = LocalContext.current
+    val haptics = rememberHaptics()
 
     // Coming back from a profile may have brought new posts or an avatar.
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -148,6 +150,7 @@ fun AccountsScreen(
             .orEmpty()
         val text = PastedText.query(clip) { "linkedin.com/" in it || "lnkd.in/" in it }
         if (text.isEmpty()) {
+            haptics.reject()
             notice = "Nothing to paste. Open a profile in your browser and copy its address."
             return
         }
@@ -259,7 +262,7 @@ fun AccountsScreen(
                         handle = candidate,
                         kind = candidateKind,
                         onOpen = { open(candidate, candidateKind) },
-                        onFollow = { viewModel.follow(candidate, candidateKind) }
+                        onFollow = { haptics.done(); viewModel.follow(candidate, candidateKind) }
                     )
                 }
             } else if (visible.isEmpty()) {

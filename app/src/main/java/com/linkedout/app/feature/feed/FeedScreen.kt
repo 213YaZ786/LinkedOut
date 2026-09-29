@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.feed
 
+import com.linkedout.app.ui.component.RejectOnFailure
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
@@ -93,6 +94,7 @@ fun FeedScreen(
     viewModel: FeedViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    RejectOnFailure(state.error)
     val followed by viewModel.followed.collectAsState()
     val isFollowing = followed.any { it.handle.equals(handle, ignoreCase = true) }
     val uriHandler = LocalUriHandler.current

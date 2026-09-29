@@ -525,6 +525,7 @@ private fun SettingRow(
     summary: String?,
     onClick: (() -> Unit)?,
     enabled: Boolean = true,
+    quiet: Boolean = false,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val alpha = if (enabled) 1f else 0.38f
@@ -539,10 +540,10 @@ private fun SettingRow(
         modifier = if (onClick == null) {
             Modifier
         } else {
-            // Every row of every section, and the switches with them, since a
-            // switch row is a setting row with a switch drawn on the end.
+            // Every row of every section answers with a tick; a switch row
+            // answers with the switch's own feel instead, so it is quiet here.
             Modifier.clickable(enabled = enabled) {
-                haptics.tick()
+                if (!quiet) haptics.tick()
                 onClick()
             }
         }
@@ -557,12 +558,18 @@ private fun SwitchRow(
     onChange: (Boolean) -> Unit,
     enabled: Boolean = true
 ) {
+    val haptics = rememberHaptics()
+    val change = { on: Boolean ->
+        haptics.toggle(on)
+        onChange(on)
+    }
     SettingRow(
         title = title,
         summary = summary,
         enabled = enabled,
-        onClick = { onChange(!checked) },
-        trailing = { Switch(checked = checked, onCheckedChange = onChange, enabled = enabled) }
+        quiet = true,
+        onClick = { change(!checked) },
+        trailing = { Switch(checked = checked, onCheckedChange = change, enabled = enabled) }
     )
 }
 

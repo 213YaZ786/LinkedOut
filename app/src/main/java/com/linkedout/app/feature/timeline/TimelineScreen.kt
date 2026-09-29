@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.timeline
 
+import com.linkedout.app.ui.component.rememberRefreshHaptics
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.PullIndicator
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -92,13 +93,18 @@ fun TimelineScreen(
     viewModel: TimelineViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    // The threshold is felt in the indicator itself; this answers the end of
+    // a refresh the reader pulled: done, or a refusal when nothing came.
+    val askedRefresh = rememberRefreshHaptics(
+        refreshing = state.loading,
+        failed = state.errors.isNotEmpty() && (state.posts.isEmpty() || state.errors.size >= state.followedCount)
+    )
     val uriHandler = LocalUriHandler.current
     val downloader: MediaDownloader = koinInject()
     val settingsStore: SettingsStore = koinInject()
     val settings by settingsStore.settings.collectAsState()
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val haptics = rememberHaptics()
     val readPosts: ReadPosts = koinInject()
     val read by readPosts.state.collectAsState()
     var viewing by remember { mutableStateOf<Pair<Post, Int>?>(null) }
@@ -234,8 +240,7 @@ fun TimelineScreen(
         state.isEmpty && state.errors.isNotEmpty() -> PullToRefreshBox(
             isRefreshing = state.loading,
             onRefresh = {
-                // Firm: a pull is a thing begun, not a button pressed.
-                haptics.firm()
+                askedRefresh()
                 viewModel.refresh()
             },
             modifier = Modifier.fillMaxSize(),
@@ -275,8 +280,7 @@ fun TimelineScreen(
         else -> PullToRefreshBox(
             isRefreshing = state.loading,
             onRefresh = {
-                // Firm: a pull is a thing begun, not a button pressed.
-                haptics.firm()
+                askedRefresh()
                 viewModel.refresh()
             },
             modifier = Modifier.fillMaxSize(),

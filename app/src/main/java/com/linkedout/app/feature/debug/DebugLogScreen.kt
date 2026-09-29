@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.debug
 
+import com.linkedout.app.ui.component.rememberHaptics
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.layout.Arrangement
@@ -58,6 +59,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
     val lastBody by log.lastBody.collectAsState()
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+    val haptics = rememberHaptics()
     val snackbar = remember { SnackbarHostState() }
     val stamp = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
 
@@ -94,6 +96,7 @@ fun DebugLogScreen(onBack: () -> Unit) {
             ) {
                 BoldButton(onClick = {
                     clipboard.setText(AnnotatedString(log.render()))
+                    haptics.done()
                     scope.launch { snackbar.showSnackbar("Log copied") }
                 }) { Text("Copy all") }
 
