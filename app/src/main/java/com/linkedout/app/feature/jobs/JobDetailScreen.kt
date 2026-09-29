@@ -71,7 +71,7 @@ fun JobDetailScreen(
         when {
             state.loading -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                    LoadingMark(size = 40.dp)
+                    LoadingMark(size = 96.dp)
                 }
             }
             detail == null -> item(key = "error") {

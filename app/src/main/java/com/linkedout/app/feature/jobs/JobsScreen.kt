@@ -128,7 +128,7 @@ fun JobsScreen(
         when {
             state.loading -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                    LoadingMark(size = 40.dp)
+                    LoadingMark(size = 96.dp)
                 }
             }
             state.searched == null -> item(key = "hint") {
@@ -150,7 +150,7 @@ fun JobsScreen(
             item(key = "more") {
                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                     when {
-                        state.loadingMore -> LoadingMark(size = 40.dp)
+                        state.loadingMore -> LoadingMark(size = 96.dp)
                         state.endReached -> Text(
                             "No more offers for this search.",
                             style = MaterialTheme.typography.bodySmall,

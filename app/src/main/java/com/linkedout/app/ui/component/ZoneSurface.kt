@@ -6,6 +6,7 @@ import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,9 +40,12 @@ fun ZoneSurface(
     val edge = if (glass == null) border else null
     val tonal = if (glass == null) tonalElevation else 0.dp
     val shadow = if (glass == null) shadowElevation else 0.dp
+    // A transparent fill has no text colour of its own, and Material would
+    // fall back to black: the glass carries the page's text colour instead.
+    val text = if (glass == null) contentColorFor(color) else MaterialTheme.colorScheme.onSurface
     if (onClick == null) {
-        Surface(look, shape, fill, border = edge, tonalElevation = tonal, shadowElevation = shadow, content = content)
+        Surface(look, shape, fill, text, tonal, shadow, edge, content)
     } else {
-        Surface(onClick, look, shape = shape, color = fill, border = edge, tonalElevation = tonal, shadowElevation = shadow, content = content)
+        Surface(onClick, look, shape = shape, color = fill, contentColor = text, border = edge, tonalElevation = tonal, shadowElevation = shadow, content = content)
     }
 }

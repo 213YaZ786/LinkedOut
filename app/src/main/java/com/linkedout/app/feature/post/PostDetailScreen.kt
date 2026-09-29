@@ -159,7 +159,7 @@ fun PostDetailScreen(
                         modifier = Modifier.align(Alignment.Center).padding(32.dp)
                     )
                 }
-                else -> LoadingMark(Modifier.align(Alignment.Center), size = 40.dp)
+                else -> LoadingMark(Modifier.align(Alignment.Center), size = 96.dp)
             }
         }
     }
