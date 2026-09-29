@@ -1,7 +1,8 @@
 package com.linkedout.app.feature.timeline
 
+import com.linkedout.app.ui.component.LoadingMark
+import com.linkedout.app.ui.component.PullIndicator
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.EmptyZone
@@ -28,7 +29,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -242,7 +242,7 @@ fun TimelineScreen(
             state = pull,
             // Under the status bar, where the list starts, not behind it.
             indicator = {
-                PullToRefreshDefaults.Indicator(
+                PullIndicator(
                     state = pull,
                     isRefreshing = state.loading,
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = statusBarTop())
@@ -283,7 +283,7 @@ fun TimelineScreen(
             state = pull,
             // Under the status bar, where the list starts, not behind it.
             indicator = {
-                PullToRefreshDefaults.Indicator(
+                PullIndicator(
                     state = pull,
                     isRefreshing = state.loading,
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = statusBarTop())
@@ -467,10 +467,7 @@ private fun TimelineFooter(state: TimelineUiState, onLoadMore: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         when {
-            state.loadingMore -> CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp
-            )
+            state.loadingMore -> LoadingMark(size = 28.dp)
             state.pagingFailed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     "Couldn't load older posts. The server is busy, " +

@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.feed
 
+import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.BoldButton
@@ -24,7 +25,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -161,10 +161,7 @@ fun FeedScreen(
                         },
                         trailing = {
                             if (state.loading) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(22.dp),
-                                    strokeWidth = 2.dp
-                                )
+                                LoadingMark(size = 24.dp)
                             } else {
                                 BannerAction(
                                     icon = LinkedOutIcons.Refresh,
@@ -214,7 +211,7 @@ fun FeedScreen(
                     if (feed == null && state.loading) {
                         item(key = "loading") {
                             Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
+                                LoadingMark(size = 40.dp)
                             }
                         }
                     }
@@ -238,10 +235,7 @@ fun FeedScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         when {
-                            state.loadingMore -> CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
-                            )
+                            state.loadingMore -> LoadingMark(size = 28.dp)
                             state.canLoadMore -> BoldButton(onClick = { viewModel.loadMore(manual = true) }) {
                                 Text(if (state.pagingFailed) "Try again" else "Load older posts")
                             }

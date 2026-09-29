@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.jobs
 
+import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.foundation.layout.Arrangement
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,7 +71,7 @@ fun JobDetailScreen(
         when {
             state.loading -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    LoadingMark(size = 40.dp)
                 }
             }
             detail == null -> item(key = "error") {

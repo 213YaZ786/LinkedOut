@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.jobs
 
+import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -128,7 +128,7 @@ fun JobsScreen(
         when {
             state.loading -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    LoadingMark(size = 40.dp)
                 }
             }
             state.searched == null -> item(key = "hint") {
@@ -150,7 +150,7 @@ fun JobsScreen(
             item(key = "more") {
                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                     when {
-                        state.loadingMore -> CircularProgressIndicator()
+                        state.loadingMore -> LoadingMark(size = 40.dp)
                         state.endReached -> Text(
                             "No more offers for this search.",
                             style = MaterialTheme.typography.bodySmall,
