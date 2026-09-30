@@ -63,6 +63,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -70,8 +72,8 @@ import kotlin.random.Random
  * A long press on a post opens a small pill of glass where the finger is,
  * with what can be done to the post: like, archive, share, and save its
  * media when it has some. Likes and archives stay on the phone, see
- * PostMarks. Each button answers with its own small motion; a like sends
- * hearts floating up out of the pill.
+ * PostMarks. Each button answers with its own small motion; a like spins
+ * the star and sends glass stars floating up out of the pill.
  *
  * The post card puts [tracker] on its outer box, calls [open] on a long
  * press, and places [PostActionsOverlay] inside that box.
@@ -87,7 +89,7 @@ class PostActions internal constructor(
     /** Where the finger last went down, in the card's own coordinates. */
     internal var pressAt by mutableStateOf(Offset.Zero)
     internal var shown by mutableStateOf(false)
-    internal var heartsAt by mutableStateOf<Offset?>(null)
+    internal var starsAt by mutableStateOf<Offset?>(null)
 
     val tracker: Modifier = Modifier.pointerInput(Unit) {
         awaitEachGesture {
@@ -101,7 +103,7 @@ class PostActions internal constructor(
     }
 
     internal fun like() {
-        if (!marks.marks.value.isLiked(post.id)) heartsAt = pressAt
+        if (!marks.marks.value.isLiked(post.id)) starsAt = pressAt
         marks.toggleLike(post)
     }
 
@@ -128,7 +130,7 @@ fun rememberPostActions(post: Post, onDownload: (MediaItem) -> Unit): PostAction
     return remember(post.id, post) { PostActions(post, marks, onDownload, context, haptics) }
 }
 
-private enum class Motion { POP, DROP, WIGGLE, BOUNCE }
+private enum class Motion { FLIP, DROP, WIGGLE, BOUNCE }
 
 @Composable
 fun PostActionsOverlay(actions: PostActions) {
@@ -159,9 +161,9 @@ fun PostActionsOverlay(actions: PostActions) {
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // The hearts leave the pill on the tap itself, the pill
-                        // closes once the heart has popped.
-                        PillButton(ActionIcons.heart, if (liked) "Unlike" else "Like", if (liked) HEART_PINK else null, Motion.POP, onPress = actions::like) {
+                        // The stars leave the pill on the tap itself, the pill
+                        // closes once the star has spun round.
+                        PillButton(ActionIcons.star, if (liked) "Unlike" else "Like", if (liked) STAR_GOLD else null, Motion.FLIP, onPress = actions::like) {
                             close()
                         }
                         PillButton(ActionIcons.archive, if (archived) "Unarchive" else "Archive", if (archived) MaterialTheme.colorScheme.primary else null, Motion.DROP) {
@@ -184,13 +186,13 @@ fun PostActionsOverlay(actions: PostActions) {
         }
     }
 
-    actions.heartsAt?.let { from ->
+    actions.starsAt?.let { from ->
         val at = IntOffset(from.x.toInt(), from.y.toInt())
         Popup(
             popupPositionProvider = remember(at) { AtPoint(at, 0.5f, 0.92f, 0) },
             properties = PopupProperties(focusable = false, clippingEnabled = false)
         ) {
-            FloatingHearts(onEnd = { actions.heartsAt = null })
+            FloatingStars(onEnd = { actions.starsAt = null })
         }
     }
 }
@@ -209,6 +211,7 @@ private fun PillButton(
     val scale = remember { Animatable(1f) }
     val drop = remember { Animatable(0f) }
     val turn = remember { Animatable(0f) }
+    val turnY = remember { Animatable(0f) }
     var busy by remember { mutableStateOf(false) }
     IconButton(
         onClick = {
@@ -217,10 +220,8 @@ private fun PillButton(
             onPress()
             scope.launch {
                 when (motion) {
-                    Motion.POP -> {
-                        scale.animateTo(1.4f, tween(110))
-                        scale.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium))
-                    }
+                    // A full turn about its upright axis, like a coin spun.
+                    Motion.FLIP -> turnY.animateTo(360f, tween(520))
                     Motion.DROP -> drop.animateTo(1f, tween(180))
                     Motion.WIGGLE -> {
                         turn.animateTo(-20f, tween(70))
@@ -246,6 +247,8 @@ private fun PillButton(
                 scaleY = scale.value
                 translationY = drop.value * 12.dp.toPx()
                 rotationZ = turn.value
+                rotationY = turnY.value
+                cameraDistance = 12 * density
                 if (motion == Motion.DROP) alpha = 1f - drop.value * 0.8f
             }
         )
@@ -253,34 +256,36 @@ private fun PillButton(
 }
 
 /**
- * Glass hearts rising from where the pill was, each on its own sway, a
- * little larger as they rise and fading at the top.
+ * Glass stars rising from where the pill was, each on its own sway and
+ * spinning about its upright axis as it goes, a little larger as they rise
+ * and fading at the top.
  */
 @Composable
-private fun FloatingHearts(onEnd: () -> Unit) {
+private fun FloatingStars(onEnd: () -> Unit) {
     val clock = remember { Animatable(0f) }
-    val hearts = remember {
-        List(HEARTS) {
-            Heart(
+    val stars = remember {
+        List(STARS) {
+            FloatingStar(
                 delay = Random.nextFloat() * 0.3f,
                 span = 0.6f + Random.nextFloat() * 0.25f,
                 size = 22f + Random.nextFloat() * 20f,
                 startX = (Random.nextFloat() - 0.5f) * 56f,
                 sway = 10f + Random.nextFloat() * 20f,
                 turns = 0.6f + Random.nextFloat() * 0.8f,
-                phase = Random.nextFloat() * 2f * PI.toFloat()
+                phase = Random.nextFloat() * 2f * PI.toFloat(),
+                spins = 0.8f + Random.nextFloat() * 0.8f
             )
         }
     }
     LaunchedEffect(Unit) {
-        clock.animateTo(1f, tween(HEARTS_MS, easing = LinearEasing))
+        clock.animateTo(1f, tween(STARS_MS, easing = LinearEasing))
         delay(16)
         onEnd()
     }
-    val heart = ImageBitmap.imageResource(R.drawable.heart_glass)
+    val star = ImageBitmap.imageResource(R.drawable.star_glass)
     Canvas(Modifier.size(width = 200.dp, height = 300.dp)) {
         val unit = 1.dp.toPx()
-        hearts.forEach { h ->
+        stars.forEach { h ->
             val p = ((clock.value - h.delay) / h.span).coerceIn(0f, 1f)
             if (p <= 0f || p >= 1f) return@forEach
             val side = h.size * unit * (0.6f + 0.4f * (p * 3f).coerceAtMost(1f))
@@ -291,10 +296,12 @@ private fun FloatingHearts(onEnd: () -> Unit) {
                 p > 0.65f -> (1f - p) / 0.35f
                 else -> 1f
             }
+            // The spin: the star narrows to its edge and widens again.
+            val width = (side * abs(cos(p * 2f * PI.toFloat() * h.spins + h.phase))).coerceAtLeast(side * 0.06f)
             drawImage(
-                heart,
-                dstOffset = IntOffset((x - side / 2).toInt(), (y - side).toInt()),
-                dstSize = IntSize(side.toInt(), side.toInt()),
+                star,
+                dstOffset = IntOffset((x - width / 2).toInt(), (y - side).toInt()),
+                dstSize = IntSize(width.toInt(), side.toInt()),
                 alpha = alpha,
                 filterQuality = FilterQuality.High
             )
@@ -302,14 +309,15 @@ private fun FloatingHearts(onEnd: () -> Unit) {
     }
 }
 
-private class Heart(
+private class FloatingStar(
     val delay: Float,
     val span: Float,
     val size: Float,
     val startX: Float,
     val sway: Float,
     val turns: Float,
-    val phase: Float
+    val phase: Float,
+    val spins: Float
 )
 
 /** Places a popup's point ([fx], [fy] of its size) on [point] of its anchor, kept on screen. */
@@ -330,16 +338,13 @@ private class AtPoint(val point: IntOffset, val fx: Float, val fy: Float, val ma
     }
 }
 
-private const val HEARTS = 9
-private const val HEARTS_MS = 1800
-private val HEART_PINK = Color(0xFFEC4F86)
-private const val HEART_PATH =
-    "M12,21.35l-1.45,-1.32C5.4,15.36 2,12.28 2,8.5 2,5.42 4.42,3 7.5,3c1.74,0 3.41,0.81 4.5,2.09" +
-        "C13.09,3.81 14.76,3 16.5,3 19.58,3 22,5.42 22,8.5c0,3.78 -3.4,6.86 -8.55,11.54L12,21.35z"
+private const val STARS = 9
+private const val STARS_MS = 1800
+private val STAR_GOLD = Color(0xFFFFB300)
 
 /** The pill's icons, drawn here so every app has the same ones. */
 private object ActionIcons {
-    val heart by lazy { icon("Heart", HEART_PATH) }
+    val star by lazy { icon("Star", "M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z") }
     val archive by lazy {
         icon(
             "Archive",
