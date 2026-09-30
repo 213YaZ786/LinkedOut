@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
@@ -35,7 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.SolidColor
 import com.linkedout.app.R
 import androidx.compose.ui.res.imageResource
@@ -65,15 +71,13 @@ import org.koin.compose.koinInject
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
-import kotlin.math.sin
-import kotlin.random.Random
 
 /**
  * A long press on a post opens a small pill of glass where the finger is,
  * with what can be done to the post: like, archive, share, and save its
  * media when it has some. Likes and archives stay on the phone, see
  * PostMarks. Each button answers with its own small motion; a like spins
- * the star and sends glass stars floating up out of the pill.
+ * the star and pops one glass star above it, spinning on the spot.
  *
  * The post card puts [tracker] on its outer box, calls [open] on a long
  * press, and places [PostActionsOverlay] inside that box.
@@ -89,7 +93,10 @@ class PostActions internal constructor(
     /** Where the finger last went down, in the card's own coordinates. */
     internal var pressAt by mutableStateOf(Offset.Zero)
     internal var shown by mutableStateOf(false)
-    internal var starsAt by mutableStateOf<Offset?>(null)
+    /** Where the popped star shows, in window coordinates, while it plays. */
+    internal var starAt by mutableStateOf<Offset?>(null)
+    /** The centre of the pill's star button, in window coordinates. */
+    internal var starButton = Offset.Zero
 
     val tracker: Modifier = Modifier.pointerInput(Unit) {
         awaitEachGesture {
@@ -103,7 +110,7 @@ class PostActions internal constructor(
     }
 
     internal fun like() {
-        if (!marks.marks.value.isLiked(post.id)) starsAt = pressAt
+        if (!marks.marks.value.isLiked(post.id)) starAt = starButton
         marks.toggleLike(post)
     }
 
@@ -161,9 +168,13 @@ fun PostActionsOverlay(actions: PostActions) {
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // The stars leave the pill on the tap itself, the pill
-                        // closes once the star has spun round.
-                        PillButton(ActionIcons.star, if (liked) "Unlike" else "Like", if (liked) STAR_GOLD else null, Motion.FLIP, onPress = actions::like) {
+                        // The star pops on the tap itself, the pill closes
+                        // once its own star has spun round.
+                        PillButton(
+                            ActionIcons.star, if (liked) "Unlike" else "Like", if (liked) STAR_GOLD else null, Motion.FLIP,
+                            modifier = Modifier.onGloballyPositioned { actions.starButton = it.boundsInWindow().center },
+                            onPress = actions::like
+                        ) {
                             close()
                         }
                         PillButton(ActionIcons.archive, if (archived) "Unarchive" else "Archive", if (archived) MaterialTheme.colorScheme.primary else null, Motion.DROP) {
@@ -186,13 +197,14 @@ fun PostActionsOverlay(actions: PostActions) {
         }
     }
 
-    actions.starsAt?.let { from ->
+    actions.starAt?.let { from ->
         val at = IntOffset(from.x.toInt(), from.y.toInt())
+        val foot = with(density) { (STAR_SIDE / 2).roundToPx() }
         Popup(
-            popupPositionProvider = remember(at) { AtPoint(at, 0.5f, 0.92f, 0) },
+            popupPositionProvider = remember(at, foot) { InWindow(at, foot) },
             properties = PopupProperties(focusable = false, clippingEnabled = false)
         ) {
-            FloatingStars(onEnd = { actions.starsAt = null })
+            PoppedStar(onEnd = { actions.starAt = null })
         }
     }
 }
@@ -204,6 +216,7 @@ private fun PillButton(
     label: String,
     tint: Color?,
     motion: Motion,
+    modifier: Modifier = Modifier,
     onPress: () -> Unit = {},
     onDone: () -> Unit
 ) {
@@ -236,7 +249,7 @@ private fun PillButton(
                 onDone()
             }
         },
-        modifier = Modifier.size(48.dp)
+        modifier = modifier.size(48.dp)
     ) {
         Icon(
             icon,
@@ -256,69 +269,57 @@ private fun PillButton(
 }
 
 /**
- * Glass stars rising from where the pill was, each on its own sway and
- * spinning about its upright axis as it goes, a little larger as they rise
- * and fading at the top.
+ * One glass star popping out of the star button: it swells out of the
+ * button with a little overshoot, rises just above it and spins on the spot
+ * about its upright axis, twice, like a coin, then fades. Its back, seen
+ * while it turns, is a shade deeper, as in the reference animation.
  */
 @Composable
-private fun FloatingStars(onEnd: () -> Unit) {
+private fun PoppedStar(onEnd: () -> Unit) {
     val clock = remember { Animatable(0f) }
-    val stars = remember {
-        List(STARS) {
-            FloatingStar(
-                delay = Random.nextFloat() * 0.3f,
-                span = 0.6f + Random.nextFloat() * 0.25f,
-                size = 22f + Random.nextFloat() * 20f,
-                startX = (Random.nextFloat() - 0.5f) * 56f,
-                sway = 10f + Random.nextFloat() * 20f,
-                turns = 0.6f + Random.nextFloat() * 0.8f,
-                phase = Random.nextFloat() * 2f * PI.toFloat(),
-                spins = 0.8f + Random.nextFloat() * 0.8f
-            )
-        }
-    }
     LaunchedEffect(Unit) {
-        clock.animateTo(1f, tween(STARS_MS, easing = LinearEasing))
+        clock.animateTo(1f, tween(STAR_MS, easing = LinearEasing))
         delay(16)
         onEnd()
     }
     val star = ImageBitmap.imageResource(R.drawable.star_glass)
-    Canvas(Modifier.size(width = 200.dp, height = 300.dp)) {
-        val unit = 1.dp.toPx()
-        stars.forEach { h ->
-            val p = ((clock.value - h.delay) / h.span).coerceIn(0f, 1f)
-            if (p <= 0f || p >= 1f) return@forEach
-            val side = h.size * unit * (0.6f + 0.4f * (p * 3f).coerceAtMost(1f))
-            val x = size.width / 2 + (h.startX + sin(p * 2f * PI.toFloat() * h.turns + h.phase) * h.sway) * unit
-            val y = size.height - p * (size.height - side)
-            val alpha = when {
-                p < 0.08f -> p / 0.08f
-                p > 0.65f -> (1f - p) / 0.35f
-                else -> 1f
-            }
-            // The spin: the star narrows to its edge and widens again.
-            val width = (side * abs(cos(p * 2f * PI.toFloat() * h.spins + h.phase))).coerceAtLeast(side * 0.06f)
-            drawImage(
-                star,
-                dstOffset = IntOffset((x - width / 2).toInt(), (y - side).toInt()),
-                dstSize = IntSize(width.toInt(), side.toInt()),
-                alpha = alpha,
-                filterQuality = FilterQuality.High
-            )
-        }
+    val back = remember { ColorFilter.tint(Color(0x40B34700), BlendMode.SrcAtop) }
+    Canvas(Modifier.size(width = STAR_SIDE * 2, height = STAR_SIDE + STAR_RISE)) {
+        val p = clock.value
+        // Swells out of the button, overshooting a touch.
+        val grow = OvershootEasing.transform((p / 0.28f).coerceAtMost(1f))
+        val side = STAR_SIDE.toPx() * (0.25f + 0.75f * grow)
+        // Rises above the button and stays there while it spins.
+        val rise = FastOutSlowInEasing.transform((p / 0.4f).coerceAtMost(1f)) * STAR_RISE.toPx()
+        // Two full turns, starting slow and ending slow.
+        val spin = FastOutSlowInEasing.transform(((p - 0.15f) / 0.7f).coerceIn(0f, 1f)) * 2f * 2f * PI.toFloat()
+        val face = cos(spin)
+        val width = (side * abs(face)).coerceAtLeast(side * 0.06f)
+        val alpha = if (p > 0.82f) (1f - p) / 0.18f else 1f
+        val cx = size.width / 2
+        val cy = size.height - STAR_SIDE.toPx() / 2 - rise
+        drawImage(
+            star,
+            dstOffset = IntOffset((cx - width / 2).toInt(), (cy - side / 2).toInt()),
+            dstSize = IntSize(width.toInt(), side.toInt()),
+            alpha = alpha,
+            colorFilter = if (face < 0f) back else null,
+            filterQuality = FilterQuality.High
+        )
     }
 }
 
-private class FloatingStar(
-    val delay: Float,
-    val span: Float,
-    val size: Float,
-    val startX: Float,
-    val sway: Float,
-    val turns: Float,
-    val phase: Float,
-    val spins: Float
-)
+private val OvershootEasing = Easing { t -> val u = t - 1f; 1f + u * u * (2.6f * u + 1.6f) }
+
+/** Places a popup so the bottom centre of its content, raised by [foot], lands on [point] of the window. */
+private class InWindow(val point: IntOffset, val foot: Int) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize
+    ): IntOffset = IntOffset(point.x - popupContentSize.width / 2, point.y + foot - popupContentSize.height)
+}
 
 /** Places a popup's point ([fx], [fy] of its size) on [point] of its anchor, kept on screen. */
 private class AtPoint(val point: IntOffset, val fx: Float, val fy: Float, val margin: Int) : PopupPositionProvider {
@@ -338,8 +339,9 @@ private class AtPoint(val point: IntOffset, val fx: Float, val fy: Float, val ma
     }
 }
 
-private const val STARS = 9
-private const val STARS_MS = 1800
+private const val STAR_MS = 1300
+private val STAR_SIDE = 56.dp
+private val STAR_RISE = 64.dp
 private val STAR_GOLD = Color(0xFFFFB300)
 
 /** The pill's icons, drawn here so every app has the same ones. */
