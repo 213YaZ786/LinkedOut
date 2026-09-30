@@ -19,6 +19,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,7 +41,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.SolidColor
 import com.linkedout.app.R
@@ -93,10 +94,15 @@ class PostActions internal constructor(
     /** Where the finger last went down, in the card's own coordinates. */
     internal var pressAt by mutableStateOf(Offset.Zero)
     internal var shown by mutableStateOf(false)
-    /** Where the popped star shows, in window coordinates, while it plays. */
+    /** Where the popped star shows, in the card's coordinates, while it plays. */
     internal var starAt by mutableStateOf<Offset?>(null)
-    /** The centre of the pill's star button, in window coordinates. */
+    /**
+     * The centre of the pill's star button and the card's corner, both on
+     * the screen: the pill is a popup, a window of its own, so only the
+     * screen relates the button to the card.
+     */
     internal var starButton = Offset.Zero
+    internal var cardCorner = Offset.Zero
 
     val tracker: Modifier = Modifier.pointerInput(Unit) {
         awaitEachGesture {
@@ -110,7 +116,7 @@ class PostActions internal constructor(
     }
 
     internal fun like() {
-        if (!marks.marks.value.isLiked(post.id)) starAt = starButton
+        if (!marks.marks.value.isLiked(post.id)) starAt = starButton - cardCorner
         marks.toggleLike(post)
     }
 
@@ -146,6 +152,9 @@ fun PostActionsOverlay(actions: PostActions) {
     val density = LocalDensity.current
     val margin = with(density) { 8.dp.roundToPx() }
 
+    // Sits at the card's corner, the popups' anchor, to place the star.
+    Spacer(Modifier.onGloballyPositioned { actions.cardCorner = it.positionOnScreen() })
+
     if (actions.shown) {
         val at = IntOffset(actions.pressAt.x.toInt(), actions.pressAt.y.toInt())
         Popup(
@@ -172,7 +181,9 @@ fun PostActionsOverlay(actions: PostActions) {
                         // once its own star has spun round.
                         PillButton(
                             ActionIcons.star, if (liked) "Unlike" else "Like", if (liked) STAR_GOLD else null, Motion.FLIP,
-                            modifier = Modifier.onGloballyPositioned { actions.starButton = it.boundsInWindow().center },
+                            modifier = Modifier.onGloballyPositioned {
+                                actions.starButton = it.positionOnScreen() + Offset(it.size.width / 2f, it.size.height / 2f)
+                            },
                             onPress = actions::like
                         ) {
                             close()
@@ -198,10 +209,11 @@ fun PostActionsOverlay(actions: PostActions) {
     }
 
     actions.starAt?.let { from ->
-        val at = IntOffset(from.x.toInt(), from.y.toInt())
+        // The bottom of the star's canvas, half a star below the button's centre.
         val foot = with(density) { (STAR_SIDE / 2).roundToPx() }
+        val at = IntOffset(from.x.toInt(), from.y.toInt() + foot)
         Popup(
-            popupPositionProvider = remember(at, foot) { InWindow(at, foot) },
+            popupPositionProvider = remember(at) { AtPoint(at, 0.5f, 1f, 0) },
             properties = PopupProperties(focusable = false, clippingEnabled = false)
         ) {
             PoppedStar(onEnd = { actions.starAt = null })
@@ -310,16 +322,6 @@ private fun PoppedStar(onEnd: () -> Unit) {
 }
 
 private val OvershootEasing = Easing { t -> val u = t - 1f; 1f + u * u * (2.6f * u + 1.6f) }
-
-/** Places a popup so the bottom centre of its content, raised by [foot], lands on [point] of the window. */
-private class InWindow(val point: IntOffset, val foot: Int) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize
-    ): IntOffset = IntOffset(point.x - popupContentSize.width / 2, point.y + foot - popupContentSize.height)
-}
 
 /** Places a popup's point ([fx], [fy] of its size) on [point] of its anchor, kept on screen. */
 private class AtPoint(val point: IntOffset, val fx: Float, val fy: Float, val margin: Int) : PopupPositionProvider {
