@@ -355,6 +355,7 @@ class LinkedInSource(
             )
             return null
         }
+        throttle.clear(LinkedInHost.HOST)
         log.keepBody(url, page.body)
         return Attempt.Body(page.body)
     }
@@ -565,6 +566,9 @@ class LinkedInSource(
                 retryAfterSeconds = page.retryAfterSeconds
             )
         } else {
+            // A page got through, so whatever was refused before was about
+            // that address and not the host. The next refusal starts small.
+            throttle.clear(LinkedInHost.HOST)
             remember(url, page.body)
             Attempt.Body(page.body)
         }

@@ -83,6 +83,8 @@ class JobsSource(
         )
         if (page.status == 429 || page.status == ErrorMapper.LINKEDIN_DENIED) {
             throttle.penalise(LinkedInHost.HOST, page.retryAfterSeconds)
+        } else if (page.status == 200) {
+            throttle.clear(LinkedInHost.HOST)
         }
         ErrorMapper.fromStatus(LinkedInHost.HOST, url, page.status, page.retryAfterSeconds, page.body)
             ?.let { return@withContext Outcome.Failure(it) }
