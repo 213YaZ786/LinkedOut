@@ -83,8 +83,13 @@ class PostDetailViewModel(
             is Outcome.Success -> {
                 val conversation = outcome.value
                 RecentPosts.remember(conversation)
+                val known = _state.value.post
+                val page = conversation.main
                 _state.value = _state.value.copy(
-                    post = _state.value.post ?: conversation.main,
+                    // The phone's copy stays, it is what the reader tapped.
+                    // The page only adds the pictures, video or document the
+                    // feed card could not carry.
+                    post = if (known != null && page != null) known.completedBy(page) else known ?: page,
                     thread = ThreadState.Ready(conversation)
                 )
             }

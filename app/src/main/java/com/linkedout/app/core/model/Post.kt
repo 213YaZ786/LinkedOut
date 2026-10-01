@@ -58,6 +58,26 @@ data class Post(
         )
         return if (merged == this) this else merged
     }
+
+    /**
+     * The post's own page folded into the copy already on screen. A profile
+     * card shows one picture of a carousel, a video's cover without its
+     * source, and no shared document at all, while the post page has all
+     * three. Only those are taken, and only when the page shows more, so a
+     * card the page knows less about stays exactly as it was.
+     */
+    fun completedBy(page: Post): Post {
+        if (page.id != id) return this
+        // The page's media go with its document. A company card carries the
+        // cover as a picture, and the page leaves it out because the
+        // document block draws it, so keeping the card's would show it twice.
+        if (document == null && page.document != null) {
+            return copy(document = page.document, media = page.media)
+        }
+        val more = page.media.size > media.size ||
+            (page.media.size == media.size && page.media.count { it.playable } > media.count { it.playable })
+        return if (more) copy(media = page.media) else this
+    }
 }
 
 @Serializable
