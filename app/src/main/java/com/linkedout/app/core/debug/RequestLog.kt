@@ -1,5 +1,6 @@
 package com.linkedout.app.core.debug
 
+import com.linkedout.app.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -56,6 +57,12 @@ class RequestLog {
 
     fun record(entry: Entry) {
         _entries.value = (_entries.value + entry).takeLast(CAPACITY)
+        // Debug builds only: lets a session on an emulator be followed live.
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d("LinkedOut", "${entry.kind} ${entry.outcome} | ${entry.url}" +
+                (entry.httpStatus?.let { " | http $it" } ?: "") + (entry.durationMillis?.let { " | ${it}ms" } ?: "") +
+                (entry.detail?.let { " | $it" } ?: ""))
+        }
     }
 
     fun record(
