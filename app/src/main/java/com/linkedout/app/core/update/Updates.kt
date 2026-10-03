@@ -62,7 +62,9 @@ object Updates {
                 ?.let { (it["browser_download_url"] as? JsonPrimitive)?.content }
             Release(
                 version = version,
-                page = (root["html_url"] as? JsonPrimitive)?.content ?: "https://github.com/$REPO/releases/latest",
+                // Only this app's own page is ever opened from here.
+                page = (root["html_url"] as? JsonPrimitive)?.content?.takeIf { it.startsWith("https://github.com/$REPO/") }
+                    ?: "https://github.com/$REPO/releases/latest",
                 apk = asset("LinkedOut-$version.apk"),
                 sums = asset("SHA256SUMS.txt")
             )
