@@ -1,5 +1,9 @@
 package com.linkedout.app.feature.feed
 
+import com.linkedout.app.ui.glass.rememberGlassBackdrop
+import com.linkedout.app.ui.glass.glassSource
+import com.linkedout.app.ui.glass.LocalGlassBackdrop
+import com.linkedout.app.ui.glass.LocalGlass
 import com.linkedout.app.ui.component.ZoneAlertDialog
 import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.component.RejectOnFailure
@@ -155,11 +159,15 @@ fun FeedScreen(
         keyOf = { it.id },
         paused = viewing != null
     )
+    // In glass, the list is recorded as it scrolls, for the way back to the
+    // top to bend it as Home's does.
+    val look = LocalGlass.current
+    val listBackdrop = rememberGlassBackdrop()
     CompositionLocalProvider(LocalInlinePlaying provides inline) {
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().then(if (look != null) Modifier.glassSource(listBackdrop, look) else Modifier),
                 contentPadding = PaddingValues(
                     start = LocalReadableInset.current,
                     end = LocalReadableInset.current,
@@ -273,14 +281,16 @@ fun FeedScreen(
             }
 
             val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
-            ScrollUpButton(
-                visible = scrolled,
-                icon = LinkedOutIcons.ArrowUp,
-                onClick = { scope.launch { listState.animateScrollToItem(0) } },
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp + LocalReadableInset.current, bottom = 16.dp + navigationBarBottom())
-            )
+            CompositionLocalProvider(LocalGlassBackdrop provides listBackdrop.takeIf { look != null }) {
+                ScrollUpButton(
+                    visible = scrolled,
+                    icon = LinkedOutIcons.ArrowUp,
+                    onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp + LocalReadableInset.current, bottom = 16.dp + navigationBarBottom())
+                )
+            }
         }
     }
 }
