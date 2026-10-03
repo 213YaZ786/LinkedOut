@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -421,7 +422,10 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
                     useController = item.type == MediaType.VIDEO
                 }
             },
-            modifier = Modifier.fillMaxSize()
+            // Clear of the navigation bar: the player anchors its speed and
+            // audio menu to its own bottom edge, and under the bar Android
+            // has no room there and throws the menu to the top of the screen.
+            modifier = Modifier.fillMaxSize().navigationBarsPadding()
         )
 
         if (!started) {
