@@ -25,9 +25,10 @@ object PostId {
             return if (tail.isNotEmpty() && tail.all(Char::isDigit)) tail else raw
         }
 
-        // .../posts/<author>_<words>-activity-<id>-<code>
+        // .../posts/<author>_<words>-activity-<id>-<code>, or <author>_activity-<id>-<code>
+        // when the post has no words of its own to make a slug from
         val slug = path.substringAfterLast('/')
-        for (marker in listOf("-activity-", "-ugcPost-", "-ugcpost-")) {
+        for (marker in listOf("-activity-", "-ugcPost-", "-ugcpost-", "_activity-", "_ugcPost-", "_ugcpost-")) {
             val at = slug.lastIndexOf(marker)
             if (at < 0) continue
             val candidate = slug.substring(at + marker.length).substringBefore('-')

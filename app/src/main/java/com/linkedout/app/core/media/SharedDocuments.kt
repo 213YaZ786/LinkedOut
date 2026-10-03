@@ -11,6 +11,7 @@ import android.os.Looper
 import android.widget.Toast
 import com.linkedout.app.core.debug.RequestLog
 import com.linkedout.app.core.model.SharedDocument
+import com.linkedout.app.data.linkedin.NativeDocument
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
@@ -79,6 +80,7 @@ class SharedDocuments(
             val file = runCatching { json.parseToJsonElement(body) as? JsonObject }.getOrNull()
                 ?.get("transcribedDocumentUrl")
                 ?.let { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+                ?.takeIf(NativeDocument::onMediaHost)
             log.record(
                 kind = RequestLog.Kind.MEDIA,
                 url = document.manifestUrl,

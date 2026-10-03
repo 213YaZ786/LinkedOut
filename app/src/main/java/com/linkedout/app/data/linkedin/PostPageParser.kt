@@ -9,7 +9,6 @@ import com.linkedout.app.core.model.PostId
 import com.linkedout.app.core.model.PostKind
 import com.linkedout.app.core.model.PostStats
 import com.linkedout.app.core.model.QuotedPost
-import com.linkedout.app.core.model.SharedDocument
 import com.linkedout.app.data.linkedin.Markup.attributeAfter
 import com.linkedout.app.data.linkedin.Markup.jsonLdBlocks
 import com.linkedout.app.data.linkedin.Markup.objectsOfType
@@ -18,7 +17,6 @@ import com.linkedout.app.data.linkedin.Markup.ownNumber
 import com.linkedout.app.data.linkedin.Markup.ownString
 import com.linkedout.app.data.linkedin.Markup.textAfter
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -136,7 +134,7 @@ class PostPageParser {
             media = graph.mediaFromGraph(post).ifEmpty { card.mediaFromCard() },
             quoted = card.parseReshare(),
             stats = graph.statsFromGraph(post) ?: card.statsFromCard(),
-            document = card.document()
+            document = NativeDocument.read(card)
         )
     }
 
@@ -294,34 +292,6 @@ class PostPageParser {
             .map { MediaItem(previewUrl = it, downloadUrl = it, type = MediaType.PHOTO) }
             .toList()
     }
-
-    /**
-     * A shared PDF or slide deck. LinkedIn renders it as an iframe whose
-     * config attribute is a JSON blob: title, page count, cover pages, and
-     * the manifest that leads to the file. 0.6.49 kept only the cover and
-     * showed it as a picture, so the document itself could not be reached.
-     */
-    private fun String.document(): SharedDocument? {
-        val at = indexOf(DOCUMENT).takeIf { it >= 0 } ?: return null
-        val open = indexOf('"', at + DOCUMENT.length).takeIf { it >= 0 } ?: return null
-        val close = indexOf('"', open + 1).takeIf { it > open } ?: return null
-        // Entities only, the attribute cannot hold a raw quote.
-        val config = runCatching {
-            Json.parseToJsonElement(Markup.decodeEntities(substring(open + 1, close))) as? JsonObject
-        }.getOrNull()?.let { (it["doc"] as? JsonObject) ?: it } ?: return null
-        val manifest = config.text("manifestUrl") ?: config.text("url") ?: return null
-        val cover = (config["coverPages"] as? JsonArray)?.firstOrNull()
-            ?.let { ((it as? JsonObject)?.get("config") as? JsonObject)?.text("src") }
-        return SharedDocument(
-            title = config.text("title")?.trim()?.takeIf { it.isNotEmpty() } ?: "Document",
-            pageCount = (config["totalPageCount"] as? JsonPrimitive)?.content?.toIntOrNull(),
-            coverUrl = cover,
-            manifestUrl = manifest
-        )
-    }
-
-    private fun JsonObject.text(key: String): String? =
-        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
 
     // ---- reshare -----------------------------------------------------------
 
