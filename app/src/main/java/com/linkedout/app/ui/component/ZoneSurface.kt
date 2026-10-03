@@ -51,7 +51,7 @@ fun ZoneSurface(
     // fall back to black: the glass carries the page's text colour instead.
     val text = when {
         glass == null -> contentColorFor(color)
-        accent -> MaterialTheme.colorScheme.onPrimaryContainer
+        accent -> if (glass.dark) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimaryContainer
         else -> MaterialTheme.colorScheme.onSurface
     }
     if (onClick == null) {

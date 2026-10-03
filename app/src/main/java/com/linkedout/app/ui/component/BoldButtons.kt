@@ -57,7 +57,7 @@ fun BoldButton(
             shape = shape,
             colors = ButtonDefaults.outlinedButtonColors(
                 containerColor = Color.Transparent,
-                contentColor = if (filled) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
+                contentColor = if (filled) (if (glass.dark) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimaryContainer) else MaterialTheme.colorScheme.primary
             ),
             border = null,
             content = content

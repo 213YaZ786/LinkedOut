@@ -119,14 +119,15 @@ object Updates {
                 ?.substringBefore(' ')?.lowercase() ?: return@withContext false
             notice.progress(0f)
             download(apk, file, notice::progress)
-            if (sha256(file) != expected || !sameApp(context, file)) return@withContext false
+            val target = if (sha256(file) == expected) sameApp(context, file) else null
+            target ?: return@withContext false
             val app = context.applicationContext
             listenForConfirmation(app)
             // Lets UpdatedReceiver tell this update from one installed by hand.
             app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(INSTALLING, true).apply()
             val installer = app.packageManager.packageInstaller
             val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-                setAppPackageName(app.packageName)
+                setAppPackageName(target)
                 // Android skips the question when this app installed the one
                 // being replaced; otherwise it still asks.
                 setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
@@ -163,17 +164,24 @@ object Updates {
      * Whether [file] is this app, a later version, signed with every key
      * the installed app is signed with.
      */
-    private fun sameApp(context: Context, file: File): Boolean {
+    private fun sameApp(context: Context, file: File): String? {
         val pm = context.packageManager
-        val archive = pm.getPackageArchiveInfo(file.path, PackageManager.GET_SIGNING_CERTIFICATES) ?: return false
-        if (archive.packageName != context.packageName) return false
-        val installed = pm.getPackageInfo(context.packageName, 0)
-        if (archive.longVersionCode <= installed.longVersionCode) return false
+        val archive = pm.getPackageArchiveInfo(file.path, PackageManager.GET_SIGNING_CERTIFICATES) ?: return null
+        // This app, newer; or the app it moves to (a new package named in its manifest), signed alike.
+        val moving = archive.packageName != context.packageName
+        if (moving && archive.packageName != successor(context)) return null
+        if (!moving && archive.longVersionCode <= pm.getPackageInfo(context.packageName, 0).longVersionCode) return null
         val signers = archive.signingInfo?.apkContentsSigners.orEmpty()
-        return signers.isNotEmpty() && signers.all {
+        val alike = signers.isNotEmpty() && signers.all {
             pm.hasSigningCertificate(context.packageName, it.toByteArray(), PackageManager.CERT_INPUT_RAW_X509)
         }
+        return if (alike) archive.packageName else null
     }
+
+    /** The package this app moves to, when its manifest names one (meta-data "handover.successor"). */
+    private fun successor(context: Context): String? = runCatching {
+        context.packageManager.getApplicationInfo(context.packageName, PackageManager.GET_META_DATA).metaData?.getString("handover.successor")
+    }.getOrNull()
 
     @Volatile
     private var listening = false

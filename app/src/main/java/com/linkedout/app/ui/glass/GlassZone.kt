@@ -102,7 +102,8 @@ private class GlassZoneNode(var shape: Shape, var look: GlassLook, var lens: Flo
 
 /** The corner radius of a rounded outline, in pixels; a plain rectangle has none. */
 internal fun cornerRadius(outline: Outline): Float = when (outline) {
-    is Outline.Rounded -> outline.roundRect.topLeftCornerRadius.x
+    // The smallest corner: a bubble's tail (one tight corner) is glass too, not left bare.
+    is Outline.Rounded -> with(outline.roundRect) { minOf(topLeftCornerRadius.x, topRightCornerRadius.x, bottomLeftCornerRadius.x, bottomRightCornerRadius.x) }
     is Outline.Rectangle -> 0f
     is Outline.Generic -> 0f
 }

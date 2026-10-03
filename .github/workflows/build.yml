@@ -158,6 +158,10 @@ jobs:
           # One line per element first: a uses-permission may span lines.
           tr '\n' ' ' < app/src/main/AndroidManifest.xml \
             | grep -oP '<uses-permission[^>]*?android:name="\K[^"]+' >> allowed.txt || true
+          # A name built from a manifest placeholder, as the release build fills it
+          # (the first manifestPlaceholders line, defaultConfig's).
+          grep -oP 'manifestPlaceholders\["\K[^"]+"\] = "[^"]+' app/build.gradle.kts | sed 's/"\] = "/ /' | awk '!seen[$1]++' \
+            | while read -r name value; do sed -i "s|\\\${$name}|$value|g" allowed.txt; done || true
           echo "allowed:"; sort -u allowed.txt
           unexpected="$(grep -oP "uses-permission: name='\K[^']+" permissions.txt | grep -vxF -f allowed.txt || true)"
           if [ -n "$unexpected" ]
