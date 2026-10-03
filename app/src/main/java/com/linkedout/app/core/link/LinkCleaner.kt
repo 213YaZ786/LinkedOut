@@ -11,8 +11,8 @@ import java.util.Base64
  * page itself but a detour through the site that showed them: Google's
  * /url?q=, Bing's click tracker, DuckDuckGo's, Facebook's and others. The real
  * address is written inside, so it is read out here, and the tracking
- * parameters that ride along are dropped. Google's newer /goto links and
- * share.google short links hide the address; [needsResolving] says so, and
+ * parameters that ride along are dropped. Google's newer /goto and /url links
+ * with a coded address and share.google short links hide it; [needsResolving] says so, and
  * RedirectResolver asks Google where they lead.
  *
  * Shared across the apps of this base: edit Modules/shared, then run sync.sh.
@@ -33,6 +33,8 @@ object LinkCleaner {
     fun needsResolving(url: String): Boolean {
         val link = parse(url) ?: return false
         return (isGoogle(link.host) && link.path == "/goto" && "url" in link.query) ||
+            // Google's results now write the address coded in /url too.
+            (isGoogle(link.host) && link.path == "/url" && (link.query["q"] ?: link.query["url"])?.let { !it.startsWith("http") } == true) ||
             link.host == "share.google"
     }
 

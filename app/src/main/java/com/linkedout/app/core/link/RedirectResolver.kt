@@ -5,6 +5,7 @@ import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -38,18 +39,26 @@ class RedirectResolver {
     suspend fun resolve(url: String): String? = withContext(Dispatchers.IO) {
         try {
             val response = client.get(url) { header(HttpHeaders.UserAgent, USER_AGENT) }
-            response.headers[HttpHeaders.Location]
+            val target = response.headers[HttpHeaders.Location]
                 ?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-                ?.let(LinkCleaner::clean)
+                // A /url link with a coded address answers a page saying
+                // where it leads, the address written out as the link's text.
+                ?: noticeTarget(response.bodyAsText())
+            target?.let(LinkCleaner::clean)
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
             null
         }
     }
 
-    private companion object {
-        const val TIMEOUT_MS = 8_000L
-        const val USER_AGENT =
+    companion object {
+        /** The address Google's redirect notice names, or null on any other page. */
+        fun noticeTarget(html: String): String? =
+            Regex("""<a href="/goto\?url=[^"]*">(https?://[^<\s]+)</a>""").find(html)?.groupValues?.get(1)
+                ?.replace("&amp;", "&")
+
+        private const val TIMEOUT_MS = 8_000L
+        private const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 16; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
     }
 }

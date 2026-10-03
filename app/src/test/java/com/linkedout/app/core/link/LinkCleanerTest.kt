@@ -41,6 +41,7 @@ class LinkCleanerTest {
     fun `knows which Google links hide their address`() {
         assertTrue(LinkCleaner.needsResolving("https://www.google.com/goto?url=CAESbAHrOzAV"))
         assertTrue(LinkCleaner.needsResolving("https://share.google/abc123"))
+        assertTrue(LinkCleaner.needsResolving("https://www.google.com/url?sa=t&source=web&rct=j&url=CAESYgHrOzAV&usg=AOvVaw0"))
         assertFalse(LinkCleaner.needsResolving("https://www.google.com/url?q=https://example.org"))
         assertFalse(LinkCleaner.needsResolving("https://example.org/goto?url=x"))
     }
