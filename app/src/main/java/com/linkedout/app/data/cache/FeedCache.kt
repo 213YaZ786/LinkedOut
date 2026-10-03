@@ -1,5 +1,6 @@
 package com.linkedout.app.data.cache
 
+import com.linkedout.app.data.linkedin.Markup
 import com.linkedout.app.core.common.writeTextAtomically
 import android.content.Context
 import com.linkedout.app.core.model.Feed
@@ -105,8 +106,18 @@ class FeedCache(
         // without cards or polls, Nitter serves them for the same ids. Keep
         // the stored post and fill in what it lacked, plus fresher counts.
         val seenAgain = incoming.posts.filter { it.id in known }.associateBy { it.id }
-        val refreshed = if (seenAgain.isEmpty()) existing.posts else existing.posts.map { post ->
-            seenAgain[post.id]?.let(post::mergedWith) ?: post
+        // Earlier versions filed a post whose address has no words as that
+        // whole address, beside its card under the real id: an empty double.
+        val ids = (known + incoming.posts.map { it.id }).toSet()
+        val refreshed = existing.posts.filterNot { post ->
+            val id = PostId.normalize(post.id)
+            id != post.id && id in ids
+        }.map { post ->
+            val merged = seenAgain[post.id]?.let(post::mergedWith) ?: post
+            // Cards stored by earlier versions kept the words of LinkedIn's
+            // "more" button at the end of a cut text.
+            val text = Markup.withoutMoreButton(merged.text)
+            if (text == merged.text) merged else merged.copy(text = text)
         }
 
         // A paged fetch that brings back nothing new means the cursor did not

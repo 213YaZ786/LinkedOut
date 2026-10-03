@@ -10,6 +10,15 @@ import org.junit.Test
 class ProfilePageParserTest {
 
     @Test
+    fun `a card cut short keeps one ellipsis, not the more button`() {
+        val parser = Markup
+        assertEquals("Imagerie Cardiaque et Vasculaire\u2026", parser.withoutMoreButton("Imagerie Cardiaque et Vasculaire...more"))
+        assertEquals("dans le suivi des patients\u2026", parser.withoutMoreButton("dans le suivi des patients....more...more"))
+        assertEquals("Lire la suite\u2026", parser.withoutMoreButton("Lire la suite \u2026plus"))
+        assertEquals("Nothing more to say", parser.withoutMoreButton("Nothing more to say"))
+    }
+
+    @Test
     fun `a profile without an Activity section still gives its own posts from the graph`() {
         val feed = ProfilePageParser().parse(PAGE, "someone-a1b2")!!
         assertEquals("Some One", feed.displayName)

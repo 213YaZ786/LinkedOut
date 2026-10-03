@@ -53,6 +53,16 @@ internal object Markup {
     }
 
     /** Tags out, entities decoded, runs of blank lines collapsed, trimmed. */
+    /**
+     * A card cut short ends with the words of LinkedIn's own "more" button,
+     * once or twice ("...more...more"). The text keeps one ellipsis instead,
+     * so it reads as cut and not as a word the author wrote.
+     */
+    fun withoutMoreButton(text: String): String {
+        val cut = MORE_BUTTON.find(text) ?: return text
+        return text.substring(0, cut.range.first).trimEnd().trimEnd('.', '\u2026') + "\u2026"
+    }
+
     fun plainText(html: String): String {
         val builder = StringBuilder(html.length)
         var inTag = false
@@ -301,4 +311,7 @@ internal object Markup {
      */
     private val NUMERIC_ENTITY = Regex("&#(x?)([0-9a-fA-F]+);", RegexOption.IGNORE_CASE)
     private val HREF = Regex("""href="([^"]+)"""")
+
+    /** LinkedIn's "more" button at the end of a card, in the page's languages. */
+    private val MORE_BUTTON = Regex("""(?:\s*(?:\.\.\.|\u2026)\s*(?:more|plus|mehr|más|altro|mais|meer|meer weergeven|voir plus))+\s*$""", RegexOption.IGNORE_CASE)
 }

@@ -307,7 +307,10 @@ class ProfilePageParser {
             media = chunk.parseMedia(id),
             quoted = if (passedOn != null) null else reshared,
             card = chunk.parseCard(),
-            stats = chunk.parseStats()
+            stats = chunk.parseStats(),
+            // A shared PDF or deck: without it a card that is only a document
+            // showed nothing but its author.
+            document = NativeDocument.read(chunk)
         )
     }
 
@@ -404,7 +407,8 @@ class ProfilePageParser {
      * the resharer's words are not confused with the original author's.
      */
     private fun String.commentaryText(outerOnly: Boolean): String? =
-        commentaryHtml(outerOnly)?.let(Markup::plainText)
+        commentaryHtml(outerOnly)?.let(Markup::plainText)?.let(Markup::withoutMoreButton)
+
 
     private fun String.commentaryHtml(outerOnly: Boolean = false): String? {
         val limit = if (outerOnly) indexOf("profile-activity-root-author").takeIf { it > 0 } ?: length else length
