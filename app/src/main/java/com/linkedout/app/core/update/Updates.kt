@@ -6,9 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -30,16 +32,17 @@ data class Release(val version: String, val page: String, val apk: String?, val 
 
 /**
  * The app's own releases on GitHub. One small request when the app opens,
- * nothing in the background. Installing downloads the release APK, checks
- * it against the release's SHA256SUMS, and hands it to Android's installer,
- * which asks the reader to confirm; the key that signed it must be the one
- * that signed the installed app, or Android refuses.
+ * nothing in the background. Installing downloads the release APK, shown
+ * in a notification, checks it (see install) and hands it to Android's
+ * installer, which asks the user to confirm when it must.
  */
 object Updates {
 
     private const val REPO = "213YaZ786/LinkedOut"
     private const val ACTION_STATUS = "com.linkedout.app.UPDATE_STATUS"
     private const val TIMEOUT_MS = 15_000
+    /** Far above any release of these apps, to stop an endless download. */
+    private const val MAX_APK = 200L * 1024 * 1024
     internal const val PREFS = "updates"
     internal const val INSTALLING = "installing"
 
@@ -93,23 +96,28 @@ object Updates {
 
     /**
      * Downloads [release], checks it and asks Android to install it. False
-     * when anything fails, the checksum above all: a file that does not
-     * match is deleted, never installed.
+     * when anything fails; a file that fails a check is deleted, never
+     * installed. Three checks: the file comes from this app's releases on
+     * GitHub, it matches the release's SHA256SUMS, and it is this app, newer,
+     * signed with the key of the installed one (Android refuses another key
+     * anyway; checking first means the user is never asked for a bad file).
      */
     suspend fun install(context: Context, release: Release): Boolean = withContext(Dispatchers.IO) {
-        runCatching {
-            val apk = release.apk ?: return@runCatching false
+        val file = File(context.cacheDir, "update.apk")
+        // The download shows in a notification, the app open or not.
+        val notice = UpdateNotice(context.applicationContext, release.version)
+        var done = false
+        try {
+            val apk = release.apk?.takeIf(::fromRepo) ?: return@withContext false
+            val sums = release.sums?.takeIf(::fromRepo) ?: return@withContext false
             val name = apk.substringAfterLast('/')
-            val expected = get(release.sums ?: return@runCatching false).decodeToString().lines()
+            val expected = get(sums).decodeToString().lines()
                 .map { it.trim() }
                 .firstOrNull { it.endsWith(name) }
-                ?.substringBefore(' ')?.lowercase() ?: return@runCatching false
-            val file = File(context.cacheDir, "update.apk")
-            download(apk, file)
-            if (sha256(file) != expected) {
-                file.delete()
-                return@runCatching false
-            }
+                ?.substringBefore(' ')?.lowercase() ?: return@withContext false
+            notice.progress(0f)
+            download(apk, file, notice::progress)
+            if (sha256(file) != expected || !sameApp(context, file)) return@withContext false
             val app = context.applicationContext
             listenForConfirmation(app)
             // Lets UpdatedReceiver tell this update from one installed by hand.
@@ -133,9 +141,36 @@ object Updates {
                 )
                 session.commit(pending.intentSender)
             }
-            file.delete()
+            done = true
             true
-        }.getOrDefault(false)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            false
+        } finally {
+            file.delete()
+            // Android's installer takes over from here; a failure stays
+            // in the notification, which opens the release page.
+            if (done) notice.cancel() else notice.failed(release.page)
+        }
+    }
+
+    /** Only files attached to this app's own releases are fetched. */
+    internal fun fromRepo(url: String): Boolean = url.startsWith("https://github.com/$REPO/releases/download/")
+
+    /**
+     * Whether [file] is this app, a later version, signed with every key
+     * the installed app is signed with.
+     */
+    private fun sameApp(context: Context, file: File): Boolean {
+        val pm = context.packageManager
+        val archive = pm.getPackageArchiveInfo(file.path, PackageManager.GET_SIGNING_CERTIFICATES) ?: return false
+        if (archive.packageName != context.packageName) return false
+        val installed = pm.getPackageInfo(context.packageName, 0)
+        if (archive.longVersionCode <= installed.longVersionCode) return false
+        val signers = archive.signingInfo?.apkContentsSigners.orEmpty()
+        return signers.isNotEmpty() && signers.all {
+            pm.hasSigningCertificate(context.packageName, it.toByteArray(), PackageManager.CERT_INPUT_RAW_X509)
+        }
     }
 
     @Volatile
@@ -177,10 +212,31 @@ object Updates {
         }
     }
 
-    private fun download(url: String, into: File) = open(url).run {
+    private fun download(url: String, into: File, onProgress: (Float) -> Unit) = open(url).run {
         try {
             if (responseCode != 200) error("http $responseCode")
-            inputStream.use { input -> into.outputStream().use { input.copyTo(it) } }
+            val total = contentLengthLong
+            if (total > MAX_APK) error("too large")
+            inputStream.use { input ->
+                into.outputStream().use { out ->
+                    val buffer = ByteArray(64 * 1024)
+                    var read = 0L
+                    var shown = -1
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        read += n
+                        if (read > MAX_APK) error("too large")
+                        out.write(buffer, 0, n)
+                        // Once per percent, not once per buffer.
+                        val percent = if (total > 0) (read * 100 / total).toInt() else -1
+                        if (percent != shown) {
+                            shown = percent
+                            onProgress(if (total > 0) read.toFloat() / total else 0f)
+                        }
+                    }
+                }
+            }
         } finally {
             disconnect()
         }
