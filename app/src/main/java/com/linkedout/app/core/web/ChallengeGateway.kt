@@ -113,9 +113,17 @@ class ChallengeGateway(
         kind: RequestLog.Kind,
         read: BrowserRead
     ): Page? {
-        if (session.cookiesWereHandedOver(host)) session.markNativeRejected(host)
+        val handedBefore = session.cookiesWereHandedOver(host)
 
         val page = viaWebView(url, host, kind, alreadyPaced = false, read = read) ?: return null
+        // Only a page the engine got and the native client did not says the
+        // native client is worse. A post LinkedIn keeps for its members walls
+        // the engine too, and once counted against the native client it sent
+        // every later read of the session through the engine, slow enough
+        // that the reader left each post before it came.
+        val engineServed = page.status == 200 && !read.looksBlocked(page.body)
+        if (!engineServed) return page
+        if (handedBefore) session.markNativeRejected(host)
 
         val kept = cookies.replaceFor(
             host = host,

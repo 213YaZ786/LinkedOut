@@ -1,5 +1,6 @@
 package com.linkedout.app.data.linkedin
 
+import kotlin.coroutines.cancellation.CancellationException
 import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.debug.RequestLog
@@ -511,6 +512,9 @@ class LinkedInSource(
                 read = browserRead()
             )
         } catch (failure: Throwable) {
+            // A card scrolled away cancels its read: not a failure, and the
+            // cancellation has to go on up.
+            if (failure is CancellationException) throw failure
             log.record(kind, url, "transport failure", detail = "${arrival.label} | ${failure.message}")
             return Attempt.Failed(ErrorMapper.fromThrowable(LinkedInHost.HOST, failure))
         }
