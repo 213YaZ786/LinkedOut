@@ -134,26 +134,35 @@ jobs:
           cat release/SHA256SUMS.txt
 
       # The app declares a handful of permissions and depends on libraries
-      # that declare a few of their own, WorkManager above all. Anything outside
-      # this list fails the build, which is the point: a new dependency that
-      # wants the camera should stop the release rather than ship quietly.
+      # that declare a few of their own, WorkManager above all. Allowed: the
+      # list below, plus what the app's own manifest asks for, since an app
+      # that is not a reader (a phone app) has needs of its own. Anything else
+      # fails the build, which is the point: a new dependency that wants the
+      # camera should stop the release rather than ship quietly.
       - name: Check release permissions
         run: |
           AAPT2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)aapt2"
           "$AAPT2" dump permissions "release/LinkedOut-$VERSION.apk" | tee permissions.txt
-          if grep -E "uses-permission" permissions.txt \
-            | grep -v "android.permission.INTERNET" \
-            | grep -v "android.permission.ACCESS_NETWORK_STATE" \
-            | grep -v "android.permission.POST_NOTIFICATIONS" \
-            | grep -v "android.permission.REQUEST_INSTALL_PACKAGES" \
-            | grep -v "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" \
-            | grep -v "android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" \
-            | grep -v "android.permission.WAKE_LOCK" \
-            | grep -v "android.permission.RECEIVE_BOOT_COMPLETED" \
-            | grep -v "android.permission.FOREGROUND_SERVICE" \
-            | grep -v "android.permission.FOREGROUND_SERVICE_DATA_SYNC" \
-            | grep -v "com.linkedout.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          printf '%s\n' \
+            android.permission.INTERNET \
+            android.permission.ACCESS_NETWORK_STATE \
+            android.permission.POST_NOTIFICATIONS \
+            android.permission.REQUEST_INSTALL_PACKAGES \
+            android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS \
+            android.permission.DOWNLOAD_WITHOUT_NOTIFICATION \
+            android.permission.WAKE_LOCK \
+            android.permission.RECEIVE_BOOT_COMPLETED \
+            android.permission.FOREGROUND_SERVICE \
+            android.permission.FOREGROUND_SERVICE_DATA_SYNC \
+            com.linkedout.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION > allowed.txt
+          # One line per element first: a uses-permission may span lines.
+          tr '\n' ' ' < app/src/main/AndroidManifest.xml \
+            | grep -oP '<uses-permission[^>]*?android:name="\K[^"]+' >> allowed.txt || true
+          echo "allowed:"; sort -u allowed.txt
+          unexpected="$(grep -oP "uses-permission: name='\K[^']+" permissions.txt | grep -vxF -f allowed.txt || true)"
+          if [ -n "$unexpected" ]
           then
+            echo "$unexpected"
             echo "::error::Unexpected permission in the release APK"
             exit 1
           fi
