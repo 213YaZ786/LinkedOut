@@ -256,6 +256,11 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
                 // The media page has no way forward until the choice is made.
                 enabled = !PAGES[pager.currentPage].showMediaChoice || chosen != null,
                 onClick = {
+                    // Install is chosen from the start, and Android lets an app
+                    // install only once allowed: moving on from that page asks.
+                    if (PAGES[pager.currentPage].showUpdateChoice && updates == UpdateMode.INSTALL && !Updates.canInstall(context)) {
+                        Updates.allowInstalls(context)
+                    }
                     if (last) onFinish(true) else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
                 }
             ) { Text(if (last) "Go to Accounts" else "Next") }
