@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.media
 
+import com.linkedout.app.ui.component.SafePlayer
 import com.linkedout.app.ui.component.DarkGround
 import androidx.compose.runtime.CompositionLocalProvider
 import com.linkedout.app.ui.glass.rememberGlassBackdrop
@@ -364,7 +365,7 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
     var muted by remember(source) { mutableStateOf(isGif || policy.startMuted) }
 
     val exo = remember(source) {
-        ExoPlayer.Builder(context).build().apply {
+        SafePlayer.build(context).apply {
             setMediaItem(PlayableItem.fromUri(source))
             if (isGif) repeatMode = Player.REPEAT_MODE_ALL
         }

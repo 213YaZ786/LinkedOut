@@ -26,6 +26,7 @@
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
 
     <application
+        android:memtagMode="sync"
         android:name=".LinkedOutApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -87,5 +88,13 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- Pictures from outside decoded in a process of their own,
+             with no permission, no files and no network. -->
+        <service
+            android:name=".core.security.DecoderService"
+            android:exported="false"
+            android:isolatedProcess="true"
+            android:process=":decoder" />
+
     </application>
 </manifest>

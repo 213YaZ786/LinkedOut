@@ -1,5 +1,8 @@
 package com.linkedout.app
 
+import com.linkedout.app.core.security.SafeCoilDecoder
+import coil3.SingletonImageLoader
+import coil3.ImageLoader
 import android.app.Application
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.settings.SettingsStore
@@ -16,6 +19,13 @@ import org.koin.core.logger.Level
 class LinkedOutApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // The isolated picture decoder is a process of this app with no
+        // rights at all: nothing of the app starts there.
+        if (android.os.Process.isIsolated()) return
+        // Every picture decoded in the isolated decoder, never in the app.
+        SingletonImageLoader.setSafe { context ->
+            ImageLoader.Builder(context).components { add(SafeCoilDecoder.Factory(context)) }.build()
+        }
         startKoin {
             androidLogger(if (BuildConfig.DEBUG) Level.DEBUG else Level.NONE)
             androidContext(this@LinkedOutApplication)
