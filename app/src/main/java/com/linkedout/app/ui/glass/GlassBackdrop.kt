@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -27,7 +26,6 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.GlobalPositionAwareModifierNode
@@ -61,19 +59,44 @@ fun rememberGlassBackdrop(): GlassBackdrop {
 /** The backdrop of the content the current controls float over, if glass is on. */
 val LocalGlassBackdrop = staticCompositionLocalOf<GlassBackdrop?> { null }
 
-/** Records this content, over the ambient light, for the controls floating above it. */
-fun Modifier.glassSource(backdrop: GlassBackdrop, look: GlassLook): Modifier = this
-    .onGloballyPositioned {
-        backdrop.origin = it.positionInRoot()
-        backdrop.window = it.findRootCoordinates().size.toSize()
+/**
+ * Records this content, over the ambient light, for the controls floating
+ * above it. Redrawn whenever it moves in the window: a tab sliding in moves
+ * its list without redrawing it, and the light painted under the list slid
+ * along with it while the zones on it showed the light where it really is.
+ */
+fun Modifier.glassSource(backdrop: GlassBackdrop, look: GlassLook): Modifier =
+    this then GlassSourceElement(backdrop, look)
+
+private data class GlassSourceElement(val backdrop: GlassBackdrop, val look: GlassLook) :
+    ModifierNodeElement<GlassSourceNode>() {
+    override fun create() = GlassSourceNode(backdrop, look)
+    override fun update(node: GlassSourceNode) {
+        node.backdrop = backdrop; node.look = look; node.invalidateDraw()
     }
-    .drawWithContent {
+    override fun InspectorInfo.inspectableProperties() { name = "glassSource" }
+}
+
+private class GlassSourceNode(var backdrop: GlassBackdrop, var look: GlassLook) :
+    Modifier.Node(), DrawModifierNode, GlobalPositionAwareModifierNode {
+
+    override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
+        val o = coordinates.positionInRoot()
+        val w = coordinates.findRootCoordinates().size.toSize()
+        if (o != backdrop.origin || w != backdrop.window) {
+            backdrop.origin = o; backdrop.window = w; invalidateDraw()
+        }
+    }
+
+    override fun ContentDrawScope.draw() {
+        val content = this
         backdrop.layer.record {
             if (backdrop.window.width > 0f) drawGround(look, look.ground, backdrop.origin, backdrop.window)
-            this@drawWithContent.drawContent()
+            content.drawContent()
         }
         drawLayer(backdrop.layer)
     }
+}
 
 /**
  * A control floating over [backdrop], in glass: what lies under it, bent

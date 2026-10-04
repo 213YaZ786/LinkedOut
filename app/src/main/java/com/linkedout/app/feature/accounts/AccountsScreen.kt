@@ -1,5 +1,6 @@
 package com.linkedout.app.feature.accounts
 
+import com.linkedout.app.ui.component.GlassSearchField
 import com.linkedout.app.core.link.LinkCleaner
 import com.linkedout.app.ui.component.CleanLinkEffect
 import com.linkedout.app.ui.component.rememberHaptics
@@ -25,7 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilledTonalButton
@@ -34,8 +34,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -222,15 +220,13 @@ fun AccountsScreen(
                 )
                 }
 
-                TextField(
+                GlassSearchField(
                     value = query,
                     onValueChange = {
                         query = it
                         notice = null
                     },
-                    singleLine = true,
-                    shape = RoundedCornerShape(28.dp),
-                    placeholder = { Text("Paste a full profile address") },
+                    placeholder = "Paste a full profile address",
                     leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
                     trailingIcon = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -247,13 +243,6 @@ fun AccountsScreen(
                             }
                         }
                     },
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    ),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = {
                         when {
