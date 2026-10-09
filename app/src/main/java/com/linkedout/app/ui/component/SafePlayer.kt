@@ -22,13 +22,15 @@ import androidx.media3.extractor.ExtractorsFactory
 object SafePlayer {
 
     @OptIn(UnstableApi::class)
-    fun build(context: Context): ExoPlayer {
-        val extractors = ExtractorsFactory {
-            DefaultExtractorsFactory().createExtractors().filter { it.javaClass.simpleName in KNOWN }.toTypedArray()
-        }
-        return ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractors))
+    fun build(context: Context): ExoPlayer =
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractors()))
             .build()
+
+    /** Only the readers of [KNOWN], for a player built with a data source of its own. */
+    @OptIn(UnstableApi::class)
+    fun extractors(): ExtractorsFactory = ExtractorsFactory {
+        DefaultExtractorsFactory().createExtractors().filter { it.javaClass.simpleName in KNOWN }.toTypedArray()
     }
 
     /** MP4 and 3GP, WebM and Matroska, AMR, Ogg, MP3, AAC, WAV, FLAC. */
