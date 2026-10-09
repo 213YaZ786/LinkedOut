@@ -408,9 +408,12 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
     // button does the rest.
     val playsAlone = isGif || policy.autoplay || tappedPlay
     LifecycleResumeEffect(exo, active, started, playsAlone) {
+        if (started && exo.playbackState == Player.STATE_IDLE) exo.prepare()
         if (active && started && playsAlone) exo.play()
         onPauseOrDispose { exo.pause() }
     }
+    // Out of sight it stops loading too (a paused player goes on downloading); it goes on from the same place.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { exo.stop() }
 
     if (failed) {
         Column(

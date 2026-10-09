@@ -129,9 +129,12 @@ internal fun InlineVideo(url: String, onClick: () -> Unit, modifier: Modifier = 
 
     // Paused with the app in the background or a screen pushed on top.
     LifecycleResumeEffect(exo) {
+        if (exo.playbackState == Player.STATE_IDLE) exo.prepare()
         exo.play()
         onPauseOrDispose { exo.pause() }
     }
+    // Out of sight it stops loading too: a paused player goes on downloading.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { exo.stop() }
 
     // A failed stream simply leaves the preview picture, as before.
     if (failed) return
