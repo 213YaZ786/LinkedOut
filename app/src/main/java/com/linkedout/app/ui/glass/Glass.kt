@@ -78,7 +78,8 @@ fun rememberGlassLook(scheme: ColorScheme, enabled: Boolean): GlassLook? = remem
             Halo(0.25f, 0.85f, 0.55f, scheme.primaryContainer.copy(alpha = if (dark) 0.55f else 0.80f)),
             Halo(0.80f, 0.95f, 0.40f, scheme.primary.copy(alpha = 0.22f))
         ),
-        zoneTint = if (dark) scheme.surfaceContainerLow.copy(alpha = 0.50f) else Color.White.copy(alpha = 0.55f),
+        // Clear enough for the light behind to show through, as polished glass.
+        zoneTint = if (dark) scheme.surfaceContainerLow.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.32f),
         floatTint = if (dark) scheme.surfaceContainerLow.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.42f),
         // By night a deep wash of the accent, so what sits on it reads light as all the night's text.
         accentTint = if (dark) scheme.primary.copy(alpha = 0.30f) else scheme.primaryContainer.copy(alpha = 0.70f)

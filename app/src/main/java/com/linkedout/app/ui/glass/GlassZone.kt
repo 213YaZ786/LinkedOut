@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
@@ -73,6 +74,12 @@ private class GlassZoneNode(var shape: Shape, var look: GlassLook, var lens: Flo
             null
         }
         if (zone != null) {
+            // A soft shadow under the zone, so it floats over the light (the glass is opaque over it).
+            drawIntoCanvas { canvas ->
+                val paint = androidx.compose.ui.graphics.Paint().apply { color = look.ground }
+                paint.asFrameworkPaint().setShadowLayer(10f * density, 0f, 3.5f * density, android.graphics.Color.argb(if (look.dark) 110 else 34, 0, 0, 0))
+                canvas.drawOutline(outline, paint)
+            }
             drawOutline(outline, ShaderBrush(zone))
         } else {
             drawOutline(outline, look.zoneTint)
@@ -125,12 +132,12 @@ internal fun setHalos(shader: RuntimeShader, look: GlassLook, window: Size) {
 
 /**
  * The rim without shaders: a soft light on the top edge that fades down
- * the flanks, a fainter one below; never a white line.
+ * the flanks, a faint shade below; never a white line.
  */
 internal fun rimBrush(look: GlassLook, height: Float): Brush {
-    val strong = Color.White.copy(alpha = if (look.dark) 0.20f else 0.35f)
+    val strong = Color.White.copy(alpha = if (look.dark) 0.16f else 0.24f)
     val faint = Color.White.copy(alpha = 0.03f)
-    return Brush.verticalGradient(0f to strong, 0.35f to faint, 0.7f to faint, 1f to strong.copy(alpha = strong.alpha * 0.5f), endY = height)
+    return Brush.verticalGradient(0f to strong, 0.35f to faint, 1f to Color.Black.copy(alpha = 0.04f), endY = height)
 }
 
 internal const val HALOS = 4
@@ -146,16 +153,22 @@ internal const val GLASS_COMMON = """
                           sdb(q + float2(0.0, e), b, r) - sdb(q - float2(0.0, e), b, r));
         return normalize(n + 1e-6);
     }
-    // The light caught by the edge fades in over a few pixels all around,
-    // barely there on the flanks and strongest on top, so the rim reads as
-    // glass and never as a white line.
+    // Polished glass (the user's reference, 2026-10-10): a thin rim of light
+    // at the very edge, bright at the top and the bottom, faint on the
+    // flanks, a hair of shade just inside it for the bevel; under it a wide,
+    // gentle gradient, light from above, shade below. Never a flat white line.
     float rimLight(float depth, float2 n, float dpr, float dark) {
-        float rim = smoothstep(3.2 * dpr, 0.0, depth);
-        rim = rim * rim;
-        float lit = 0.10 + 0.55 * pow(max(dot(n, float2(-0.25, -0.97)), 0.0), 2.0)
-                  + 0.25 * pow(max(dot(n, float2(0.2, 0.98)), 0.0), 3.0);
-        float glow = 0.04 * smoothstep(14.0 * dpr, 0.0, depth) * max(-n.y, 0.0);
-        return rim * lit * (dark > 0.5 ? 0.26 : 0.42) + glow;
+        float edge = 1.0 - smoothstep(0.4 * dpr, 1.8 * dpr, depth);
+        float bevel = smoothstep(1.2 * dpr, 2.4 * dpr, depth) * (1.0 - smoothstep(2.4 * dpr, 4.5 * dpr, depth));
+        float band = 1.0 - smoothstep(0.0, 20.0 * dpr, depth);
+        band = band * band * band;
+        float vertical = abs(n.y);
+        float up = pow(max(-n.y, 0.0), 1.6);
+        float down = pow(max(n.y, 0.0), 2.0);
+        float rim = edge * (0.10 + 0.32 * pow(vertical, 1.4)) * (dark > 0.5 ? 0.75 : 1.0);
+        float light = band * (0.20 + 0.80 * up) * (dark > 0.5 ? 0.10 : 0.10);
+        float shade = band * down * (dark > 0.5 ? 0.04 : 0.03) + bevel * (dark > 0.5 ? 0.05 : 0.035);
+        return rim + light - shade;
     }
 """
 
