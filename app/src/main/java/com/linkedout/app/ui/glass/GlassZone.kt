@@ -36,19 +36,19 @@ import androidx.compose.ui.unit.toSize
  * zones can scroll at no real cost. Below Android 13, which has no runtime
  * shaders, the zone is a tinted pane with the same rim, over the same light.
  */
-fun Modifier.glassZone(shape: Shape, look: GlassLook, lens: Float = 0.7f): Modifier =
-    this then GlassZoneElement(shape, look, lens)
+fun Modifier.glassZone(shape: Shape, look: GlassLook, lens: Float = 0.7f, flanks: Float = 0f): Modifier =
+    this then GlassZoneElement(shape, look, lens, flanks)
 
-private data class GlassZoneElement(val shape: Shape, val look: GlassLook, val lens: Float) :
+private data class GlassZoneElement(val shape: Shape, val look: GlassLook, val lens: Float, val flanks: Float) :
     ModifierNodeElement<GlassZoneNode>() {
-    override fun create() = GlassZoneNode(shape, look, lens)
+    override fun create() = GlassZoneNode(shape, look, lens, flanks)
     override fun update(node: GlassZoneNode) {
-        node.shape = shape; node.look = look; node.lens = lens; node.invalidateDraw()
+        node.shape = shape; node.look = look; node.lens = lens; node.flanks = flanks; node.invalidateDraw()
     }
     override fun InspectorInfo.inspectableProperties() { name = "glassZone" }
 }
 
-private class GlassZoneNode(var shape: Shape, var look: GlassLook, var lens: Float) :
+private class GlassZoneNode(var shape: Shape, var look: GlassLook, var lens: Float, var flanks: Float) :
     Modifier.Node(), DrawModifierNode, GlobalPositionAwareModifierNode {
 
     private var origin = Offset.Zero
@@ -95,7 +95,9 @@ private class GlassZoneNode(var shape: Shape, var look: GlassLook, var lens: Flo
             .onFailure { shaderFailed = true; android.util.Log.w("Glass", "zone shader refused", it) }
             .getOrNull()?.also { shader = it } ?: return null
         s.setFloatUniform("size", size.width, size.height)
-        s.setFloatUniform("radius", cornerRadius(outline))
+        val r = cornerRadii(outline)
+        s.setFloatUniform("radii", r[0], r[1], r[2], r[3])
+        s.setFloatUniform("flanks", flanks)
         s.setFloatUniform("origin", origin.x, origin.y)
         s.setFloatUniform("dpr", density)
         s.setFloatUniform("lens", lens)
@@ -113,6 +115,12 @@ internal fun cornerRadius(outline: Outline): Float = when (outline) {
     is Outline.Rounded -> with(outline.roundRect) { minOf(topLeftCornerRadius.x, topRightCornerRadius.x, bottomLeftCornerRadius.x, bottomRightCornerRadius.x) }
     is Outline.Rectangle -> 0f
     is Outline.Generic -> 0f
+}
+
+/** Each corner's radius in pixels (top start, top end, bottom end, bottom start), so the rim follows a bubble's tail and its round corners alike. */
+internal fun cornerRadii(outline: Outline): FloatArray = when (outline) {
+    is Outline.Rounded -> with(outline.roundRect) { floatArrayOf(topLeftCornerRadius.x, topRightCornerRadius.x, bottomRightCornerRadius.x, bottomLeftCornerRadius.x) }
+    else -> floatArrayOf(0f, 0f, 0f, 0f)
 }
 
 /** The halos as four plain uniforms each, placed in window pixels; a missing one has no strength. */
@@ -148,6 +156,16 @@ internal const val GLASS_COMMON = """
         float2 q = abs(p) - b + r;
         return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
     }
+    // A rounded box with its own radius at each corner (top left, top right, bottom right, bottom left).
+    float sdb4(float2 p, float2 b, float4 r) {
+        float rr = p.x < 0.0 ? (p.y < 0.0 ? r.x : r.w) : (p.y < 0.0 ? r.y : r.z);
+        return sdb(p, b, rr);
+    }
+    float2 normalAt4(float2 q, float2 b, float4 r, float e) {
+        float2 n = float2(sdb4(q + float2(e, 0.0), b, r) - sdb4(q - float2(e, 0.0), b, r),
+                          sdb4(q + float2(0.0, e), b, r) - sdb4(q - float2(0.0, e), b, r));
+        return normalize(n + 1e-6);
+    }
     float2 normalAt(float2 q, float2 b, float r, float e) {
         float2 n = float2(sdb(q + float2(e, 0.0), b, r) - sdb(q - float2(e, 0.0), b, r),
                           sdb(q + float2(0.0, e), b, r) - sdb(q - float2(0.0, e), b, r));
@@ -157,7 +175,8 @@ internal const val GLASS_COMMON = """
     // at the very edge, bright at the top and the bottom, faint on the
     // flanks, a hair of shade just inside it for the bevel; under it a wide,
     // gentle gradient, light from above, shade below. Never a flat white line.
-    float rimLight(float depth, float2 n, float dpr, float dark) {
+    // [flanks] 1 lights the sides as well (a message bubble, as iOS's).
+    float rimLight(float depth, float2 n, float dpr, float dark, float flanks) {
         float edge = 1.0 - smoothstep(0.4 * dpr, 1.8 * dpr, depth);
         float bevel = smoothstep(1.2 * dpr, 2.4 * dpr, depth) * (1.0 - smoothstep(2.4 * dpr, 4.5 * dpr, depth));
         float band = 1.0 - smoothstep(0.0, 20.0 * dpr, depth);
@@ -165,8 +184,10 @@ internal const val GLASS_COMMON = """
         float vertical = abs(n.y);
         float up = pow(max(-n.y, 0.0), 1.6);
         float down = pow(max(n.y, 0.0), 2.0);
-        float rim = edge * (0.10 + 0.32 * pow(vertical, 1.4)) * (dark > 0.5 ? 0.75 : 1.0);
-        float light = band * (0.20 + 0.80 * up) * (dark > 0.5 ? 0.10 : 0.10);
+        // With flanks, iOS's specular instead: bright where the edge faces the top left or the bottom right, faint between.
+        float spec = pow(max(dot(n, float2(-0.7071, -0.7071)), 0.0), 2.0) + 0.8 * pow(max(dot(n, float2(0.7071, 0.7071)), 0.0), 2.0);
+        float rim = edge * (0.10 + 0.32 * mix(pow(vertical, 1.4), 0.15 + 0.85 * spec, flanks)) * (dark > 0.5 ? 0.75 : 1.0);
+        float light = band * (0.20 + 0.80 * up + flanks * 0.6 * pow(abs(n.x), 1.6)) * (dark > 0.5 ? 0.10 : 0.10);
         float shade = band * down * (dark > 0.5 ? 0.04 : 0.03) + bevel * (dark > 0.5 ? 0.05 : 0.035);
         return rim + light - shade;
     }
@@ -174,7 +195,8 @@ internal const val GLASS_COMMON = """
 
 private const val ZONE_AGSL = """
     uniform float2 size;
-    uniform float radius;
+    uniform float4 radii;
+    uniform float flanks;
     uniform float2 origin;
     uniform float dpr;
     uniform float lens;
@@ -205,15 +227,15 @@ private const val ZONE_AGSL = """
     half4 main(float2 p) {
         float2 b = size * 0.5;
         float2 q = p - b;
-        float d = sdb(q, b, radius);
-        float2 n = normalAt(q, b, radius, 1.5 * dpr);
+        float d = sdb4(q, b, radii);
+        float2 n = normalAt4(q, b, radii, 1.5 * dpr);
         float depth = -d;
         float k = 1.0 - clamp(depth / min(min(b.x, b.y), 22.0 * dpr), 0.0, 1.0);
         k = k * k;
         float2 src = b + q * (1.0 - 0.05 * lens) - n * k * lens * 20.0 * dpr;
         half3 c = ambient(origin + src);
         c = mix(c, tint.rgb, tint.a);
-        c += half3(rimLight(depth, n, dpr, dark));
+        c += half3(rimLight(depth, n, dpr, dark, flanks));
         return half4(c, 1.0);
     }
 """
