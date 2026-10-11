@@ -464,8 +464,7 @@ private fun GlassPane(
     val look = LocalGlass.current
     val backdrop = LocalGlassBackdrop.current
     val scheme = MaterialTheme.colorScheme
-    val dark = look?.dark ?: (scheme.background.red + scheme.background.green + scheme.background.blue < 1.5f)
-    val color = if (accent && !dark) scheme.onPrimaryContainer else scheme.onSurface
+    val color = if (accent) scheme.onPrimaryContainer else scheme.onSurface
     val presses = remember { MutableInteractionSource() }
     val pressed by presses.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.9f else 1f, spring(dampingRatio = 0.5f, stiffness = 600f), label = "press")
@@ -481,8 +480,14 @@ private fun GlassPane(
                 .clip(shape)
                 .then(
                     if (look != null && backdrop != null) {
-                        // The accent dense enough that its icon reads on a bright frame too.
-                        Modifier.glassFloating(backdrop, shape, look, tint = if (accent) scheme.primaryContainer.copy(alpha = 0.8f) else look.zoneTint, lens = 1.3f)
+                        // A film can be bright: the body dark and dense, light icons on it,
+                        // as Media3's PlayerControlView and the big players draw theirs.
+                        Modifier.glassFloating(
+                            backdrop, shape, look,
+                            tint = if (accent) scheme.primaryContainer.copy(alpha = 0.9f)
+                                else scheme.surfaceContainerLowest.copy(alpha = 0.6f),
+                            lens = 1.3f
+                        )
                     } else {
                         Modifier.background(if (accent) scheme.primaryContainer else scheme.surfaceContainerHigh.copy(alpha = 0.92f), shape)
                     }
