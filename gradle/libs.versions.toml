@@ -22,6 +22,10 @@ gifdecoder = "5.0.9"
 # The browser engine library, used by the apps that need one.
 webkit = "1.17.0"
 junit = "4.13.2"
+# Screens tested on the JVM, as Now in Android does (core/screenshot-testing): Robolectric
+# draws them, Roborazzi compares the pictures; no emulator, nothing for anyone to look at.
+robolectric = "4.17"
+roborazzi = "1.76.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -52,6 +56,11 @@ media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls
 glide-gifdecoder = { group = "com.github.bumptech.glide", name = "gifdecoder", version.ref = "gifdecoder" }
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
@@ -61,3 +70,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
