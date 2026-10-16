@@ -109,6 +109,10 @@ fun GlassVideo(
     var state by remember(player) { mutableIntStateOf(player.playbackState) }
     var ratio by remember(player) { mutableFloatStateOf(0f) }
     var speed by remember(player) { mutableFloatStateOf(player.playbackParameters.speed) }
+    // A file that cannot be read says so, as Media3's PlayerView shows its
+    // error_message when player.getPlayerError() is set (androidx/media,
+    // libraries/ui/src/main/java/androidx/media3/ui/PlayerView.java, updateErrorMessage).
+    var failed by remember(player) { mutableStateOf(player.playerError != null) }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -117,6 +121,11 @@ fun GlassVideo(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 state = playbackState
+                if (playbackState == Player.STATE_READY) failed = false
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                failed = true
             }
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -204,6 +213,20 @@ fun GlassVideo(
                     modifier = if (ratio > 0f) Modifier.aspectRatio(ratio) else Modifier.fillMaxSize()
                 )
             }
+        }
+
+        if (failed) {
+            CompositionLocalProvider(LocalGlassBackdrop provides backdrop.takeIf { look != null }) {
+                GlassPane(shape = RoundedCornerShape(28.dp), modifier = Modifier.align(Alignment.Center).padding(24.dp)) {
+                    Text(
+                        "Can't play this video",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                    )
+                }
+            }
+            return@Box
         }
 
         if (!controls) return@Box

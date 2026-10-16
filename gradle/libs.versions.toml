@@ -17,6 +17,8 @@ koin = "4.2.2"
 ktor = "3.6.0"
 coil = "3.6.3"
 media3 = "1.11.1"
+# Glide's GIF decoder (pure Java), run only inside the isolated DecoderService.
+gifdecoder = "5.0.9"
 # The browser engine library, used by the apps that need one.
 webkit = "1.17.0"
 junit = "4.13.2"
@@ -47,6 +49,7 @@ media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", versi
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 # HLS playlists, for the networks that serve their videos that way.
 media3-exoplayer-hls = { group = "androidx.media3", name = "media3-exoplayer-hls", version.ref = "media3" }
+glide-gifdecoder = { group = "com.github.bumptech.glide", name = "gifdecoder", version.ref = "gifdecoder" }
 androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 

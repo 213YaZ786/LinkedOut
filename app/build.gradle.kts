@@ -106,6 +106,8 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    // GIF frames, decoded only inside the isolated DecoderService.
+    implementation(libs.glide.gifdecoder)
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)

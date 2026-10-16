@@ -54,7 +54,60 @@ object SafeImages {
         }.also { releaseLater(context.applicationContext) }
     }
 
+    /** An animated GIF's frames and each one's time on screen, in ms. */
+    class Frames(val pictures: List<Bitmap>, val delays: IntArray)
+
+    /**
+     * Every frame of an animated GIF, decoded in [DecoderService] as
+     * Glide's GifDrawable takes them from its GifDecoder
+     * (https://github.com/bumptech/glide, load/resource/gif/GifFrameLoader.java);
+     * null for a still picture, a GIF too large to hold, or a failure:
+     * the caller shows [decode]'s still.
+     */
+    suspend fun frames(context: Context, uri: Uri, maxSide: Int = 720): Frames? = withContext(Dispatchers.IO) {
+        runCatching { context.contentResolver.openInputStream(uri) }.getOrNull()?.use { input ->
+            running.withPermit {
+                withTimeoutOrNull(TIMEOUT) {
+                    val app = context.applicationContext
+                    val result = call(app, DecoderService.DECODE_FRAMES, input, maxSide) ?: return@withTimeoutOrNull null
+                    runCatching {
+                        DataInputStream(ParcelFileDescriptor.AutoCloseInputStream(result).buffered()).use { inp ->
+                            val count = inp.readInt()
+                            val w = inp.readInt()
+                            val h = inp.readInt()
+                            require(count in 2..MAX_FRAMES && w in 1..DecoderService.MAX_SIDE && h in 1..DecoderService.MAX_SIDE)
+                            require(w.toLong() * h * 4 * count <= DecoderService.MAX_FRAMES_BYTES)
+                            val delays = IntArray(count)
+                            val pictures = List(count) { i ->
+                                delays[i] = inp.readInt().coerceIn(MIN_DELAY, MAX_DELAY)
+                                val pixels = ByteArray(w * h * 4)
+                                inp.readFully(pixels)
+                                Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(ByteBuffer.wrap(pixels)) }
+                            }
+                            Frames(pictures, delays)
+                        }
+                    }.getOrNull()
+                }
+            }.also { releaseLater(context.applicationContext) }
+        }
+    }
+
     private suspend fun transact(app: Context, input: InputStream, maxSide: Int): Bitmap? {
+        val result = call(app, DecoderService.DECODE, input, maxSide) ?: return null
+        return runCatching {
+            DataInputStream(ParcelFileDescriptor.AutoCloseInputStream(result).buffered()).use { inp ->
+                val w = inp.readInt()
+                val h = inp.readInt()
+                require(w in 1..DecoderService.MAX_SIDE && h in 1..DecoderService.MAX_SIDE)
+                val pixels = ByteArray(w * h * 4)
+                inp.readFully(pixels)
+                Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(ByteBuffer.wrap(pixels)) }
+            }
+        }.getOrNull()
+    }
+
+    /** One call to the decoder, as [transact] always made it: the reply's pipe, or null. */
+    private suspend fun call(app: Context, code: Int, input: InputStream, maxSide: Int): ParcelFileDescriptor? {
         val decoder = binder(app) ?: return null
         val pipe = ParcelFileDescriptor.createPipe()
         // Fed from here while the decoder reads it.
@@ -67,24 +120,14 @@ object SafeImages {
             data.writeInterfaceToken(DecoderService.DESCRIPTOR)
             data.writeFileDescriptor(pipe[0].fileDescriptor)
             data.writeInt(maxSide.coerceIn(DecoderService.MIN_SIDE, DecoderService.MAX_SIDE))
-            val sent = runCatching { decoder.transact(DecoderService.DECODE, data, reply, 0) }.getOrDefault(false)
+            val sent = runCatching { decoder.transact(code, data, reply, 0) }.getOrDefault(false)
             if (sent && reply.readInt() == 1) reply.readFileDescriptor() else null
         } finally {
             pipe[0].close()
             data.recycle()
             reply.recycle()
         }
-        result ?: return null
-        return runCatching {
-            DataInputStream(ParcelFileDescriptor.AutoCloseInputStream(result).buffered()).use { inp ->
-                val w = inp.readInt()
-                val h = inp.readInt()
-                require(w in 1..DecoderService.MAX_SIDE && h in 1..DecoderService.MAX_SIDE)
-                val pixels = ByteArray(w * h * 4)
-                inp.readFully(pixels)
-                Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { copyPixelsFromBuffer(ByteBuffer.wrap(pixels)) }
-            }
-        }.getOrNull()
+        return result
     }
 
     private val running = Semaphore(2)
@@ -139,5 +182,9 @@ object SafeImages {
     }
 
     private const val TIMEOUT = 15_000L
+    private const val MAX_FRAMES = 1000
+    /** Glide's floor and the browsers' (GifHeaderParser MIN_FRAME_DELAY), and a frame never held past a minute. */
+    private const val MIN_DELAY = 20
+    private const val MAX_DELAY = 60_000
     private const val KEEP_BOUND = 20_000L
 }

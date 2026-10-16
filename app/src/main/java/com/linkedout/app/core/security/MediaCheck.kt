@@ -51,6 +51,36 @@ object MediaCheck {
         }
     }
 
+    /**
+     * The type to give another app, or the phone's media store, for [uri]:
+     * the sender's [claimed] picture, film or sound type only when the
+     * first bytes agree, else a plain file no viewer decodes. The WHATWG
+     * MIME Sniffing rules for an image or media context
+     * (https://mimesniff.spec.whatwg.org/#context-specific-sniffing):
+     * a resource whose bytes are not of the context's type is not handed
+     * to that context. Other claimed types are returned as given.
+     */
+    fun typeFor(context: Context, uri: Uri, claimed: String): String {
+        val family = claimed.substringBefore(';').trim().lowercase().substringBefore('/')
+        if (family != "image" && family != "video" && family != "audio") return typeFor(Kind.OTHER, claimed)
+        return typeFor(kind(context, uri), claimed)
+    }
+
+    /** [typeFor] once the file's [real] kind is known. */
+    fun typeFor(real: Kind, claimed: String): String {
+        val type = claimed.substringBefore(';').trim().lowercase()
+        val family = type.substringBefore('/')
+        if (family != "image" && family != "video" && family != "audio") return type
+        val agrees = when (real) {
+            Kind.IMAGE -> family == "image"
+            // A 3GP or MP4 holds films and sounds alike under one brand.
+            Kind.VIDEO -> family == "video" || family == "audio"
+            Kind.AUDIO -> family == "audio"
+            Kind.OTHER -> false
+        }
+        return if (agrees) type else "application/octet-stream"
+    }
+
     /** An ISO media file says what it holds in its brand. */
     private fun brand(brand: String): Kind = when (brand.trim().lowercase()) {
         "heic", "heix", "heim", "heis", "hevc", "hevx", "mif1", "msf1", "avif", "avis" -> Kind.IMAGE
