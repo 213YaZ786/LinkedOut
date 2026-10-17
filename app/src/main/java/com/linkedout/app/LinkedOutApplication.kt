@@ -22,6 +22,8 @@ class LinkedOutApplication : Application() {
         // The isolated picture decoder is a process of this app with no
         // rights at all: nothing of the app starts there.
         if (android.os.Process.isIsolated()) return
+        // The links kit's catalogs (ClearURLs rules, public suffixes) from the assets, for LinkCleaner and the link sheet.
+        com.linkedout.app.core.link.ClearUrls.attach(this)
         // Every picture decoded in the isolated decoder, never in the app.
         SingletonImageLoader.setSafe { context ->
             // The network side first, pictures capped in bytes before the decoder.

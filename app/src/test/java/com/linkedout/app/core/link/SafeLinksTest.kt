@@ -127,6 +127,31 @@ class SafeLinksTest {
         assertEquals(3, refused)
     }
 
+    // The same Recorder as above (Compose's UriHandler, https://developer.android.com/reference/kotlin/androidx/compose/ui/platform/UriHandler).
+    @Test
+    fun `the intermediary gets web links before the platform, the app's own links never`() {
+        val platform = Recorder()
+        val asked = mutableListOf<String>()
+        var refused = 0
+        val handler = SafeUriHandler(
+            platform = platform,
+            inApp = { it.startsWith("at://") },
+            onRefused = { refused++ },
+            intermediary = { asked += it }
+        )
+        handler.openUri("HTTPS://example.org/x")
+        handler.openUri("at://did:plc:abc/app.bsky.feed.post/1")
+        handler.openUri("javascript:alert(1)")
+        assertEquals(listOf("https://example.org/x"), asked)
+        assertEquals(emptyList<String>(), platform.opened)
+        assertEquals(1, refused)
+        // What the sheet's Open chose goes out, checked again.
+        handler.openOut("https://example.org/x")
+        handler.openOut("intent:#Intent;end")
+        assertEquals(listOf("https://example.org/x"), platform.opened)
+        assertEquals(2, refused)
+    }
+
     @Test
     fun `a link no app can open is refused, not thrown`() {
         var refused = 0

@@ -99,4 +99,6 @@ one for the post page, since the two share no class name.
 Forked from [MTGA](https://github.com/213YaZ786/MTGA), which reads X the same
 way.
 
+Links are checked before they open, after [URLCheck](https://github.com/TrianguloY/URLCheck) (CC BY 4.0). The tracking rules are [ClearURLs](https://github.com/ClearURLs/Rules) (LGPL-3.0), the site names come from the [Public Suffix List](https://publicsuffix.org) (MPL-2.0).
+
 MIT licensed.

@@ -52,17 +52,33 @@ object SafeLinks {
  * [onRefused] says nothing opened, for an address of another kind or one no
  * app can open.
  *
+ * [intermediary], when the app has one, is given every address that would
+ * leave the app, instead of opening it: the link sheet (LinkSheet) shows
+ * where it goes, and its Open comes back through [openOut]. The addresses
+ * the app shows itself ([inApp]) never reach it.
+ *
  * Wrapping Compose's handler as the apps already did for their own links:
  * https://developer.android.com/reference/kotlin/androidx/compose/ui/platform/UriHandler
  */
 class SafeUriHandler(
     private val platform: UriHandler,
     private val inApp: (String) -> Boolean,
-    private val onRefused: () -> Unit
+    private val onRefused: () -> Unit,
+    private val intermediary: ((String) -> Unit)? = null
 ) : UriHandler {
 
     override fun openUri(uri: String) {
         if (inApp(uri)) return
+        val url = SafeLinks.openable(uri)
+        if (url == null) {
+            onRefused()
+            return
+        }
+        if (intermediary != null) intermediary.invoke(url) else openOut(url)
+    }
+
+    /** [uri] to the platform, past the intermediary: for what the link sheet's Open chose. */
+    fun openOut(uri: String) {
         val url = SafeLinks.openable(uri)
         if (url == null) {
             onRefused()
