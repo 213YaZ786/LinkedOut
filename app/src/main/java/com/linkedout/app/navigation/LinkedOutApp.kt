@@ -389,7 +389,7 @@ private fun MainTabs(
     // Once when the app opens, never over the guide; debug builds are a
     // different app and skip it.
     val updates by store.settings.collectAsState()
-    if (!showWelcome && !BuildConfig.DEBUG) UpdatePrompt(updates.updates, BuildConfig.VERSION_NAME)
+    if (!showWelcome && !BuildConfig.DEBUG) UpdatePrompt(updates.updates, BuildConfig.VERSION_NAME, busy = { com.linkedout.app.ui.component.SafePlayer.anyPlaying() }) // a film is not cut by the update (update kit's busy check)
 
     // Remembered on every settled switch, so choosing "Last tab" later in
     // Settings already knows where the reader was.

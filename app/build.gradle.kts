@@ -22,8 +22,8 @@ android {
         applicationId = "com.linkedout.app"
         minSdk = 31
         targetSdk = 37
-        versionCode = 121
-        versionName = "0.9.21"
+        versionCode = 122
+        versionName = "0.9.22"
     }
 
     signingConfigs {
@@ -84,6 +84,7 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

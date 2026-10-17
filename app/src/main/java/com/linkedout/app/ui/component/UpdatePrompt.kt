@@ -16,8 +16,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.core.update.Release
+import com.linkedout.app.core.update.Start
 import com.linkedout.app.core.update.UpdateMode
 import com.linkedout.app.core.update.Updates
+import com.linkedout.app.core.update.startFor
 import kotlinx.coroutines.launch
 
 /** Once per launch of the process, not on every return to the screen. */
@@ -28,12 +30,16 @@ private enum class Step { ASK, DOWNLOADING, FAILED }
 /**
  * Asks GitHub once, when the app opens, whether a newer version is out, and
  * says so in a dialog. [mode] NOTIFY offers the release page; INSTALL
- * downloads, checks and installs it without a dialog, Android confirming
- * only when it must (see UpdatedReceiver for what follows).
+ * downloads and checks it without a dialog, then installs it when the user
+ * leaves the app and [busy] is false (see Updates; UpdatedReceiver says what
+ * follows). [busy] is the app's own check, true while a call, a sending or a
+ * playback must not be cut; it reads the app's state, never a composition's.
  * Nothing is shown when the app is up to date or GitHub cannot be reached.
  */
 @Composable
-fun UpdatePrompt(mode: UpdateMode, currentVersion: String) {
+fun UpdatePrompt(mode: UpdateMode, currentVersion: String, busy: () -> Boolean = { false }) {
+    // Off or Notify chosen after a download: nothing installs behind the user's back.
+    LaunchedEffect(mode) { if (mode != UpdateMode.INSTALL) Updates.drop() }
     if (mode == UpdateMode.OFF) return
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -44,16 +50,19 @@ fun UpdatePrompt(mode: UpdateMode, currentVersion: String) {
         if (checkedThisLaunch) return@LaunchedEffect
         checkedThisLaunch = true
         val newer = Updates.latest()?.takeIf { Updates.isNewer(it.version, currentVersion) } ?: return@LaunchedEffect
-        // Install mode asks nothing: the update downloads and installs by
-        // itself, Android confirming only when it must. The dialog shows
-        // only when installing cannot go ahead, or failed.
-        if (mode == UpdateMode.INSTALL && newer.apk != null && Updates.canInstall(context)) {
-            if (!Updates.install(context, newer)) {
-                step = Step.FAILED
-                release = newer
+        // Install mode asks nothing: the update downloads by itself and goes
+        // in when the user leaves. The dialog shows only when installing
+        // cannot go ahead, or failed.
+        when (startFor(mode, newer.apk != null, Updates.canInstall(context))) {
+            Start.STAGE -> {
+                Updates.arm(context, busy)
+                if (!Updates.stage(context, newer)) {
+                    step = Step.FAILED
+                    release = newer
+                }
             }
-        } else {
-            release = newer
+            Start.ASK -> release = newer
+            Start.NOTHING -> Unit
         }
     }
 
@@ -89,7 +98,8 @@ fun UpdatePrompt(mode: UpdateMode, currentVersion: String) {
                     } else {
                         step = Step.DOWNLOADING
                         scope.launch {
-                            if (Updates.install(context, shown)) release = null else step = Step.FAILED
+                            Updates.arm(context, busy)
+                            if (Updates.stage(context, shown)) release = null else step = Step.FAILED
                         }
                     }
                 }) { Text("Install") }

@@ -10,8 +10,14 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -33,8 +39,20 @@ data class Release(val version: String, val page: String, val apk: String?, val 
 /**
  * The app's own releases on GitHub. One small request when the app opens,
  * nothing in the background. Installing downloads the release APK, shown
- * in a notification, checks it (see install) and hands it to Android's
- * installer, which asks the user to confirm when it must.
+ * in a notification, checks it (see stage) and keeps it; the app hands it
+ * to Android's installer only when the user leaves the app (ON_STOP of the
+ * whole process) and it is not busy, so nothing is replaced under their
+ * hands. The manifest holds UPDATE_PACKAGES_WITHOUT_USER_ACTION, so Android
+ * installs without asking; when it still asks (STATUS_PENDING_USER_ACTION),
+ * the confirmation is shown at the next start of the app, once.
+ *
+ * Sources: PackageInstaller.SessionParams.setRequireUserAction and
+ * Manifest.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION
+ * (https://developer.android.com/reference/android/content/pm/PackageInstaller.SessionParams#setRequireUserAction(int),
+ * https://developer.android.com/reference/android/Manifest.permission#UPDATE_PACKAGES_WITHOUT_USER_ACTION):
+ * with the permission, an installer updating itself, and an app targeting a
+ * recent API, no user action is required. setRequestUpdateOwnership is not
+ * used: it needs ENFORCE_UPDATE_OWNERSHIP and only counts on a first install.
  */
 object Updates {
 
@@ -97,20 +115,77 @@ object Updates {
         )
     }
 
+    /** A verified APK kept in the cache until the user leaves the app. */
+    internal class Staged(val file: File, val packageName: String, val version: String, val page: String)
+
+    private val gate = UpdateGate()
+    @Volatile private var staged: Staged? = null
+    @Volatile private var busy: () -> Boolean = { false }
+    @Volatile private var foreground = true
+    /** Android's confirmation screen, held while the app is out of sight. */
+    @Volatile private var held: Intent? = null
+    private var armed = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /**
-     * Downloads [release], checks it and asks Android to install it. False
+     * Starts watching whether the user is in the app, once for the process:
+     * the update goes in at ON_STOP, Android's confirmation (if any) is shown
+     * at ON_START. Main thread. [busy] says whether the app must not be
+     * replaced now (a call, a message sending, media playing); it is read
+     * off the main thread, so it reads the app's own state, never a
+     * composition's. A check that throws counts as busy.
+     * Registered on the application, not on a screen: leaving by Back
+     * destroys the screen before ProcessLifecycleOwner's delayed ON_STOP.
+     * Ported from the pattern of
+     * https://developer.android.com/reference/androidx/lifecycle/ProcessLifecycleOwner.
+     */
+    fun arm(context: Context, busy: () -> Boolean = { false }) {
+        this.busy = busy
+        if (armed) return
+        armed = true
+        val app = context.applicationContext
+        val lifecycle = ProcessLifecycleOwner.get().lifecycle
+        foreground = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    foreground = true
+                    if (gate.started()) showHeld(app)
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    foreground = false
+                    scope.launch { commitIfLeft(app) }
+                }
+                else -> Unit
+            }
+        })
+    }
+
+    /** The mode left Install: an update waiting is forgotten and its file deleted. */
+    fun drop() {
+        gate.dropped()
+        held = null
+        staged?.file?.delete()
+        staged = null
+    }
+
+    /**
+     * Downloads [release], checks it and keeps it for [commitIfLeft]. False
      * when anything fails; a file that fails a check is deleted, never
      * installed. Three checks: the file comes from this app's releases on
      * GitHub, it matches the release's SHA256SUMS, and it is this app, newer,
      * signed with the key of the installed one (Android refuses another key
      * anyway; checking first means the user is never asked for a bad file).
+     * A file kept by an earlier launch and still matching is not downloaded
+     * again. Nothing is shown to the user but the download's notification.
      */
-    suspend fun install(context: Context, release: Release): Boolean = withContext(Dispatchers.IO) {
-        val file = File(context.cacheDir, "update.apk")
+    suspend fun stage(context: Context, release: Release): Boolean = withContext(Dispatchers.IO) {
+        val app = context.applicationContext
+        val file = File(app.cacheDir, "update.apk")
         // The download shows in a notification, the app open or not.
-        val notice = UpdateNotice(context.applicationContext, release.version)
+        val notice = UpdateNotice(app, release.version)
         var done = false
-        try {
+        val ok = try {
             val apk = release.apk?.takeIf(::fromRepo) ?: return@withContext false
             val sums = release.sums?.takeIf(::fromRepo) ?: return@withContext false
             val name = apk.substringAfterLast('/')
@@ -118,44 +193,91 @@ object Updates {
                 .map { it.trim() }
                 .firstOrNull { it.endsWith(name) }
                 ?.substringBefore(' ')?.lowercase() ?: return@withContext false
-            notice.progress(0f)
-            download(apk, file, notice::progress)
-            val target = if (sha256(file) == expected) sameApp(context, file) else null
-            target ?: return@withContext false
-            val app = context.applicationContext
-            listenForConfirmation(app)
-            // Lets UpdatedReceiver tell this update from one installed by hand.
-            app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(INSTALLING, true).apply()
-            val installer = app.packageManager.packageInstaller
-            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-                setAppPackageName(target)
-                // Android skips the question when this app installed the one
-                // being replaced; otherwise it still asks.
-                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            if (!(file.exists() && sha256(file) == expected)) {
+                notice.progress(0f)
+                download(apk, file, notice::progress)
             }
-            val id = installer.createSession(params)
-            installer.openSession(id).use { session ->
-                session.openWrite("app.apk", 0, file.length()).use { out ->
-                    file.inputStream().use { it.copyTo(out) }
-                    session.fsync(out)
-                }
-                val status = Intent(ACTION_STATUS).setPackage(app.packageName)
-                val pending = PendingIntent.getBroadcast(
-                    app, id, status, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-                )
-                session.commit(pending.intentSender)
-            }
-            done = true
-            true
+            done = if (sha256(file) == expected) stageFile(app, file, release.version, release.page) else false
+            done
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             false
         } finally {
-            file.delete()
-            // Android's installer takes over from here; a failure stays
-            // in the notification, which opens the release page.
+            if (!done) file.delete()
             if (done) notice.cancel() else notice.failed(release.page)
         }
+        // After the notice is settled, so a failed commit's own notice stays.
+        if (ok) commitIfLeft(app)
+        ok
+    }
+
+    /**
+     * Keeps [file], already checked against its SHA-256, as the update to
+     * install when the user leaves: it must be this app, newer, signed alike
+     * (sameApp). The one way into the waiting state, for a download and for
+     * the debug receiver that feeds a local APK.
+     */
+    internal fun stageFile(app: Context, file: File, version: String, page: String): Boolean {
+        val target = sameApp(app, file) ?: return false
+        listenForConfirmation(app)
+        staged = Staged(file, target, version, page)
+        gate.staged()
+        return true
+    }
+
+    /**
+     * Commits the waiting update when the user is out of the app and it is
+     * not busy; else it waits for the next ON_STOP. Run off the main thread.
+     */
+    internal fun commitIfLeft(app: Context) {
+        val s = staged ?: return
+        val busyNow = runCatching { busy() }.getOrDefault(true)
+        if (!gate.installNow(foreground, busyNow)) return
+        staged = null
+        if (!commit(app, s)) UpdateNotice(app, s.version).failed(s.page)
+    }
+
+    /**
+     * Hands [s] to Android's installer. Written after the session recipe of
+     * https://developer.android.com/reference/android/content/pm/PackageInstaller
+     * (createSession, openWrite, fsync, commit with an IntentSender).
+     */
+    private fun commit(app: Context, s: Staged): Boolean = try {
+        // Lets UpdatedReceiver tell this update from one installed by hand.
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(INSTALLING, true).apply()
+        val installer = app.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+            setAppPackageName(s.packageName)
+            // No question when the manifest holds UPDATE_PACKAGES_WITHOUT_USER_ACTION
+            // and the app updates itself (see the class doc); else Android
+            // still answers STATUS_PENDING_USER_ACTION.
+            setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+        }
+        val id = installer.createSession(params)
+        installer.openSession(id).use { session ->
+            session.openWrite("app.apk", 0, s.file.length()).use { out ->
+                s.file.inputStream().use { it.copyTo(out) }
+                session.fsync(out)
+            }
+            val status = Intent(ACTION_STATUS).setPackage(app.packageName)
+            val pending = PendingIntent.getBroadcast(
+                app, id, status, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            session.commit(pending.intentSender)
+        }
+        true
+    } catch (e: Exception) {
+        app.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(INSTALLING).apply()
+        false
+    } finally {
+        s.file.delete()
+    }
+
+    /** Shows the held confirmation, once. */
+    private fun showHeld(context: Context) {
+        val confirm = held ?: return
+        held = null
+        runCatching { context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
 
     /** Only files attached to this app's own releases are fetched. */
@@ -188,19 +310,28 @@ object Updates {
     private var listening = false
 
     /**
-     * Android answers the install with the screen that asks the reader: open
-     * it. One receiver for the life of the process, however many tries.
+     * Android may answer the install with the screen that asks the reader.
+     * The app is out of sight when it commits, and an activity is never
+     * started from the background: the screen is held and shown at the next
+     * start of the app (UpdateGate), once. A failed or cancelled install
+     * clears the flag UpdatedReceiver reads. One receiver for the life of the
+     * process, however many tries.
      */
     private fun listenForConfirmation(app: Context) {
         if (listening) return
         listening = true
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
-                if (status != PackageInstaller.STATUS_PENDING_USER_ACTION) return
-                @Suppress("DEPRECATION")
-                val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
-                context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+                    PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                        @Suppress("DEPRECATION")
+                        val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT) ?: return
+                        held = confirm
+                        if (gate.pendingUserAction(foreground)) showHeld(context)
+                    }
+                    PackageInstaller.STATUS_SUCCESS -> Unit
+                    else -> context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(INSTALLING).apply()
+                }
             }
         }
         ContextCompat.registerReceiver(app, receiver, IntentFilter(ACTION_STATUS), ContextCompat.RECEIVER_NOT_EXPORTED)

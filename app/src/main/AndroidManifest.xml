@@ -5,6 +5,8 @@
     <!-- Only used when the reader chooses to install updates from the app;
          Android asks them to allow it then. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- An update goes in without a question when the user leaves the app. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!--
         Asked for at the moment the reader turns on notifications for new
