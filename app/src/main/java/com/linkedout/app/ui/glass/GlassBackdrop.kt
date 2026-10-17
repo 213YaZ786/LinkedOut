@@ -229,7 +229,7 @@ private const val LENS_AGSL = """
         float2 src = centre + q * (1.0 - 0.05 * lens) - n * k * lens * 20.0 * dpr;
         half4 s = content.eval(src);
         half3 c = mix(s.rgb, tint.rgb, tint.a);
-        c += half3(rimLight(depth, highlightNormal(q, b, float4(radius)), dpr, dark, 0.0, min(b.x, b.y)));
+        c = lightGlass(c, rimLight(depth, highlightNormal(q, b, float4(radius)), dpr, dark, 0.0, min(b.x, b.y)), dark);
         return half4(c, 1.0);
     }
 """

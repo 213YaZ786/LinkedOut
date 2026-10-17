@@ -1,5 +1,6 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -38,6 +40,7 @@ fun EmptyZone(
     message: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    iconShape: Shape? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null
 ) {
@@ -52,7 +55,14 @@ fun EmptyZone(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 icon?.let {
-                    Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                    // [iconShape]: the icon on a container of that shape, as Material 3 Expressive's shapes
+                    // (androidx compose/material3 MaterialShapes.kt) hold an icon.
+                    if (iconShape != null) Box(
+                        Modifier.size(72.dp).background(MaterialTheme.colorScheme.primaryContainer, iconShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(36.dp))
+                    } else Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
                 }
                 Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
                 Text(

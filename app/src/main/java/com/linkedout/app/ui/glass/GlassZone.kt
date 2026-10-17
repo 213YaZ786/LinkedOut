@@ -217,6 +217,14 @@ internal const val GLASS_COMMON = """
         float shade = band * down * (dark > 0.5 ? 0.04 : 0.03) + bevel * (dark > 0.5 ? 0.05 : 0.035);
         return rim + light - shade;
     }
+    // The rim laid on the glass, from https://github.com/Kyant0/AndroidLiquidGlass highlight/HighlightStyle.kt.
+    // By night added (their Default, BlendMode.Plus); by day drawn over (their Ambient, DrawScope.DefaultBlendMode:
+    // c * (1 - a) + white * a), so on pale glass the light keeps its fall from the top and bottom to the flanks
+    // instead of clipping to white all round.
+    half3 lightGlass(half3 c, float r, float dark) {
+        if (dark > 0.5) return c + half3(r);
+        return mix(c, half3(1.0), max(r, 0.0)) + half3(min(r, 0.0));
+    }
 """
 
 private const val ZONE_AGSL = """
@@ -261,7 +269,7 @@ private const val ZONE_AGSL = """
         float2 src = b + q * (1.0 - 0.05 * lens) - n * k * lens * 20.0 * dpr;
         half3 c = ambient(origin + src);
         c = mix(c, tint.rgb, tint.a);
-        c += half3(rimLight(depth, highlightNormal(q, b, radii), dpr, dark, flanks, min(b.x, b.y)));
+        c = lightGlass(c, rimLight(depth, highlightNormal(q, b, radii), dpr, dark, flanks, min(b.x, b.y)), dark);
         return half4(c, 1.0);
     }
 """
