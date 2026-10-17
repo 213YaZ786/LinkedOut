@@ -82,7 +82,9 @@ fun rememberGlassLook(scheme: ColorScheme, enabled: Boolean): GlassLook? = remem
         zoneTint = if (dark) scheme.surfaceContainerLow.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.32f),
         floatTint = if (dark) scheme.surfaceContainerLow.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.42f),
         // By night a deep wash of the accent, so what sits on it reads light as all the night's text.
-        accentTint = if (dark) scheme.primary.copy(alpha = 0.30f) else scheme.primaryContainer.copy(alpha = 0.70f)
+        // By day as clear as the floating glass (0.70 drowned the rim and the bevel: a flat disc,
+        // the send button, 2026-10-17), so a chosen or prominent pane stays polished glass.
+        accentTint = if (dark) scheme.primary.copy(alpha = 0.30f) else scheme.primaryContainer.copy(alpha = 0.42f)
     )
 }
 
