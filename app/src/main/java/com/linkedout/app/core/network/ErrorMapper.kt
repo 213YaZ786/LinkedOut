@@ -24,7 +24,10 @@ object ErrorMapper {
      */
     const val LINKEDIN_DENIED = 999
 
-    fun fromThrowable(host: String, t: Throwable): AppError = when (t) {
+    fun fromThrowable(host: String, t: Throwable): AppError = if (t.isTooLarge()) {
+        // Over the size cap (ResponseLimit): the service sent too much, as a failing server does.
+        AppError.ServerError(host, 0)
+    } else when (t) {
         is UnknownHostException -> AppError.DnsFailure(host)
         is SSLException -> AppError.TlsFailure(host, t.message)
         is HttpRequestTimeoutException -> AppError.Timeout(host, HttpClientFactory.REQUEST_TIMEOUT_MS)

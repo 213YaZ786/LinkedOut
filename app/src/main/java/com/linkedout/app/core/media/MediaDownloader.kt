@@ -7,6 +7,7 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import com.linkedout.app.core.link.SafeLinks
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
 import kotlinx.coroutines.CoroutineScope
@@ -55,7 +56,14 @@ class MediaDownloader(
     }
 
     private fun enqueue(item: MediaItem, authorHandle: String) {
-        val url = item.downloadUrl
+        // DownloadManager.Request throws on anything but http and https
+        // (AOSP, frameworks/base/core/java/android/app/DownloadManager.java),
+        // and the address comes from a post: checked as every link is.
+        val url = SafeLinks.openable(item.downloadUrl)
+        if (url == null) {
+            toast("Could not start the download")
+            return
+        }
         // A playlist is a few lines of text naming the real segments, and
         // DownloadManager would happily save it as an .mp4 that no player can
         // open. Refusing is the honest answer, and this is the one rendition

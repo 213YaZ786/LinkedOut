@@ -29,6 +29,14 @@ object HttpClientFactory {
     const val PROBE_TIMEOUT_MS = 6_000L
 
     /**
+     * The biggest answer taken, for the network and for a page the web
+     * engine hands back. A LinkedIn page is about 400 kB (a company page
+     * measured 2026-10-17: 464 kB); 8 MB leaves seventeen times that and
+     * stops a hostile or broken answer from being read whole into memory.
+     */
+    const val MAX_BODY_BYTES = 8L * 1024 * 1024
+
+    /**
      * [userAgent] is the string every request carries unless it sets its own.
      * It used to be a feed reader identifier, which LinkedIn answers with a
      * stripped page, and it was wrong for every request this app makes. The
@@ -46,6 +54,8 @@ object HttpClientFactory {
         engine {
             config { cookieJar(GuestCookieJar(session, guest, cookieDomain)) }
             addInterceptor(WebSessionInterceptor(session))
+            // Ported from Signal-Android's OkHttpUtil size limit, see ResponseLimit.
+            addInterceptor(ResponseLimit(MAX_BODY_BYTES))
         }
         followRedirects = true
 

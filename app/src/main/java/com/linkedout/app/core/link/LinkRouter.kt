@@ -69,8 +69,10 @@ class LinkRouter(private val context: Context) {
          * tap is better than losing the app.
          */
         fun openOutside(context: Context, url: String) {
-            val view = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-            val host = runCatching { Uri.parse(url).host }.getOrNull().orEmpty()
+            // Only http and https leave the app, see SafeLinks.
+            val safe = SafeLinks.openable(url) ?: return
+            val view = Intent(Intent.ACTION_VIEW, Uri.parse(safe))
+            val host = runCatching { Uri.parse(safe).host }.getOrNull().orEmpty()
             val intent = if (LinkedInLink.isLinkedInHost(host)) {
                 Intent.createChooser(view, null).putExtra(
                     Intent.EXTRA_EXCLUDE_COMPONENTS,

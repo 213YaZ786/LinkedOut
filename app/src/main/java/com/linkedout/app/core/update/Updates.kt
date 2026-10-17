@@ -83,7 +83,8 @@ object Updates {
         return false
     }
 
-    private fun numbers(version: String) = version.split('.').map { part -> part.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
+    // ASCII digits only: a tag with another script's digits reads as 0 (Mushaf's LatinDigitsTest guard).
+    private fun numbers(version: String) = version.split('.').map { part -> part.takeWhile { it in '0'..'9' }.take(9).toIntOrNull() ?: 0 }
 
     /** Whether Android lets this app install packages; the reader allows it once. */
     fun canInstall(context: Context): Boolean = context.packageManager.canRequestPackageInstalls()
@@ -205,18 +206,67 @@ object Updates {
         ContextCompat.registerReceiver(app, receiver, IntentFilter(ACTION_STATUS), ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
-    private fun open(url: String): HttpURLConnection =
-        (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = TIMEOUT_MS
-            readTimeout = TIMEOUT_MS
-            setRequestProperty("User-Agent", "LinkedOut")
-            setRequestProperty("Accept", "application/vnd.github+json, */*")
+    /**
+     * Opens [start] once it answers 200. Redirects are never left to HttpURLConnection: each hop
+     * is read here and must be HTTPS to one of GitHub's hosts before it is followed, three at most.
+     * Ported from Mushaf's Net.open (its own code), after
+     * https://developer.android.com/reference/java/net/HttpURLConnection#setInstanceFollowRedirects(boolean)
+     * and https://developer.android.com/privacy-and-security/risks/cleartext.
+     */
+    private fun open(start: String): HttpURLConnection {
+        var url = checked(URL(start))
+        var hops = 0
+        while (true) {
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                setRequestProperty("User-Agent", "LinkedOut")
+                setRequestProperty("Accept", "application/vnd.github+json, */*")
+            }
+            when (val code = conn.responseCode) {
+                200 -> return conn
+                301, 302, 303, 307, 308 -> {
+                    val location = conn.getHeaderField("Location")
+                    conn.disconnect()
+                    if (hops++ >= MAX_REDIRECTS || location.isNullOrBlank()) error("redirect refused")
+                    url = checked(URL(url, location))
+                }
+                else -> {
+                    conn.disconnect()
+                    error("http $code")
+                }
+            }
         }
+    }
+
+    /** [url] when it is HTTPS to one of GitHub's hosts, else refused (Mushaf's Net.checked). */
+    internal fun checked(url: URL): URL {
+        if (url.protocol != "https" || url.host.lowercase() !in GITHUB) error("refused ${url.host}")
+        return url
+    }
+
+    /** The release list and the APK: GitHub's API, its pages and where it keeps release files. */
+    internal val GITHUB = setOf("api.github.com", "github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com")
+    private const val MAX_REDIRECTS = 3
+    /** The release list is a few kilobytes: read no more than this (Signal-Android OkHttpUtil.readAsBytes' size limit). */
+    private const val MAX_JSON = 1L shl 20
 
     private fun get(url: String): ByteArray = open(url).run {
         try {
-            if (responseCode != 200) error("http $responseCode")
-            inputStream.use { it.readBytes() }
+            inputStream.use { input ->
+                val out = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(16 * 1024)
+                var total = 0L
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    total += n
+                    if (total > MAX_JSON) error("too large")
+                    out.write(buffer, 0, n)
+                }
+                out.toByteArray()
+            }
         } finally {
             disconnect()
         }
@@ -224,7 +274,6 @@ object Updates {
 
     private fun download(url: String, into: File, onProgress: (Float) -> Unit) = open(url).run {
         try {
-            if (responseCode != 200) error("http $responseCode")
             val total = contentLengthLong
             if (total > MAX_APK) error("too large")
             inputStream.use { input ->

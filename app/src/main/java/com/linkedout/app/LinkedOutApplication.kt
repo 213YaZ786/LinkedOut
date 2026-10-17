@@ -24,7 +24,11 @@ class LinkedOutApplication : Application() {
         if (android.os.Process.isIsolated()) return
         // Every picture decoded in the isolated decoder, never in the app.
         SingletonImageLoader.setSafe { context ->
-            ImageLoader.Builder(context).components { add(SafeCoilDecoder.Factory(context)) }.build()
+            // The network side first, pictures capped in bytes before the decoder.
+            ImageLoader.Builder(context).components {
+                add(SafeCoilDecoder.network())
+                add(SafeCoilDecoder.Factory(context))
+            }.build()
         }
         startKoin {
             androidLogger(if (BuildConfig.DEBUG) Level.DEBUG else Level.NONE)

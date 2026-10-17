@@ -40,7 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import com.linkedout.app.core.link.SafeUriHandler
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavHostController
 import com.linkedout.app.core.link.LinkRouter
@@ -108,14 +110,15 @@ fun LinkedOutApp() {
 
     // Every tap on a link inside the app goes through here. LinkedIn profiles,
     // companies and posts open in LinkedOut, including country subdomains and
-    // lnkd.in short links. Anything else goes to the browser.
+    // lnkd.in short links. Web links go to the browser, anything else stays
+    // text (SafeLinks).
+    val context = LocalContext.current
     val uris = remember(platformUris) {
-        object : UriHandler {
-            override fun openUri(uri: String) {
-                val link = links.parse(uri)
-                if (link != null) show(link) else platformUris.openUri(uri)
-            }
-        }
+        SafeUriHandler(
+            platform = platformUris,
+            inApp = { uri -> links.parse(uri)?.also { show(it) } != null },
+            onRefused = { Toast.makeText(context, "Link not opened", Toast.LENGTH_SHORT).show() }
+        )
     }
 
     CompositionLocalProvider(LocalUriHandler provides uris) {

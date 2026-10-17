@@ -1,5 +1,7 @@
 package com.linkedout.app.core.link
 
+import com.linkedout.app.core.network.ResponseLimit
+import com.linkedout.app.core.network.SizeLimits
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -33,6 +35,8 @@ class RedirectResolver {
             connectTimeoutMillis = TIMEOUT_MS
             requestTimeoutMillis = TIMEOUT_MS
         }
+        // The notice is a few kB: anything near the cap is not one.
+        engine { addInterceptor(ResponseLimit(SizeLimits.NOTICE)) }
     }
 
     /** The cleaned address [url] leads to, or null when Google did not say. */

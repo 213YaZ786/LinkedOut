@@ -7,9 +7,15 @@ import coil3.decode.DecodeResult
 import coil3.decode.Decoder
 import coil3.decode.ImageSource
 import coil3.fetch.SourceFetchResult
+import coil3.network.NetworkFetcher
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.Options
 import coil3.size.pxOrElse
+import com.linkedout.app.core.network.ResponseLimit
+import com.linkedout.app.core.network.SizeLimits
+import com.linkedout.app.core.network.readAsBytes
 import kotlin.math.max
+import okhttp3.OkHttpClient
 
 /**
  * Every picture of a feed decoded in the isolated decoder ([SafeImages])
@@ -27,7 +33,9 @@ class SafeCoilDecoder(
 ) : Decoder {
 
     override suspend fun decode(): DecodeResult {
-        val bytes = source.source().use { it.readByteArray() }
+        // Bounded as Signal's OkHttpUtil.readAsBytes (see readAsBytes): a copy
+        // already on disk can be larger than the network lets in.
+        val bytes = source.source().use { readAsBytes(it.inputStream(), SizeLimits.PICTURE) }
         val wanted = max(options.size.width.pxOrElse { 0 }, options.size.height.pxOrElse { 0 })
         val side = if (wanted > 0) wanted else DEFAULT_SIDE
         val bitmap = SafeImages.decode(context, bytes, side) ?: error("Not a picture the isolated decoder accepts")
@@ -41,7 +49,17 @@ class SafeCoilDecoder(
             SafeCoilDecoder(app, result.source, options)
     }
 
-    private companion object {
-        const val DEFAULT_SIDE = 2048
+    companion object {
+        private const val DEFAULT_SIDE = 2048
+
+        /**
+         * Coil's network fetcher on an OkHttp client of its own, as Coil's
+         * documentation sets one up (https://coil-kt.github.io/coil/network/),
+         * with [ResponseLimit] so a picture over [SizeLimits.PICTURE] fails
+         * on the network side, before any byte reaches the decoder. Add it
+         * to the image loader's components before [Factory].
+         */
+        fun network(): NetworkFetcher.Factory =
+            OkHttpNetworkFetcherFactory(callFactory = { OkHttpClient.Builder().addInterceptor(ResponseLimit(SizeLimits.PICTURE)).build() })
     }
 }

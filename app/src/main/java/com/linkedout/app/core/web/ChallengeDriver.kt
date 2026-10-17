@@ -23,6 +23,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.linkedout.app.core.common.ChallengeKind
 import com.linkedout.app.core.network.ChallengeDetector
+import com.linkedout.app.core.network.HttpClientFactory
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.coroutines.CoroutineScope
@@ -408,6 +409,8 @@ class ChallengeDriver(
 
     private fun decode(raw: String?): String? {
         if (raw.isNullOrEmpty() || raw == "null") return null
+        // A page past the network's cap is no page either (HttpClientFactory.MAX_BODY_BYTES).
+        if (raw.length > HttpClientFactory.MAX_BODY_BYTES) return null
         return runCatching {
             (Json.parseToJsonElement(raw) as? JsonPrimitive)?.takeIf { it.isString }?.content
         }.getOrNull()?.takeIf { it.isNotBlank() }
