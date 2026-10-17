@@ -375,7 +375,9 @@ private fun TrackSegment(
             .glassZone(shape, look, lens = 1f)
             .drawBehind {
                 if (active) {
-                    washShape(shape, look.accentTint)
+                    // Material's active track is primary (SliderTokens.ActiveTrackColor): washed with primary as
+                    // GlassSwitch's on track and GlassCheck's box (0.85), never the pale accentTint.
+                    washShape(shape, accent.copy(alpha = 0.85f))
                 } else {
                     // drawStopIndicator: 4 dp, its centre one corner from the end, only if there is room.
                     val c = (TrackHeight / 2).toPx()
