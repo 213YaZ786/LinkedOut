@@ -139,13 +139,15 @@ internal fun setHalos(shader: RuntimeShader, look: GlassLook, window: Size) {
 }
 
 /**
- * The rim without shaders: a soft light on the top edge that fades down
- * the flanks, a faint shade below; never a white line.
+ * The rim without shaders: light on the top edge and its mirror on the
+ * bottom edge, faint on the flanks (the same light as the shader's
+ * rimLight, from Kyant0/AndroidLiquidGlass highlight/HighlightStyle.kt
+ * Default: the abs of the dot with the light gives the mirror); never a white line.
  */
 internal fun rimBrush(look: GlassLook, height: Float): Brush {
-    val strong = Color.White.copy(alpha = if (look.dark) 0.16f else 0.24f)
+    val strong = Color.White.copy(alpha = if (look.dark) 0.20f else 0.30f)
     val faint = Color.White.copy(alpha = 0.03f)
-    return Brush.verticalGradient(0f to strong, 0.35f to faint, 1f to Color.Black.copy(alpha = 0.04f), endY = height)
+    return Brush.verticalGradient(0f to strong, 0.3f to faint, 0.7f to faint, 1f to strong.copy(alpha = strong.alpha * 0.8f), endY = height)
 }
 
 internal const val HALOS = 4
@@ -171,23 +173,47 @@ internal const val GLASS_COMMON = """
                           sdb(q + float2(0.0, e), b, r) - sdb(q - float2(0.0, e), b, r));
         return normalize(n + 1e-6);
     }
+    // The edge normal of a rounded box, for the highlight only.
+    // Port of gradSdRoundedRect and its gradRadius (radius * 1.5, at most the half size), Kyant0/AndroidLiquidGlass
+    // (Apache-2.0), backdrop/src/commonMain/kotlin/com/kyant/backdrop/internal/Shaders.kt; each corner keeps its own
+    // radius as in sdb4, a sign that is never 0 on the axes, and no division by a zero length.
+    float2 highlightNormal(float2 q, float2 b, float4 r) {
+        float rr = q.x < 0.0 ? (q.y < 0.0 ? r.x : r.w) : (q.y < 0.0 ? r.y : r.z);
+        float gradRadius = min(rr * 1.5, min(b.x, b.y));
+        float2 cc = abs(q) - (b - float2(gradRadius));
+        float2 s = float2(q.x < 0.0 ? -1.0 : 1.0, q.y < 0.0 ? -1.0 : 1.0);
+        if (cc.x >= 0.0 || cc.y >= 0.0) {
+            float2 m = max(cc, 0.0);
+            return s * m / max(length(m), 1e-6);
+        }
+        float gx = step(cc.y, cc.x);
+        return s * float2(gx, 1.0 - gx);
+    }
     // Polished glass (the user's reference, 2026-10-10): a thin rim of light
     // at the very edge, bright at the top and the bottom, faint on the
     // flanks, a hair of shade just inside it for the bevel; under it a wide,
     // gentle gradient, light from above, shade below. Never a flat white line.
-    // [flanks] 1 lights the sides as well (a message bubble, as iOS's).
-    float rimLight(float depth, float2 n, float dpr, float dark, float flanks) {
-        float edge = 1.0 - smoothstep(0.4 * dpr, 1.8 * dpr, depth);
+    // The rim's strength follows the angle of the edge normal [n] as in
+    // Kyant0/AndroidLiquidGlass (highlight/HighlightStyle.kt Default, Shaders.kt DefaultHighlightShaderString):
+    // intensity = pow(abs(dot(n, light)), falloff), the abs giving the mirror light on the opposite edge.
+    // The light is from the top (angle -90 degrees, y down), so the flanks stay faint.
+    // [flanks] 1 lights the sides as well (a message bubble, as iOS's): the light comes from the top left
+    // (their default angle, 45 degrees) and its mirror, the bottom right a little weaker.
+    // [m] the smaller half size of the shape: a small shape (a 44 dp circle) gets a wider and stronger rim, so
+    // its top and bottom arcs read like a large zone's straight edge.
+    float rimLight(float depth, float2 n, float dpr, float dark, float flanks, float m) {
+        float tiny = 1.0 - smoothstep(20.0 * dpr, 64.0 * dpr, m);
+        float edge = 1.0 - smoothstep(0.4 * dpr, (1.8 + 1.0 * tiny) * dpr, depth);
         float bevel = smoothstep(1.2 * dpr, 2.4 * dpr, depth) * (1.0 - smoothstep(2.4 * dpr, 4.5 * dpr, depth));
         float band = 1.0 - smoothstep(0.0, 20.0 * dpr, depth);
         band = band * band * band;
-        float vertical = abs(n.y);
         float up = pow(max(-n.y, 0.0), 1.6);
         float down = pow(max(n.y, 0.0), 2.0);
-        // With flanks, iOS's specular instead: bright where the edge faces the top left or the bottom right, faint between.
-        float spec = pow(max(dot(n, float2(-0.7071, -0.7071)), 0.0), 2.0) + 0.8 * pow(max(dot(n, float2(0.7071, 0.7071)), 0.0), 2.0);
-        float rim = edge * (0.10 + 0.32 * mix(pow(vertical, 1.4), 0.15 + 0.85 * spec, flanks)) * (dark > 0.5 ? 0.75 : 1.0);
-        float light = band * (0.20 + 0.80 * up + flanks * 0.6 * pow(abs(n.x), 1.6)) * (dark > 0.5 ? 0.10 : 0.10);
+        float vertical = pow(abs(n.y), 3.4 - 0.8 * tiny);
+        float d = dot(n, float2(-0.7071, -0.7071));
+        float spec = pow(abs(d), 2.0) * (d < 0.0 ? 0.8 : 1.0);
+        float rim = edge * (0.01 + 0.50 * (1.0 + 0.35 * tiny) * mix(vertical, 0.15 + 0.85 * spec, flanks)) * (dark > 0.5 ? 0.75 : 1.0);
+        float light = band * (0.20 + 0.80 * up + flanks * 0.6 * pow(abs(n.x), 1.6)) * 0.10;
         float shade = band * down * (dark > 0.5 ? 0.04 : 0.03) + bevel * (dark > 0.5 ? 0.05 : 0.035);
         return rim + light - shade;
     }
@@ -235,7 +261,7 @@ private const val ZONE_AGSL = """
         float2 src = b + q * (1.0 - 0.05 * lens) - n * k * lens * 20.0 * dpr;
         half3 c = ambient(origin + src);
         c = mix(c, tint.rgb, tint.a);
-        c += half3(rimLight(depth, n, dpr, dark, flanks));
+        c += half3(rimLight(depth, highlightNormal(q, b, radii), dpr, dark, flanks, min(b.x, b.y)));
         return half4(c, 1.0);
     }
 """
