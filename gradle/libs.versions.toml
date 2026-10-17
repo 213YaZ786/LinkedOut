@@ -19,6 +19,8 @@ coil = "3.6.3"
 media3 = "1.11.1"
 # Glide's GIF decoder (pure Java), run only inside the isolated DecoderService.
 gifdecoder = "5.0.9"
+# Material 3 Expressive's shapes (EmptyZone's Sunny) until material3 ships MaterialShapes stable.
+graphicsShapes = "1.1.0"
 # The browser engine library, used by the apps that need one.
 webkit = "1.17.0"
 junit = "4.13.2"
@@ -40,7 +42,8 @@ androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graph
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
-androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
+androidx-graphics-shapes = { group = "androidx.graphics", name = "graphics-shapes", version.ref = "graphicsShapes" }
+androidx-navigation-compose ={ group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.11.0" }
 koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
 koin-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }

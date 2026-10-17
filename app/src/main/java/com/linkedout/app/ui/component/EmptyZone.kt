@@ -40,7 +40,7 @@ fun EmptyZone(
     message: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    iconShape: Shape? = null,
+    iconShape: Shape? = SunnyShape,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null
 ) {
@@ -55,8 +55,8 @@ fun EmptyZone(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 icon?.let {
-                    // [iconShape]: the icon on a container of that shape, as Material 3 Expressive's shapes
-                    // (androidx compose/material3 MaterialShapes.kt) hold an icon.
+                    // [iconShape]: the icon on a container of that shape (Sunny unless said otherwise, null for
+                    // the bare icon), as Material 3 Expressive's shapes (androidx compose/material3 MaterialShapes.kt) hold an icon.
                     if (iconShape != null) Box(
                         Modifier.size(72.dp).background(MaterialTheme.colorScheme.primaryContainer, iconShape),
                         contentAlignment = Alignment.Center
