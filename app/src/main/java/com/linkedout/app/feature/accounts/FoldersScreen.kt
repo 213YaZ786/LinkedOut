@@ -17,10 +17,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.graphics.Color
+import com.linkedout.app.ui.component.BoldIconButton
+import com.linkedout.app.ui.component.QuietButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -118,14 +122,14 @@ fun FoldersScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                BoldButton(filled = true, onClick = {
                     haptics.done()
                     viewModel.deleteFolder(name)
                     if (open == name) open = null
                     deleting = null
                 }) { Text("Delete") }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } }
+            dismissButton = { QuietButton(onClick = { deleting = null }) { Text("Cancel") } }
         )
     }
 
@@ -194,7 +198,7 @@ fun FoldersScreen(
                         }
                         if (name != FollowedAccount.MAIN) {
                             BoldButton(onClick = { renaming = name }) { Text("Rename") }
-                            IconButton(onClick = { deleting = name }) {
+                            BoldIconButton(onClick = { deleting = name }) {
                                 Icon(
                                     LinkedOutIcons.Delete,
                                     contentDescription = "Delete this folder",
@@ -227,7 +231,9 @@ fun FoldersScreen(
                                         .then(Modifier),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    TextButton(
+                                    // A row inside the folder's zone: a transparent tap target, never a
+                                    // second glass zone (Modules, "Liquid glass, as built").
+                                    Surface(
                                         onClick = {
                                             // Filing is moving, so it answers
                                             // like something taken.
@@ -237,33 +243,45 @@ fun FoldersScreen(
                                                 if (here) FollowedAccount.MAIN else name
                                             )
                                         },
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = ButtonDefaults.textShape,
+                                        color = Color.Transparent,
+                                        contentColor = MaterialTheme.colorScheme.primary
                                     ) {
-                                        Avatar(
-                                            url = row.avatarUrl,
-                                            name = row.name ?: row.handle,
-                                            size = 28.dp
-                                        )
-                                        Text(
-                                            row.name ?: row.handle,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f).padding(start = 10.dp)
-                                        )
-                                        if (here) {
-                                            Icon(
-                                                LinkedOutIcons.Check,
-                                                contentDescription = "Filed here",
-                                                modifier = Modifier.size(18.dp)
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = ButtonDefaults.MinHeight)
+                                                .padding(ButtonDefaults.TextButtonContentPadding),
+                                            horizontalArrangement = Arrangement.Center,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Avatar(
+                                                url = row.avatarUrl,
+                                                name = row.name ?: row.handle,
+                                                size = 28.dp
                                             )
-                                        } else {
                                             Text(
-                                                row.folder,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1
+                                                row.name ?: row.handle,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f).padding(start = 10.dp)
                                             )
+                                            if (here) {
+                                                Icon(
+                                                    LinkedOutIcons.Check,
+                                                    contentDescription = "Filed here",
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            } else {
+                                                Text(
+                                                    row.folder,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -298,10 +316,10 @@ private fun NameDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+            BoldButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank(), filled = true) {
                 Text(confirm)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { QuietButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }

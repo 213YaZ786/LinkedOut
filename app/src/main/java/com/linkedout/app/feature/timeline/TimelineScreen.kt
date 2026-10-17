@@ -37,7 +37,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.linkedout.app.ui.component.QuietButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -466,13 +466,13 @@ private fun FailureDialog(
         },
         confirmButton = {
             if (failed.isEmpty()) {
-                TextButton(onClick = onDismiss) { Text("Close") }
+                QuietButton(onClick = onDismiss) { Text("Close") }
             } else {
-                TextButton(onClick = onRetry) { Text("Try again") }
+                BoldButton(onClick = onRetry, filled = true) { Text("Try again") }
             }
         },
         dismissButton = {
-            if (failed.isNotEmpty()) TextButton(onClick = onDismiss) { Text("Close") }
+            if (failed.isNotEmpty()) QuietButton(onClick = onDismiss) { Text("Close") }
         }
     )
 }

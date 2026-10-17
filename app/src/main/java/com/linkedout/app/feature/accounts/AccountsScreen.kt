@@ -28,12 +28,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -343,13 +344,27 @@ private fun AccountCard(row: AccountRow, onClick: () -> Unit, onFile: () -> Unit
                 )
                 // The folder is a control, not a label. Tapping the card opens
                 // the account, so filing it needs a target of its own.
-                TextButton(onClick = onFile, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text(
-                        row.folder,
-                        style = MaterialTheme.typography.labelMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                // A tap target inside the account's zone: androidx Surface(onClick), transparent,
+                // in TextButton's shape and height, never a second glass zone.
+                Surface(
+                    onClick = onFile,
+                    shape = ButtonDefaults.textShape,
+                    color = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .heightIn(min = ButtonDefaults.MinHeight)
+                            .padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            row.folder,
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }

@@ -16,7 +16,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.linkedout.app.ui.component.QuietButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -129,7 +129,7 @@ private fun InteractiveCheck(task: ChallengeSolver.Task, solver: ChallengeSolver
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    TextButton(
+                    QuietButton(
                         onClick = { solver.complete(task, ChallengeSolver.Result.Cancelled) }
                     ) { Text("Close") }
                 }
