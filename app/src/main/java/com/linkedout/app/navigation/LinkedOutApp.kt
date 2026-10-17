@@ -494,46 +494,38 @@ private fun MainTabs(
         val tabsBackdrop = rememberGlassBackdrop()
         val tabsSource = if (look != null) Modifier.glassSource(tabsBackdrop, look) else Modifier
         val dockBackdrop = tabsBackdrop.takeIf { look != null }
-        if (side) {
-            // Where the margins around the 720 dp column are wide enough, the
-            // pill sits in the left one and the column stays centred on the
-            // screen. In a narrower window the content moves right to clear it.
-            val clearsPill = maxWidth - ReadableWidth >= SideDockClearance * 2
-            Box(Modifier.fillMaxSize()) {
-                // No dock at the bottom, only the navigation bar to clear.
-                CompositionLocalProvider(LocalDockPadding provides navigationBar) {
-                    pages(
-                        Modifier
-                            .fillMaxSize()
-                            .then(tabsSource)
-                            .padding(start = if (clearsPill) 0.dp else SideDockClearance)
-                    )
-                }
-
-                CompositionLocalProvider(LocalGlassBackdrop provides dockBackdrop) {
-                    FloatingDock(
-                        items = tabs.map { DockItem(it.icon, it.label) },
-                        position = pager.currentPage + pager.currentPageOffsetFraction,
-                        onSelect = ::go,
-                        vertical = true,
-                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 16.dp)
-                    )
-                }
+        // One Box and one call of pages on both widths, only their modifiers
+        // and the dock's side change: a composable's identity is its place in
+        // the composition, so a second branch for the wide window threw the
+        // tabs away on a turn of the screen, with the media viewer a post had
+        // open (https://developer.android.com/develop/ui/compose/lifecycle).
+        // Where the margins around the 720 dp column are wide enough, the
+        // pill sits in the left one and the column stays centred on the
+        // screen. In a narrower window the content moves right to clear it.
+        val clearsPill = maxWidth - ReadableWidth >= SideDockClearance * 2
+        Box(Modifier.fillMaxSize()) {
+            // On the side there is no dock at the bottom, only the navigation bar to clear.
+            CompositionLocalProvider(LocalDockPadding provides if (side) navigationBar else DockClearance + navigationBar) {
+                pages(
+                    Modifier
+                        .fillMaxSize()
+                        .then(tabsSource)
+                        .padding(start = if (side && !clearsPill) SideDockClearance else 0.dp)
+                )
             }
-        } else {
-            Box(Modifier.fillMaxSize()) {
-                CompositionLocalProvider(LocalDockPadding provides DockClearance + navigationBar) {
-                    pages(Modifier.fillMaxSize().then(tabsSource))
-                }
 
-                CompositionLocalProvider(LocalGlassBackdrop provides dockBackdrop) {
-                    FloatingDock(
-                        items = tabs.map { DockItem(it.icon, it.label) },
-                        position = pager.currentPage + pager.currentPageOffsetFraction,
-                        onSelect = ::go,
-                        modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
-                    )
-                }
+            CompositionLocalProvider(LocalGlassBackdrop provides dockBackdrop) {
+                FloatingDock(
+                    items = tabs.map { DockItem(it.icon, it.label) },
+                    position = pager.currentPage + pager.currentPageOffsetFraction,
+                    onSelect = ::go,
+                    vertical = side,
+                    modifier = if (side) {
+                        Modifier.align(Alignment.CenterStart).padding(start = 16.dp)
+                    } else {
+                        Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp)
+                    }
+                )
             }
         }
 
