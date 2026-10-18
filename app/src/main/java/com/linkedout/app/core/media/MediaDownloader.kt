@@ -35,7 +35,11 @@ class MediaDownloader(
     private val resolveVideo: suspend (postId: String) -> String?
 ) {
 
-    fun download(item: MediaItem, authorHandle: String) {
+    /**
+     * [permalink] is the post the file comes from, kept by the media store as
+     * the file's REFERER_URI, see [SaveOrigin].
+     */
+    fun download(item: MediaItem, authorHandle: String, permalink: String?) {
         // A profile page renders a cover and a play badge and no source at
         // all. The address is on the post's own page, one request away, and
         // kept for the life of the process once found.
@@ -47,15 +51,15 @@ class MediaDownloader(
                 if (found.isNullOrBlank()) {
                     toast("LinkedIn did not give this video's address")
                 } else {
-                    enqueue(item.copy(downloadUrl = found, playable = true), authorHandle)
+                    enqueue(item.copy(downloadUrl = found, playable = true), authorHandle, permalink)
                 }
             }
             return
         }
-        enqueue(item, authorHandle)
+        enqueue(item, authorHandle, permalink)
     }
 
-    private fun enqueue(item: MediaItem, authorHandle: String) {
+    private fun enqueue(item: MediaItem, authorHandle: String, permalink: String?) {
         // DownloadManager.Request throws on anything but http and https
         // (AOSP, frameworks/base/core/java/android/app/DownloadManager.java),
         // and the address comes from a post: checked as every link is.
@@ -89,7 +93,12 @@ class MediaDownloader(
         }
 
         runCatching { manager.enqueue(request) }
-            .onSuccess { toast("Saving $fileName") }
+            // The post's address goes into the file's media store row when the
+            // download is done, see [SaveOrigin].
+            .onSuccess { id ->
+                SaveOrigin.remember(context, id, PostReferer.forPermalink(permalink))
+                toast("Saving $fileName")
+            }
             .onFailure { toast("Could not start the download") }
     }
 

@@ -90,6 +90,18 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- A saved file's post written into the media store when the download
+             is done. The system's download provider sends it, so it is exported,
+             and only the holder of SEND_DOWNLOAD_COMPLETED_INTENTS (the system)
+             can reach it. -->
+        <receiver
+            android:name=".core.media.SaveOriginReceiver"
+            android:exported="true"
+            android:permission="android.permission.SEND_DOWNLOAD_COMPLETED_INTENTS">
+            <intent-filter>
+                <action android:name="android.intent.action.DOWNLOAD_COMPLETE" />
+            </intent-filter>
+        </receiver>
         <!-- Pictures from outside decoded in a process of their own,
              with no permission, no files and no network. -->
         <service

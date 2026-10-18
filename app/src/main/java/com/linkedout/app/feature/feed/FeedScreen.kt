@@ -134,7 +134,11 @@ fun FeedScreen(
         MediaViewer(
             media = media,
             startIndex = index,
-            onDownload = { downloader.download(it, handle) },
+            // The viewer holds the pictures only (the avatar belongs to no
+            // post): the post's address is the one of the post carrying them.
+            onDownload = {
+                downloader.download(it, handle, feed?.posts?.firstOrNull { post -> post.media == media }?.permalink)
+            },
             onDismiss = { viewing = null }
         )
     }
@@ -254,7 +258,7 @@ fun FeedScreen(
                         post = post,
                         onClick = { onOpenPost(post) },
                         onOpenLink = { uriHandler.openUri(it) },
-                        onDownload = { downloader.download(it, post.authorHandle) },
+                        onDownload = { downloader.download(it, post.authorHandle, post.permalink) },
                         showStats = settings.showCounts,
                         onOpenMedia = { index -> viewing = post.media to index }
                     )
