@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
  * A picture the user can zoom: pinch to zoom, pan while zoomed, double tap
  * to zoom where tapped or back. At rest a single finger is left alone, so a
  * pager or a swipe to close around it still gets it. [content] draws the
- * picture filling the box; the zoom applies to it.
+ * picture filling the box; the zoom applies to it. [onTap] gets a single tap.
  *
  * Shared across the apps of this base: edit Modules/shared, then run sync.sh.
  */
@@ -36,6 +36,7 @@ import kotlinx.coroutines.launch
 fun Zoomable(
     modifier: Modifier = Modifier,
     onZoomChanged: (Boolean) -> Unit = {},
+    onTap: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     val haptics = rememberHaptics()
@@ -63,6 +64,9 @@ fun Zoomable(
             .onSizeChanged { size = it }
             .pointerInput(Unit) {
                 detectTapGestures(
+                    // A single tap, told once it is known not to be the first of a double tap (a viewer
+                    // hides its chrome with it, as ReFra's and Glimpse's do).
+                    onTap = onTap?.let { tapped -> { _: Offset -> tapped() } },
                     onDoubleTap = { tap ->
                         haptics.tick()
                         val zoomed = scale.value > 1f

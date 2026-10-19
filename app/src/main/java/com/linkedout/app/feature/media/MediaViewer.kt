@@ -1,97 +1,65 @@
 package com.linkedout.app.feature.media
 
-import com.linkedout.app.ui.component.SafePlayer
-import com.linkedout.app.ui.component.DarkGround
-import androidx.compose.runtime.CompositionLocalProvider
-import com.linkedout.app.ui.glass.rememberGlassBackdrop
-import com.linkedout.app.ui.glass.glassSource
-import com.linkedout.app.ui.glass.LocalGlassBackdrop
-import com.linkedout.app.ui.glass.LocalGlass
-import com.linkedout.app.ui.component.FloatingRoundButton
-import com.linkedout.app.ui.component.GlassVideo
 import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.layout.size
-import com.linkedout.app.ui.component.rememberMediaPolicy
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.animation.core.Animatable
-import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import com.linkedout.app.ui.component.BoldButton
-import com.linkedout.app.ui.component.BoldIconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
 import coil3.compose.AsyncImage
 import com.linkedout.app.core.debug.RequestLog
-import com.linkedout.app.data.repository.VideoSources
+import com.linkedout.app.core.media.OfflineMedia
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
+import com.linkedout.app.data.repository.VideoSources
+import com.linkedout.app.ui.component.BoldButton
+import com.linkedout.app.ui.component.BoldIconButton
+import com.linkedout.app.ui.component.FloatingRoundButton
+import com.linkedout.app.ui.component.GlassVideo
+import com.linkedout.app.ui.component.MediaViewerFrame
+import com.linkedout.app.ui.component.SafePlayer
+import com.linkedout.app.ui.component.ZoomableImage
+import com.linkedout.app.ui.component.rememberMediaPolicy
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import kotlinx.coroutines.launch
-import kotlin.math.abs
-import kotlin.math.roundToInt
-import androidx.media3.common.MediaItem as PlayableItem
-import com.linkedout.app.core.media.OfflineMedia
 import org.koin.compose.koinInject
+import androidx.media3.common.MediaItem as PlayableItem
 
 /**
  * Full screen viewer for the media of one post.
  *
  * Swipe sideways between attachments, pinch or double tap to zoom a photo,
- * swipe down (or back) to close. Videos play through Media3 ExoPlayer, GIFs
- * loop muted like on X. The download button saves the current attachment.
+ * swipe down (or back) to close, tap to hide the buttons and the player
+ * controls. Videos play through Media3 ExoPlayer, GIFs loop muted like on X.
+ * The download button saves the current attachment.
  *
- * Always dark, whatever the theme: media is judged against black, and a light
- * frame around a photo changes how it looks.
+ * The frame (dialog, pager, close, tap to hide) is the reader kit's
+ * MediaViewerFrame; the pages and the download are this app's.
  */
 @Composable
 fun MediaViewer(
@@ -102,199 +70,71 @@ fun MediaViewer(
 ) {
     if (media.isEmpty()) return
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) { DarkGround {
-        val pager = rememberPagerState(
-            initialPage = startIndex.coerceIn(0, media.lastIndex),
-            pageCount = { media.size }
-        )
-        var zoomed by remember { mutableStateOf(false) }
-        val dragY = remember { Animatable(0f) }
-        val scope = rememberCoroutineScope()
-        val context = LocalContext.current
-        // The save button needs the same address the player needed, and for a
-        // video opened from a profile that address is not on the item: the
-        // profile page names the video and carries only its cover. Resolving
-        // it here rather than inside the page means the button no longer
-        // depends on whether the player happened to resolve it first.
-        val sources: VideoSources = koinInject()
-        var resolving by remember { mutableStateOf(false) }
-        val fade = (1f - abs(dragY.value) / 1200f).coerceIn(0.3f, 1f)
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // The save button needs the same address the player needed, and for a
+    // video opened from a profile that address is not on the item: the
+    // profile page names the video and carries only its cover. Resolving
+    // it here rather than inside the page means the button no longer
+    // depends on whether the player happened to resolve it first.
+    val sources: VideoSources = koinInject()
+    var resolving by remember { mutableStateOf(false) }
 
-        // In glass, the pages are recorded for the round buttons above them
-        // to bend what is shown.
-        val look = LocalGlass.current
-        val pagerBackdrop = rememberGlassBackdrop()
-
-        Box(
-            Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = fade))
-        ) {
-            HorizontalPager(
-                state = pager,
-                userScrollEnabled = !zoomed,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (look != null) Modifier.glassSource(pagerBackdrop, look) else Modifier)
-                    .offset { IntOffset(0, dragY.value.roundToInt()) }
-                    .draggable(
-                        orientation = Orientation.Vertical,
-                        enabled = !zoomed,
-                        state = rememberDraggableState { delta ->
-                            scope.launch { dragY.snapTo(dragY.value + delta) }
-                        },
-                        onDragStopped = { velocity ->
-                            if (abs(dragY.value) > DISMISS_DISTANCE || abs(velocity) > DISMISS_VELOCITY) {
-                                onDismiss()
+    MediaViewerFrame(
+        count = media.size,
+        startIndex = startIndex,
+        onDismiss = onDismiss,
+        actions = { current ->
+            FloatingRoundButton(
+                icon = LinkedOutIcons.Download,
+                label = "Save to Downloads",
+                onClick = {
+                    if (resolving) return@FloatingRoundButton
+                    val item = media[current]
+                    if (item.playable || item.sourcePostId == null) {
+                        onDownload(item)
+                    } else {
+                        resolving = true
+                        scope.launch {
+                            // Cached for the life of the process, so a
+                            // video already watched costs no request here.
+                            val found = sources.sourceFor(item.sourcePostId)
+                            resolving = false
+                            if (found == null) {
+                                // Saving the cover under a video's name is
+                                // worse than saying no: it looks like it
+                                // worked until the file is opened.
+                                Toast.makeText(
+                                    context,
+                                    "LinkedIn did not give this video's address",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             } else {
-                                dragY.animateTo(0f)
-                            }
-                        }
-                    )
-            ) { page ->
-                val item = media[page]
-                val active = pager.currentPage == page
-                when (item.type) {
-                    MediaType.PHOTO -> ZoomableImage(
-                        url = item.downloadUrl,
-                        onZoomChanged = { if (active) zoomed = it }
-                    )
-                    MediaType.VIDEO, MediaType.GIF -> VideoPage(item = item, active = active)
-                }
-            }
-
-            CompositionLocalProvider(LocalGlassBackdrop provides pagerBackdrop.takeIf { look != null }) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .systemBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                FloatingRoundButton(icon = LinkedOutIcons.Close, label = "Close", onClick = onDismiss)
-                Text(
-                    if (media.size > 1) "${pager.currentPage + 1} / ${media.size}" else "",
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                FloatingRoundButton(
-                    icon = LinkedOutIcons.Download,
-                    label = "Save to Downloads",
-                    onClick = {
-                        if (resolving) return@FloatingRoundButton
-                        val item = media[pager.currentPage]
-                        if (item.playable || item.sourcePostId == null) {
-                            onDownload(item)
-                        } else {
-                            resolving = true
-                            scope.launch {
-                                // Cached for the life of the process, so a
-                                // video already watched costs no request here.
-                                val found = sources.sourceFor(item.sourcePostId)
-                                resolving = false
-                                if (found == null) {
-                                    // Saving the cover under a video's name is
-                                    // worse than saying no: it looks like it
-                                    // worked until the file is opened.
-                                    Toast.makeText(
-                                        context,
-                                        "LinkedIn did not give this video's address",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                } else {
-                                    onDownload(item.copy(downloadUrl = found, playable = true))
-                                }
+                                onDownload(item.copy(downloadUrl = found, playable = true))
                             }
                         }
                     }
-                )
-            }
-            }
+                }
+            )
         }
-    } }
+    ) { index, active, onZoomChanged ->
+        val item = media[index]
+        when (item.type) {
+            MediaType.PHOTO -> SavedPhoto(url = item.downloadUrl, onZoomChanged = onZoomChanged)
+            MediaType.VIDEO, MediaType.GIF -> VideoPage(item = item, active = active)
+        }
+    }
 }
 
-/**
- * Pinch to zoom, pan while zoomed, double tap to toggle. At rest a single
- * finger is left alone, so the pager and swipe to dismiss still get it.
- */
+/** A photo, from the saved copy when there is one. */
 @Composable
-private fun ZoomableImage(url: String, onZoomChanged: (Boolean) -> Unit) {
+private fun SavedPhoto(url: String, onZoomChanged: (Boolean) -> Unit) {
     val offline: OfflineMedia = koinInject()
     val saved by offline.names.collectAsState()
     val model = remember(url, saved) { offline.modelFor(url) }
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    var size by remember { mutableStateOf(IntSize.Zero) }
-
-    fun clamp(candidate: Offset): Offset {
-        val maxX = size.width * (scale - 1f) / 2f
-        val maxY = size.height * (scale - 1f) / 2f
-        return Offset(candidate.x.coerceIn(-maxX, maxX), candidate.y.coerceIn(-maxY, maxY))
-    }
-
-    fun update(newScale: Float, newOffset: Offset) {
-        val wasZoomed = scale > 1f
-        scale = newScale
-        offset = if (newScale <= 1f) Offset.Zero else clamp(newOffset)
-        if (wasZoomed != scale > 1f) onZoomChanged(scale > 1f)
-    }
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .onSizeChanged { size = it }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onDoubleTap = { tap ->
-                        if (scale > 1f) {
-                            update(1f, Offset.Zero)
-                        } else {
-                            val center = Offset(size.width / 2f, size.height / 2f)
-                            update(DOUBLE_TAP_SCALE, (center - tap) * (DOUBLE_TAP_SCALE - 1f))
-                        }
-                    }
-                )
-            }
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    do {
-                        val event = awaitPointerEvent()
-                        val fingers = event.changes.count { it.pressed }
-                        if (fingers > 1 || scale > 1f) {
-                            val zoom = event.calculateZoom()
-                            val pan = event.calculatePan()
-                            update((scale * zoom).coerceIn(1f, MAX_SCALE), offset + pan)
-                            event.changes.forEach { if (it.positionChanged()) it.consume() }
-                        }
-                    } while (event.changes.any { it.pressed })
-                }
-            }
-    ) {
-        AsyncImage(
-            // The saved copy when there is one, so a picture already on the
-            // phone opens with no network at all.
-            model = model,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offset.x
-                    translationY = offset.y
-                }
-        )
-    }
+    // The saved copy when there is one, so a picture already on the
+    // phone opens with no network at all.
+    ZoomableImage(model = model, onZoomChanged = onZoomChanged)
 }
 
 /**
@@ -466,8 +306,3 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
 
     }
 }
-
-private const val MAX_SCALE = 5f
-private const val DOUBLE_TAP_SCALE = 2.5f
-private const val DISMISS_DISTANCE = 300f
-private const val DISMISS_VELOCITY = 2500f

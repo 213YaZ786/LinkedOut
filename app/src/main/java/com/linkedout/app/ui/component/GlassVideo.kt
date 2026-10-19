@@ -1,6 +1,11 @@
 package com.linkedout.app.ui.component
 
+import android.content.Context
+import android.media.AudioManager
+import android.provider.Settings
 import android.view.TextureView
+import android.view.Window
+import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,6 +17,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -21,7 +28,11 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -47,6 +58,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +71,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -77,6 +91,8 @@ import com.linkedout.app.ui.glass.glassSource
 import com.linkedout.app.ui.glass.rememberGlassBackdrop
 import com.linkedout.app.ui.glass.rememberGlassLook
 import kotlinx.coroutines.delay
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * A video in the app's own player: the picture at its own shape on black,
@@ -85,7 +101,9 @@ import kotlinx.coroutines.delay
  * own controls were a grey bar and menus of another app.
  *
  * A tap shows or hides the controls, a double tap on either half goes back
- * or forward ten seconds. While it plays they leave after a few seconds.
+ * or forward ten seconds. A vertical drag sets the brightness on the left
+ * half and the volume on the right half, a level showing while it lasts.
+ * While it plays the controls leave after a few seconds.
  * [controls] false (a GIF) leaves the bare picture.
  *
  * The picture is a TextureView, not a SurfaceView: a surface is drawn by
@@ -142,7 +160,11 @@ fun GlassVideo(
         onDispose { player.removeListener(listener) }
     }
 
-    var shown by remember(player) { mutableStateOf(true) }
+    // Inside a viewer the controls follow the viewer's own chrome state (LocalViewerChrome: the buttons
+    // around the media come and go with them, one tap for both, as Google Photos and ReFra); alone, the
+    // player keeps its own.
+    val ownShown = remember(player) { mutableStateOf(true) }
+    var shown by (LocalViewerChrome.current ?: ownShown)
     var menu by remember(player) { mutableStateOf(false) }
     // Each touch restarts the wait before the controls leave.
     var touches by remember(player) { mutableIntStateOf(0) }
@@ -154,6 +176,8 @@ fun GlassVideo(
         }
     }
     LaunchedEffect(ended) { if (ended) shown = true }
+    // A film that cannot play has no tap to bring the chrome back: a viewer's buttons must not stay hidden over it.
+    LaunchedEffect(failed) { if (failed) shown = true }
 
     var position by remember(player) { mutableLongStateOf(0L) }
     var duration by remember(player) { mutableLongStateOf(0L) }
@@ -196,6 +220,88 @@ fun GlassVideo(
             }
         }
         touches++
+    }
+
+    // Brightness (left half) and volume (right half) by a vertical drag, as mpv-android does
+    // (MIT, https://github.com/mpv-android/mpv-android at 2540110: app/src/main/java/is/xyz/mpv/TouchGestures.kt for the
+    // gesture, MPVActivity.kt onPropertyChange for the two levels). The brightness is the window's, put back to
+    // BRIGHTNESS_OVERRIDE_NONE when the player leaves.
+    val view = LocalView.current
+    val context = LocalContext.current
+    val level = remember { LevelDrag() }
+    var levelVolume by remember { mutableStateOf(false) }
+    var levelValue by remember { mutableFloatStateOf(0f) }
+    var levelShown by remember { mutableStateOf(false) }
+    var levelHeld by remember { mutableStateOf(false) }
+    var levelEnds by remember { mutableIntStateOf(0) }
+    val currentMuted by rememberUpdatedState(muted)
+    val currentOnMutedChange by rememberUpdatedState(onMutedChange)
+    LaunchedEffect(levelHeld, levelEnds) {
+        if (!levelHeld && levelShown) {
+            delay(LEVEL_BUBBLE_MS)
+            levelShown = false
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            level.window?.let { window ->
+                val attributes = window.attributes
+                attributes.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                window.attributes = attributes
+            }
+        }
+    }
+
+    // mpv-android MPVActivity.kt onPropertyChange(PropertyChange.Init): the starting level is cached before it changes.
+    fun levelBegin(right: Boolean) {
+        level.volume = right
+        levelVolume = right
+        if (right) {
+            val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            level.maxVolume = if (audio.isVolumeFixed) 0 else audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            // A muted film starts from silence: raising it above zero unmutes.
+            level.initialVolume = if (currentMuted) 0 else audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+            level.lastVolume = -1
+            levelValue = if (level.maxVolume > 0) level.initialVolume.toFloat() / level.maxVolume else 0f
+            levelShown = level.maxVolume > 0
+        } else {
+            val window = windowOf(view, context)
+            level.window = level.window ?: window
+            level.initialBrightness = window?.attributes?.screenBrightness?.takeIf { it >= 0f }
+                ?: systemBrightness(context) ?: 0.5f
+            levelValue = level.initialBrightness
+            levelShown = window != null
+        }
+        levelHeld = true
+    }
+
+    // mpv-android MPVActivity.kt onPropertyChange(PropertyChange.Volume / Bright): [diff] is the drag so far scaled by the
+    // screen height (TouchGestures.processMovement), times CONTROL_VOLUME_MAX / CONTROL_BRIGHT_MAX.
+    fun levelMove(diff: Float) {
+        if (level.volume) {
+            if (level.maxVolume == 0) return
+            val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val volume = (level.initialVolume + (diff * CONTROL_VOLUME_MAX * level.maxVolume).toInt()).coerceIn(0, level.maxVolume)
+            if (volume != level.lastVolume) {
+                level.lastVolume = volume
+                if (volume > 0 && currentMuted) currentOnMutedChange(false)
+                if (volume > 0 || !currentMuted) audio.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
+            }
+            levelValue = volume.toFloat() / level.maxVolume
+        } else {
+            val window = level.window ?: return
+            val brightness = (level.initialBrightness + diff * CONTROL_BRIGHT_MAX).coerceIn(0f, 1f)
+            val attributes = window.attributes
+            attributes.screenBrightness = brightness
+            window.attributes = attributes
+            levelValue = brightness
+        }
+    }
+
+    // mpv-android MPVActivity.kt onPropertyChange(PropertyChange.Finalize): the gesture text goes when the finger lifts.
+    fun levelEnd() {
+        levelHeld = false
+        levelEnds++
     }
 
     Box(modifier.fillMaxSize().background(Color.Black)) {
@@ -250,6 +356,43 @@ fun GlassVideo(
                         }
                     )
                 }
+                // After the tap detector so it sees the events first: a drag taken here is consumed, which cancels the
+                // tap and keeps the viewer's pager and swipe down to close (the frame's draggable) from starting.
+                // mpv-android TouchGestures.onTouchEvent / processMovement: the dead zone at the top and bottom, the side
+                // of the first touch, a horizontal move past the trigger is left alone, a vertical one is taken. The
+                // trigger is Compose's touch slop, not mpv's 1/30 of the screen, so no parent claims the drag before us.
+                .pointerInput(player) {
+                    val trigger = viewConfiguration.touchSlop
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val width = size.width.toFloat()
+                        val height = size.height.toFloat()
+                        if (width < 1f || height < 1f) return@awaitEachGesture
+                        if (down.position.y < height * DEADZONE_PERCENT / 100f ||
+                            down.position.y > height * (100 - DEADZONE_PERCENT) / 100f
+                        ) return@awaitEachGesture
+                        var taken = false
+                        do {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (!taken && (change.isConsumed || event.changes.count { it.pressed } > 1)) break
+                            val dx = change.position.x - down.position.x
+                            val dy = change.position.y - down.position.y
+                            if (!taken) {
+                                if (abs(dx) > trigger) break
+                                if (abs(dy) > trigger) {
+                                    taken = true
+                                    levelBegin(down.position.x > width / 2f)
+                                }
+                            }
+                            if (taken) {
+                                levelMove(-dy / height)
+                                change.consume()
+                            }
+                        } while (change.pressed)
+                        if (taken) levelEnd()
+                    }
+                }
         )
 
         CompositionLocalProvider(LocalGlassBackdrop provides backdrop.takeIf { look != null }) {
@@ -268,6 +411,55 @@ fun GlassVideo(
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
                     )
+                }
+            }
+
+            // The level while the finger drags brightness or volume, and a moment after (mpv-android's gestureTextView,
+            // res/layout/player.xml: centred over the film, hidden at Finalize). Above the play buttons when they show.
+            AnimatedVisibility(
+                visible = levelShown,
+                enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                exit = fadeOut() + scaleOut(targetScale = 0.9f),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset(y = if (shown) (-96).dp else 0.dp)
+            ) {
+                GlassPane(shape = RoundedCornerShape(24.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+                    ) {
+                        Icon(
+                            when {
+                                !levelVolume -> PlayerIcons.Brightness
+                                levelValue <= 0f -> PlayerIcons.VolumeOff
+                                else -> PlayerIcons.VolumeOn
+                            },
+                            contentDescription = if (levelVolume) "Volume" else "Brightness",
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Box(
+                            Modifier
+                                .width(120.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(LocalContentColor.current.copy(alpha = 0.25f))
+                        ) {
+                            Box(
+                                Modifier
+                                    .fillMaxHeight()
+                                    .fillMaxWidth(levelValue.coerceIn(0f, 1f))
+                                    .background(MaterialTheme.colorScheme.primary)
+                            )
+                        }
+                        Text(
+                            "${(levelValue * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.widthIn(min = 44.dp)
+                        )
+                    }
                 }
             }
 
@@ -543,6 +735,35 @@ private const val POSITION_EVERY_MS = 250L
 private const val JUMP_MS = 10_000L
 private const val JUMP_BUBBLE_MS = 700L
 
+// mpv-android (MIT, https://github.com/mpv-android/mpv-android at 2540110), TouchGestures.kt companion: CONTROL_VOLUME_MAX
+// and CONTROL_BRIGHT_MAX (a drag of the screen's whole height moves the level 1.5 times its range, so the start need not
+// be the bottom), DEADZONE (percent of the height at the top and bottom left alone, for the status bar). LEVEL_BUBBLE_MS
+// is how long the level stays after the finger lifts.
+private const val CONTROL_VOLUME_MAX = 1.5f
+private const val CONTROL_BRIGHT_MAX = 1.5f
+private const val DEADZONE_PERCENT = 5
+private const val LEVEL_BUBBLE_MS = 700L
+
+// What one level drag holds: mpv-android (MIT, https://github.com/mpv-android/mpv-android at 2540110),
+// app/src/main/java/is/xyz/mpv/MPVActivity.kt fields initialBright, initialVolume, maxVolume.
+private class LevelDrag {
+    var volume = false
+    var window: Window? = null
+    var initialBrightness = 0f
+    var initialVolume = 0
+    var maxVolume = 0
+    var lastVolume = -1
+}
+
+// mpv-android (MIT, https://github.com/mpv-android/mpv-android at 2540110), app/src/main/java/is/xyz/mpv/Utils.kt
+// getScreenBrightness: without a brightness of its own the window starts from the system setting (as there, not with
+// auto-brightness).
+private fun systemBrightness(context: Context): Float? = try {
+    Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS) / 255f
+} catch (e: Settings.SettingNotFoundException) {
+    null
+}
+
 /** Material icons (Apache 2.0), from google/material-design-icons, 24 dp grid. */
 private object PlayerIcons {
     val Play by lazy { build("M8 5v14l11-7z") }
@@ -570,6 +791,10 @@ private object PlayerIcons {
             // The "1", a polygon in the source file.
             "M10.86,15.94L10.86,11.67L10.77,11.67L9,12.3L9,12.99L10.01,12.68L10.01,15.94z"
         )
+    }
+    // google/material-design-icons at 49d4db3, src/device/brightness_medium/materialicons/24px.svg
+    val Brightness by lazy {
+        build("M20 15.31L23.31 12 20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69zM12 18V6c3.31 0 6 2.69 6 6s-2.69 6-6 6z")
     }
     val VolumeOn by lazy {
         build("M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z")
