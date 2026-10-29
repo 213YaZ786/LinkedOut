@@ -79,10 +79,11 @@ internal object JobsParser {
     /**
      * Line breaks the markup expresses with tags. Stripping tags alone joined
      * two paragraphs into "des Médecins ?Le Centre", so breaks, paragraph
-     * ends and list items become newlines first, and an item gets a bullet.
+     * ends and list items become newlines first, and an item gets a hyphen
+     * as a list is written in plain text (Reddit's markdown list, https://www.reddit.com/wiki/markdown), no bullet.
      */
     internal fun withLineBreaks(html: String): String =
-        html.replace(BREAK, "\n").replace(ITEM, "\n• ")
+        html.replace(BREAK, "\n").replace(ITEM, "\n- ")
 
     private val BREAK = Regex("""(?i)<br\s*/?>|</p>|</li>|</ul>|</ol>""")
     private val ITEM = Regex("(?i)<li[^>]*>")

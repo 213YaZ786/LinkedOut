@@ -193,8 +193,9 @@ private fun NameRow(post: Post) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)
         )
+        // Name and time joined with a comma, as AOSP Dialer's CallLogEntryText.java (https://android.googlesource.com/platform/packages/apps/Dialer/+/refs/heads/main/java/com/android/dialer/calllogutils/CallLogEntryText.java).
         Text(
-            " · ${relativeTime(post.publishedAtMillis)}",
+            ", ${relativeTime(post.publishedAtMillis)}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
@@ -561,8 +562,8 @@ internal fun DocumentBlock(document: SharedDocument, authorHandle: String) {
 
 private fun documentLength(pages: Int?): String = when (pages) {
     null -> "PDF"
-    1 -> "PDF · 1 page"
-    else -> "PDF · $pages pages"
+    1 -> "PDF, 1 page"
+    else -> "PDF, $pages pages"
 }
 
 @Composable
@@ -703,7 +704,8 @@ internal fun PollBlock(poll: Poll) {
 
 internal fun pollInfo(poll: Poll): String? {
     val votes = poll.votes?.let { if (it == 1L) "1 vote" else "%,d votes".format(it) }
-    return listOfNotNull(votes, poll.status).joinToString(" · ").ifBlank { null }
+    // Joined with a comma, as AOSP Dialer's CallLogEntryText.java joinSecondaryTextComponents (https://android.googlesource.com/platform/packages/apps/Dialer/+/refs/heads/main/java/com/android/dialer/calllogutils/CallLogEntryText.java).
+    return listOfNotNull(votes, poll.status).joinToString(", ").ifBlank { null }
 }
 
 @Composable

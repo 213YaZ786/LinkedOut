@@ -197,8 +197,9 @@ private fun JobCardZone(card: JobCard, onClick: () -> Unit) {
                 if (card.company.isNotBlank()) {
                     Text(card.company, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                // Joined with a comma, as AOSP Dialer's CallLogEntryText.java joinSecondaryTextComponents (https://android.googlesource.com/platform/packages/apps/Dialer/+/refs/heads/main/java/com/android/dialer/calllogutils/CallLogEntryText.java).
                 Text(
-                    listOfNotNull(card.location.takeIf { it.isNotBlank() }, postedLabel(card.postedDate)).joinToString(" · "),
+                    listOfNotNull(card.location.takeIf { it.isNotBlank() }, postedLabel(card.postedDate)).joinToString(", "),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

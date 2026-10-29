@@ -105,8 +105,9 @@ private fun Head(detail: JobDetail, onApply: () -> Unit) {
             if (detail.company.isNotBlank()) {
                 Text(detail.company, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
             }
+            // Joined with a comma, as AOSP Dialer's CallLogEntryText.java joinSecondaryTextComponents (https://android.googlesource.com/platform/packages/apps/Dialer/+/refs/heads/main/java/com/android/dialer/calllogutils/CallLogEntryText.java).
             Text(
-                listOfNotNull(detail.location.takeIf { it.isNotBlank() }, detail.postedAgo).joinToString(" · "),
+                listOfNotNull(detail.location.takeIf { it.isNotBlank() }, detail.postedAgo).joinToString(", "),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center

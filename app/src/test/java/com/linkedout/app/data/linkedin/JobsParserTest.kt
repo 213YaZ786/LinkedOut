@@ -45,7 +45,7 @@ class JobsParserTest {
         assertEquals(listOf("Seniority level" to "Entry level", "Employment type" to "Full-time"), detail.criteria)
         // Two breaks are a paragraph, kept as one blank line. List items get a bullet.
         assertTrue(detail.description.startsWith("You hold a master's degree?\n\nJoin a modern department."))
-        assertTrue(detail.description.contains("• Dosimetry"))
+        assertTrue(detail.description.contains("- Dosimetry"))
         assertEquals("https://www.linkedin.com/jobs/view/4455683589", detail.url)
     }
 

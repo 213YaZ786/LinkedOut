@@ -185,8 +185,9 @@ fun DebugLogScreen(onBack: () -> Unit) {
                                     entry.bodyBytes?.let { add("$it bytes") }
                                 }
                                 if (meta.isNotEmpty()) {
+                                    // Joined with a comma, as AOSP Dialer's CallLogEntryText.java joinSecondaryTextComponents (https://android.googlesource.com/platform/packages/apps/Dialer/+/refs/heads/main/java/com/android/dialer/calllogutils/CallLogEntryText.java).
                                     Text(
-                                        meta.joinToString("  ·  "),
+                                        meta.joinToString(", "),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
