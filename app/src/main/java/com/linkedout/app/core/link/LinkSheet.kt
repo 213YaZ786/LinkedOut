@@ -4,6 +4,7 @@ import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.component.DialogPane
 import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.component.ZoneSurface
+import com.linkedout.app.ui.component.rememberGroupLabelSize
 import com.linkedout.app.ui.component.rememberHaptics
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -13,16 +14,23 @@ import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,11 +45,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.launch
@@ -112,26 +124,32 @@ fun LinkSheet(
                         }
                     },
                     style = MaterialTheme.typography.headlineSmall,
+                    textAlign = TextAlign.Center,
                     overflow = TextOverflow.Ellipsis,
-                    maxLines = 4
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 warnings.forEach { warning ->
-                    Row(verticalAlignment = Alignment.Top) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.Top) {
                         Box(
                             Modifier.padding(top = 7.dp).size(10.dp).background(levelColor(warning.level), CircleShape)
                         )
                         Text(
                             warning.label,
                             style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
                             modifier = Modifier.padding(start = 12.dp)
                         )
                     }
                 }
-                ZoneSurface(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                // Inside the pane: Material 3's Large. The address is centred too, as a wrapped
+                // address keeps full lines of one width and only the last one is short.
+                ZoneSurface(shape = androidx.compose.material3.ShapeDefaults.Large, modifier = Modifier.fillMaxWidth()) {
                     SelectionContainer {
                         Text(
                             clean,
                             style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
                             maxLines = 8,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
@@ -142,27 +160,24 @@ fun LinkSheet(
                     Text(
                         "It leads nowhere else",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QuietButton(
-                        onClick = {
+                LinkButtons(
+                    buildList {
+                        add(LinkAction("Copy") {
                             haptics.tick()
                             copy(context, clean)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Copy", maxLines = 1) }
-                    QuietButton(
-                        onClick = {
+                        })
+                        add(LinkAction("Share") {
                             haptics.tick()
                             share(context, clean)
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Share", maxLines = 1) }
-                    if (expand != null) {
-                        QuietButton(
-                            onClick = {
+                        })
+                        if (expand != null) {
+                            // "Expanding" is the longer label: the buttons are measured on it, so they do not move.
+                            add(LinkAction(if (expanding) "Expanding" else "Expand", measureAs = "Expanding", enabled = !expanding) {
                                 haptics.tick()
                                 expanding = true
                                 nothingMore = false
@@ -171,28 +186,108 @@ fun LinkSheet(
                                     expanding = false
                                     if (end != null && LinkCleaner.clean(end) != clean) shown = end else nothingMore = true
                                 }
-                            },
-                            enabled = !expanding,
-                            modifier = Modifier.weight(1f)
-                        ) { Text(if (expanding) "Expanding" else "Expand", maxLines = 1) }
+                            })
+                        }
                     }
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QuietButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancel", maxLines = 1) }
-                    BoldButton(
-                        onClick = {
+                )
+                LinkButtons(
+                    listOf(
+                        LinkAction("Cancel", onClick = onDismiss),
+                        LinkAction("Open", main = true) {
                             haptics.firm()
                             onDismiss()
                             onOpen(clean)
-                        },
-                        filled = true,
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Open", maxLines = 1) }
+                        }
+                    )
+                )
+            }
+        }
+    }
+}
+
+/** One button of [LinkButtons]; [main] is the one filled button, [measureAs] the label the width is measured on. */
+private class LinkAction(
+    val label: String,
+    val measureAs: String = label,
+    val enabled: Boolean = true,
+    val main: Boolean = false,
+    val onClick: () -> Unit
+)
+
+/**
+ * A group of buttons that adapts to the language, the font scale and the width, as PersonActions
+ * does (Modules' phone kit; the recipe is Compose's flow layouts, FlowRow with maxItemsInEachRow
+ * and Modifier.weight(1f).fillMaxRowHeight(), https://developer.android.com/develop/ui/compose/layouts/flow).
+ * The least width of a button is measured, not guessed: the widest label on one line plus the
+ * button's own padding (TextMeasurer, https://developer.android.com/develop/ui/compose/text/measure-text-layout).
+ * Labels that fit on one line share the rows balanced (5 that do not fit in one row make 3 + 2, never
+ * 4 + 1); if that leaves a lone button, the widest word sets the width and labels may wrap between
+ * words; every label of the group is drawn at one size, the largest at which each longest word fits
+ * (rememberGroupLabelSize, the ladder of TextAutoSize.StepBased,
+ * https://developer.android.com/develop/ui/compose/text/autosize). Nothing is clipped.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LinkButtons(actions: List<LinkAction>) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val style = MaterialTheme.typography.labelLarge
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val widths = remember(actions.map { it.measureAs }, style, density) {
+            val oneLine = actions.maxOf { measurer.measure(it.measureAs, style, softWrap = false, maxLines = 1).size.width }
+            val word = actions.maxOf { action ->
+                action.measureAs.split(' ').filter { it.isNotEmpty() }
+                    .maxOfOrNull { measurer.measure(it, style, softWrap = false, maxLines = 1).size.width } ?: 0
+            }
+            oneLine to word
+        }
+        // Button's own horizontal padding, ButtonDefaults.ContentPadding: 24 dp each side.
+        val oneLineWidth = with(density) { widths.first.toDp() } + ButtonPadding * 2
+        val wordWidth = with(density) { widths.second.toDp() } + ButtonPadding * 2
+        val available = maxWidth
+        fun perRowFor(width: Dp): Int {
+            val fit = ((available + ButtonSpace) / (width + ButtonSpace)).toInt().coerceAtLeast(1)
+            val lines = (actions.size + fit - 1) / fit
+            return (actions.size + lines - 1) / lines
+        }
+        fun lone(perRow: Int) = actions.size > perRow && actions.size % perRow == 1
+        val perOneLine = perRowFor(oneLineWidth)
+        val wrapped = lone(perOneLine) && !lone(perRowFor(wordWidth))
+        val perRow = if (wrapped) perRowFor(wordWidth) else perOneLine
+        val minWidth = if (wrapped) wordWidth else oneLineWidth
+        // One size for every label of the group, computed once from the width the balanced rows give a button
+        // (rememberGroupLabelSize, ui/component/GroupLabelSize.kt: the ladder of TextAutoSize.StepBased asked of the whole group).
+        val inRow = minOf(perRow, actions.size)
+        val buttonWidth = maxOf(minOf(minWidth, available), (available - ButtonSpace * (inRow - 1)) / inRow)
+        val labelSize = rememberGroupLabelSize(actions.flatMap { listOf(it.label, it.measureAs) }, style, buttonWidth - ButtonPadding * 2)
+        FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ButtonSpace),
+            verticalArrangement = Arrangement.spacedBy(ButtonSpace),
+            maxItemsInEachRow = perRow
+        ) {
+            actions.forEach { action ->
+                val modifier = Modifier.weight(1f).fillMaxRowHeight().widthIn(min = minOf(minWidth, available))
+                val label: @Composable RowScope.() -> Unit = {
+                    val text = LocalTextStyle.current
+                    // Words wrap between themselves; no autosize of its own, the group's size is the one.
+                    BasicText(
+                        action.label,
+                        style = text.copy(color = LocalContentColor.current, textAlign = TextAlign.Center, fontSize = labelSize)
+                    )
+                }
+                if (action.main) {
+                    BoldButton(onClick = action.onClick, filled = true, enabled = action.enabled, modifier = modifier, content = label)
+                } else {
+                    QuietButton(onClick = action.onClick, enabled = action.enabled, modifier = modifier, content = label)
                 }
             }
         }
     }
 }
+
+private val ButtonPadding = 24.dp
+private val ButtonSpace = 8.dp
 
 /** The tone of a warning: red for danger, a warm red for caution (as SMS's links), quiet for a note. */
 @Composable

@@ -6,7 +6,12 @@ import androidx.compose.foundation.shape.CircleShape
 import com.linkedout.app.ui.glass.glassZone
 import com.linkedout.app.ui.glass.LocalGlass
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
@@ -17,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -30,44 +36,76 @@ import androidx.compose.ui.unit.dp
  */
 val BoldEdge: Dp = 2.dp
 
+/**
+ * The space between buttons side by side. Glass shadows eat into the gap, so
+ * Material's 8 dp reads as touching; iOS alerts keep their buttons well apart.
+ */
+val ButtonGap: Dp = 12.dp
+
+/**
+ * Material's 48 dp touch target kept around a glass control, and the control itself drawn at
+ * Material's own size, so the glass, the clip and the press ripple share one shape. A Material
+ * button reserves the 48 dp outside its shape (Surface.kt: minimumInteractiveComponentSize before
+ * surface(shape) and the ripple): a glassZone on the button's modifier was drawn on the 48 dp and
+ * the ripple stopped 4 dp short of it. Here the reservation is made by the outer box, through
+ * androidx's own Modifier.minimumInteractiveComponentSize, which centres its content, and turned
+ * off inside with LocalMinimumInteractiveComponentSize = Dp.Unspecified, which it ignores
+ * (androidx/androidx compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/InteractiveComponentSize.kt).
+ * [propagateMinConstraints] passes a caller's fillMaxWidth or weight on to the control.
+ */
+@Composable
+fun GlassTarget(modifier: Modifier, control: @Composable () -> Unit) {
+    Box(modifier.minimumInteractiveComponentSize(), contentAlignment = Alignment.Center, propagateMinConstraints = true) {
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified, content = control)
+    }
+}
+
 @Composable
 fun boldBorder(enabled: Boolean = true, color: Color = MaterialTheme.colorScheme.primary): BorderStroke =
     BorderStroke(BoldEdge, if (enabled) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
 
-/** [filled] keeps a tonal fill inside the edge, for the one main action of a place. */
+/**
+ * [filled] keeps a tonal fill inside the edge, for the one main action of a place.
+ * [shape] is Material's own `shape` parameter of OutlinedButton
+ * (androidx/androidx compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Button.kt),
+ * carried through our glass: a button inside a card takes ShapeDefaults.Large.
+ */
 @Composable
 fun BoldButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     filled: Boolean = false,
+    shape: Shape = ButtonDefaults.outlinedShape,
     content: @Composable RowScope.() -> Unit
 ) {
     // In glass, a pane of glass with its label in the accent and no edge;
     // the main action of a place keeps a wash of the accent inside.
     val glass = LocalGlass.current
     if (glass != null) {
-        val shape = ButtonDefaults.outlinedShape
-        OutlinedButton(
-            onClick = onClick,
-            modifier = modifier
-                .glassZone(shape, glass, lens = 1f)
-                .then(if (filled && enabled) Modifier.background(glass.accentTint.copy(alpha = 0.45f), shape) else Modifier),
-            enabled = enabled,
-            shape = shape,
-            colors = ButtonDefaults.outlinedButtonColors(
-                containerColor = Color.Transparent,
-                contentColor = if (filled) (if (glass.dark) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimaryContainer) else MaterialTheme.colorScheme.primary
-            ),
-            border = null,
-            content = content
-        )
+        GlassTarget(modifier) {
+            OutlinedButton(
+                onClick = onClick,
+                modifier = Modifier
+                    .glassZone(shape, glass, lens = 1f)
+                    .then(if (filled && enabled) Modifier.background(glass.accentTint.copy(alpha = 0.45f), shape) else Modifier),
+                enabled = enabled,
+                shape = shape,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = if (filled) (if (glass.dark) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimaryContainer) else MaterialTheme.colorScheme.primary
+                ),
+                border = null,
+                content = content
+            )
+        }
         return
     }
     OutlinedButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
+        shape = shape,
         colors = if (filled) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.outlinedButtonColors(),
         border = boldBorder(enabled),
         content = content
@@ -77,23 +115,37 @@ fun BoldButton(
 /**
  * A quiet action beside a louder one, Skip or Back next to Next: a text
  * button, and in glass a small pane of glass like every other button, so no
- * control floats bare over the ambient light.
+ * control floats bare over the ambient light. [shape] is Material's own
+ * `shape` parameter of TextButton (androidx/androidx, material3 Button.kt).
  */
 @Composable
 fun QuietButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    shape: Shape = ButtonDefaults.textShape,
     content: @Composable RowScope.() -> Unit
 ) {
     val glass = LocalGlass.current
-    val shape = ButtonDefaults.textShape
+    if (glass != null) {
+        GlassTarget(modifier) {
+            TextButton(
+                onClick = onClick,
+                modifier = Modifier.glassZone(shape, glass, lens = 1f),
+                enabled = enabled,
+                shape = shape,
+                contentPadding = ButtonDefaults.ContentPadding,
+                content = content
+            )
+        }
+        return
+    }
     TextButton(
         onClick = onClick,
-        modifier = if (glass == null) modifier else modifier.glassZone(shape, glass, lens = 1f),
+        modifier = modifier,
         enabled = enabled,
         shape = shape,
-        contentPadding = if (glass == null) ButtonDefaults.TextButtonContentPadding else ButtonDefaults.ContentPadding,
+        contentPadding = ButtonDefaults.TextButtonContentPadding,
         content = content
     )
 }
@@ -113,13 +165,15 @@ fun BoldIconButton(
     // edge other than the accent, keeps its fill so it is still noticed.
     val glass = LocalGlass.current
     if (glass != null && edge == MaterialTheme.colorScheme.primary) {
-        IconButton(
-            onClick = onClick,
-            modifier = modifier.glassZone(CircleShape, glass, lens = 1f),
-            enabled = enabled,
-            colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary),
-            content = content
-        )
+        GlassTarget(modifier) {
+            IconButton(
+                onClick = onClick,
+                modifier = Modifier.glassZone(CircleShape, glass, lens = 1f),
+                enabled = enabled,
+                colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                content = content
+            )
+        }
         return
     }
     OutlinedIconButton(

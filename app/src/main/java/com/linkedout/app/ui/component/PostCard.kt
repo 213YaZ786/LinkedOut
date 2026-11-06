@@ -21,6 +21,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +62,11 @@ import java.util.concurrent.TimeUnit
  *
  * The card is a [Zone], so it has its own fill and its own rounded corners,
  * and the list needs no rule between two posts. A post that arrived since
- * the last visit wears a small dot until the reader has scrolled past it.
+ * the last visit wears a small dot, at the end of its name line, until the reader has scrolled past it.
+ *
+ * The zone drawn twice and the dot of the name line are ported from MTGA's card:
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/ui/component/PostCard.kt#PostCard
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/ui/component/PostCard.kt#NameRow
  */
 @Composable
 fun PostCard(
@@ -78,16 +83,16 @@ fun PostCard(
     // A tap opens the post, a long press the pill of actions, see PostActions.
     val tap = rememberHaptics()
     val actions = rememberPostActions(post, onDownload)
-    Box(modifier.then(actions.tracker)) {
+    // The zone is drawn twice, as MTGA's PostCard draws it (itself as SMS's ThreadScreen.kt draws its bubble:
+    // in place, and again as the held copy without click handlers): [outer] places it, [clicks] is what the column
+    // answers to. MTGA's third argument, the copy flag, only stops the avatar flying to the opened post, and
+    // LinkedOut has no shared element, so it is not ported.
+    val zone: @Composable (Modifier, Modifier) -> Unit = { outer, clicks ->
     Zone(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = ZoneGap)
+        modifier = outer
     ) {
         Column(
-            Modifier
-                .combinedClickable(onClick = { tap.tick(); onClick() }, onLongClick = actions::open)
-                .padding(horizontal = 16.dp, vertical = if (compact) 10.dp else 14.dp),
+            clicks.padding(horizontal = 16.dp, vertical = if (compact) 10.dp else 14.dp),
             verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)
         ) {
             post.contextLine()?.let { ContextLine(it) }
@@ -102,7 +107,7 @@ fun PostCard(
                     Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 6.dp)
                 ) {
-                    NameRow(post)
+                    NameRow(post, unread)
 
                     if (post.text.isNotBlank()) {
                         Text(post.text, style = MaterialTheme.typography.bodyLarge)
@@ -139,9 +144,20 @@ fun PostCard(
             }
         }
     }
-    // Arrived since the last visit and not yet scrolled past, see NewDot.
-    NewDot(unread, Modifier.align(Alignment.TopEnd).padding(top = if (compact) 11.dp else 13.dp, end = 22.dp))
-    PostActionsOverlay(actions)
+    }
+    Box(modifier) {
+        // The tracker sits on the zone itself, after the padding, so its bounds are the zone HoldMenu lifts.
+        zone(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = ZoneGap)
+                .then(actions.tracker),
+            Modifier.combinedClickable(onClick = { tap.tick(); onClick() }, onLongClick = actions::open)
+        )
+        // The copy plays no film of its own: the inline player stays in the card below it.
+        PostActionsOverlay(actions) {
+            CompositionLocalProvider(LocalInlinePlaying provides null) { zone(Modifier.fillMaxWidth(), Modifier) }
+        }
     }
 }
 
@@ -175,7 +191,7 @@ internal fun Avatar(url: String?, name: String, size: Dp = 44.dp) {
 }
 
 @Composable
-private fun NameRow(post: Post) {
+private fun NameRow(post: Post, unread: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             post.authorName,
@@ -200,6 +216,9 @@ private fun NameRow(post: Post) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
+        // Arrived since the last visit and not yet scrolled past. The dot sits on
+        // the line it marks, centred on it, as Fossify Messages' unread_count_badge (https://github.com/FossifyOrg/Messages/blob/main/app/src/main/res/layout/item_conversation.xml).
+        NewDot(unread, Modifier.padding(start = 8.dp))
     }
 }
 

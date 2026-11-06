@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -48,6 +50,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -168,22 +171,35 @@ fun MediaViewerFrame(
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
+                        // The top row is FloatingTop's layout (SMS, AGPL-3.0, same author,
+                        // https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/ui/component/FloatingPane.kt#FloatingTop):
+                        // two slots of the same size around a weight(1f) centre, so the counter stays
+                        // centred whatever the actions are.
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .heightIn(min = ViewerActionSize + 16.dp)
                                 // The bars may be hidden, so the row keeps the place they have.
                                 .windowInsetsPadding(WindowInsets.systemBarsIgnoringVisibility)
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            FloatingRoundButton(icon = ViewerIcons.Close, label = "Close", onClick = onDismiss)
-                            Text(
-                                if (count > 1) "${pager.currentPage + 1} / $count" else "",
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f)
-                            )
-                            actions(pager.currentPage)
+                            // Both slots keep their room, so the counter stays centred.
+                            Box(Modifier.size(ViewerActionSize), contentAlignment = Alignment.Center) {
+                                FloatingRoundButton(icon = ViewerIcons.Close, label = "Close", onClick = onDismiss)
+                            }
+                            Box(Modifier.weight(1f).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    if (count > 1) "${pager.currentPage + 1} / $count" else "",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                            // The actions take a RowScope, so they sit in a Row inside the trailing slot.
+                            Box(Modifier.size(ViewerActionSize), contentAlignment = Alignment.Center) {
+                                Row { actions(pager.currentPage) }
+                            }
                         }
                     }
                 }
@@ -191,6 +207,14 @@ fun MediaViewerFrame(
         }
     } }
 }
+
+/**
+ * The size of the round actions at the top, the same 48 dp as FloatingRoundButton. SMS's
+ * TopActionSize (https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/ui/component/FloatingPane.kt#TopActionSize)
+ * lives in the panes kit, which LinkedOut, Yid and Frontr do not take, so it is ported here
+ * under its own name (the panes kit's one would clash in MTGA, same package).
+ */
+private val ViewerActionSize = 48.dp
 
 /**
  * Pinch to zoom, pan while zoomed, double tap to toggle, a single tap flips

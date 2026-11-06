@@ -67,6 +67,7 @@ import com.linkedout.app.data.settings.StartTab
 import com.linkedout.app.core.model.PostKind
 import com.linkedout.app.feature.accounts.AccountsScreen
 import com.linkedout.app.feature.accounts.FoldersScreen
+import com.linkedout.app.feature.connection.ConnectionScreen
 import com.linkedout.app.feature.debug.DebugLogScreen
 import com.linkedout.app.feature.feed.FeedScreen
 import com.linkedout.app.feature.post.PostDetailScreen
@@ -81,6 +82,7 @@ import com.linkedout.app.ui.component.LocalDockPadding
 import androidx.compose.animation.EnterExitState
 import com.linkedout.app.ui.component.LocalInlinePlaybackAllowed
 import com.linkedout.app.ui.component.SideDockClearance
+import com.linkedout.app.ui.component.rememberHaptics
 import kotlinx.coroutines.launch
 
 @Composable
@@ -249,6 +251,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                 MainTabs(
                     settled = settled,
                     onOpenDebugLog = { navController.open(Routes.DEBUG_LOG) },
+                    onOpenConnection = { navController.open(Routes.CONNECTION) },
                     onOpenSavedMedia = { navController.open(Routes.SAVED_MEDIA) },
                     onOpenFeed = { handle, kind -> navController.open(Routes.feed(handle, kind)) },
                     onOpenFolders = { navController.open(Routes.FOLDERS) },
@@ -268,6 +271,11 @@ private fun LinkedOutNavHost(navController: NavHostController) {
             composable(Routes.DEBUG_LOG) {
                 ReadableScroll {
                     DebugLogScreen(onBack = { navController.back() })
+                }
+            }
+            composable(Routes.CONNECTION) {
+                ReadableScroll {
+                    ConnectionScreen(onBack = { navController.back() })
                 }
             }
             composable(Routes.SAVED_MEDIA) {
@@ -364,6 +372,7 @@ private fun Post.cacheOwner(): String =
 private fun MainTabs(
     settled: Boolean,
     onOpenDebugLog: () -> Unit,
+    onOpenConnection: () -> Unit,
     onOpenSavedMedia: () -> Unit,
     onOpenFolders: () -> Unit,
     onOpenJob: (JobCard) -> Unit,
@@ -407,10 +416,16 @@ private fun MainTabs(
         if (store.current.lastTab != page) store.update { it.copy(lastTab = page) }
     }
 
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/navigation/MtgaApp.kt#MainTabs
+    val haptics = rememberHaptics()
+
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val side = WidthClass.of(maxWidth).usesSideDock
 
         fun go(index: Int) {
+            // Firm: moving to another tab is taking the whole screen somewhere
+            // else, not pressing a button on the one you are reading.
+            if (index != pager.currentPage) haptics.firm()
             scope.launch {
                 // On the side, tabs switch in place, like a navigation rail.
                 // At the bottom they slide, because there pages are also swiped.
@@ -476,7 +491,8 @@ private fun MainTabs(
                         TopDestination.SETTINGS -> SettingsScreen(
                             onOpenDebugLog = onOpenDebugLog,
                             onOpenSavedMedia = onOpenSavedMedia,
-                            onOpenWelcome = { showWelcome = true }
+                            onOpenWelcome = { showWelcome = true },
+                            onOpenConnection = onOpenConnection
                         )
                     }
                 }

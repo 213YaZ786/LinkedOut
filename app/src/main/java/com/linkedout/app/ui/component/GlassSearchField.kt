@@ -3,7 +3,6 @@ package com.linkedout.app.ui.component
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -31,7 +30,7 @@ fun GlassSearchField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     focusRequester: FocusRequester? = null
 ) {
-    val shape = RoundedCornerShape(28.dp)
+    val shape = androidx.compose.material3.ShapeDefaults.ExtraLarge
     val clear = Color.Transparent
     ZoneSurface(shape = shape, modifier = modifier) {
         TextField(

@@ -2,30 +2,9 @@ package com.linkedout.app.ui.component
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Easing
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.scaleIn
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -33,55 +12,36 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.positionOnScreen
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.SolidColor
-import com.linkedout.app.R
-import androidx.compose.ui.res.imageResource
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.marks.PostMarks
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
-import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.cos
 
 /**
- * A long press on a post opens a small pill of glass where the finger is,
- * with what can be done to the post: like, archive, share, and save its
- * media when it has some. Likes and archives stay on the phone, see
- * PostMarks. Each button answers with its own small motion; a like spins
- * the star and pops one glass star above it, spinning on the spot.
+ * A long press on a post opens the suite's long press menu (HoldMenu, SMS's
+ * message menu): the post lifts out of the feed over the blurred screen and
+ * a pane of glass under it offers like, archive, share, and save media when
+ * the post has some. Likes and archives stay on the phone, see PostMarks. A
+ * new like plays SparkButton's star over the card once the menu has closed.
  *
- * The post card puts [tracker] on its outer box, calls [open] on a long
- * press, and places [PostActionsOverlay] inside that box.
+ * The post card puts [tracker] on the zone it draws, calls [open] on a long
+ * press, and places [PostActionsOverlay] in the same box, giving it the
+ * zone again without its click handlers.
  */
 @Stable
 class PostActions internal constructor(
@@ -89,34 +49,32 @@ class PostActions internal constructor(
     private val marks: PostMarks,
     private val onDownload: (MediaItem) -> Unit,
     private val context: Context,
-    private val haptics: Haptics
+    private val haptics: Haptics,
+    internal val sparkState: SparkButtonState
 ) {
-    /** Where the finger last went down, in the card's own coordinates. */
-    internal var pressAt by mutableStateOf(Offset.Zero)
-    internal var shown by mutableStateOf(false)
-    /** Where the popped star shows, in the card's coordinates, while it plays. */
-    internal var starAt by mutableStateOf<Offset?>(null)
-    /**
-     * The centre of the pill's star button and the card's corner, both on
-     * the screen: the pill is a popup, a window of its own, so only the
-     * screen relates the button to the card.
-     */
-    internal var starButton = Offset.Zero
-    internal var cardCorner = Offset.Zero
+    internal var menuOpen by mutableStateOf(false)
+    /** The zone's place in its window, which HoldMenu lifts the copy from. */
+    internal var bounds by mutableStateOf(Rect.Zero)
+    /** Set when the post becomes liked, cleared when the star has finished. */
+    internal var burst by mutableStateOf(false)
 
-    val tracker: Modifier = Modifier.pointerInput(Unit) {
-        awaitEachGesture {
-            pressAt = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial).position
-        }
-    }
+    // The way SMS's ThreadScreen.kt hides a held message while its menu is open (onGloballyPositioned,
+    // graphicsLayer alpha): https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/feature/thread/ThreadScreen.kt
+    val tracker: Modifier = Modifier
+        .onGloballyPositioned { bounds = it.boundsInWindow() }
+        .graphicsLayer { alpha = if (menuOpen) 0f else 1f }
 
     fun open() {
         haptics.firm()
-        shown = true
+        menuOpen = true
     }
 
+    // HoldMenu closes before it runs an action, so the burst starts on a card that is back in place.
     internal fun like() {
-        if (!marks.marks.value.isLiked(post.id)) starAt = starButton - cardCorner
+        if (!marks.marks.value.isLiked(post.id)) {
+            burst = true
+            sparkState.animate()
+        }
         marks.toggleLike(post)
     }
 
@@ -140,213 +98,70 @@ fun rememberPostActions(post: Post, onDownload: (MediaItem) -> Unit): PostAction
     val marks: PostMarks = koinInject()
     val context = LocalContext.current
     val haptics = rememberHaptics()
-    return remember(post.id, post) { PostActions(post, marks, onDownload, context, haptics) }
+    val sparkState = rememberSparkButtonState()
+    return remember(post.id, post) { PostActions(post, marks, onDownload, context, haptics, sparkState) }
 }
 
-private enum class Motion { FLIP, DROP, WIGGLE, BOUNCE }
-
+// How a caller opens HoldMenu, from SMS's ThreadScreen.kt around line 1969:
+// https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/feature/thread/ThreadScreen.kt
+// The star is Tusky's favourite button, connyduck/sparkbutton through SparkButton.
 @Composable
-fun PostActionsOverlay(actions: PostActions) {
+fun BoxScope.PostActionsOverlay(actions: PostActions, held: @Composable () -> Unit) {
     val marks: PostMarks = koinInject()
     val state by marks.marks.collectAsState()
-    val density = LocalDensity.current
-    val margin = with(density) { 8.dp.roundToPx() }
 
-    // Sits at the card's corner, the popups' anchor, to place the star.
-    Spacer(Modifier.onGloballyPositioned { actions.cardCorner = it.positionOnScreen() })
+    if (actions.menuOpen) {
+        val liked = state.isLiked(actions.post.id)
+        val archived = state.isArchived(actions.post.id)
+        HoldMenu(
+            bounds = actions.bounds,
+            actions = listOfNotNull(
+                HoldAction(ActionIcons.star, if (liked) "Unlike" else "Like", run = actions::like),
+                HoldAction(ActionIcons.archive, if (archived) "Unarchive" else "Archive", run = actions::archive),
+                HoldAction(ActionIcons.share, "Share", run = actions::share),
+                if (actions.canSave) HoldAction(ActionIcons.save, "Save media", run = actions::save) else null
+            ),
+            onDismiss = { actions.menuOpen = false },
+            held = held
+        )
+    }
 
-    if (actions.shown) {
-        val at = IntOffset(actions.pressAt.x.toInt(), actions.pressAt.y.toInt())
-        Popup(
-            popupPositionProvider = remember(at) { AtPoint(at, 0.5f, 0.5f, margin) },
-            onDismissRequest = { actions.shown = false },
-            properties = PopupProperties(focusable = true)
-        ) {
-            val appear = remember { MutableTransitionState(false) }.apply { targetState = true }
-            AnimatedVisibility(
-                visibleState = appear,
-                enter = fadeIn(tween(120)) + scaleIn(tween(160), initialScale = 0.5f) +
-                    expandVertically(tween(180), expandFrom = Alignment.CenterVertically)
-            ) {
-                val liked = state.isLiked(actions.post.id)
-                val archived = state.isArchived(actions.post.id)
-                val close = { actions.shown = false }
-                ZoneSurface(shape = RoundedCornerShape(50), shadowElevation = 6.dp) {
-                    Column(
-                        modifier = Modifier.padding(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        // The star pops on the tap itself, the pill closes
-                        // once its own star has spun round.
-                        PillButton(
-                            ActionIcons.star, if (liked) "Unlike" else "Like", if (liked) STAR_GOLD else null, Motion.FLIP,
-                            modifier = Modifier.onGloballyPositioned {
-                                actions.starButton = it.positionOnScreen() + Offset(it.size.width / 2f, it.size.height / 2f)
-                            },
-                            onPress = actions::like
-                        ) {
-                            close()
-                        }
-                        PillButton(ActionIcons.archive, if (archived) "Unarchive" else "Archive", if (archived) MaterialTheme.colorScheme.primary else null, Motion.DROP) {
-                            actions.archive()
-                            close()
-                        }
-                        PillButton(ActionIcons.share, "Share", null, Motion.WIGGLE) {
-                            close()
-                            actions.share()
-                        }
-                        if (actions.canSave) {
-                            PillButton(ActionIcons.save, "Save media", null, Motion.BOUNCE) {
-                                actions.save()
-                                close()
-                            }
-                        }
-                    }
-                }
-            }
+    // SparkButton has no end callback, so the star is removed after the length of its keyframes,
+    // https://github.com/connyduck/sparkbutton/blob/main/sparkbutton-compose/src/main/kotlin/at/connyduck/sparkbutton/compose/SparkButton.kt#SparkButton
+    LaunchedEffect(actions.burst) {
+        if (actions.burst) {
+            delay(SPARK_DURATION_MILLIS)
+            actions.burst = false
         }
     }
 
-    actions.starAt?.let { from ->
-        // The bottom of the star's canvas, half a star below the button's centre.
-        val foot = with(density) { (STAR_SIDE / 2).roundToPx() }
-        val at = IntOffset(from.x.toInt(), from.y.toInt() + foot)
-        Popup(
-            popupPositionProvider = remember(at) { AtPoint(at, 0.5f, 1f, 0) },
-            properties = PopupProperties(focusable = false, clippingEnabled = false)
+    // Instagram's double tap heart plays over the post itself, centred, so the star does too.
+    // The state's animate() starts the animation from code, as the library's SparkButtonState allows
+    // (same file, #SparkButtonState). The library's own colours are kept: STAR_GOLD (#FFB300) is neither
+    // its amber (#FFC107) nor its deep orange (#FF5722), it only tints the star. It stays enabled: the
+    // library draws a disabled button at 0.38 alpha, star and sparks included, and it is only on screen
+    // for the burst's second, its click doing nothing.
+    if (actions.burst) {
+        SparkButton(
+            onClick = {},
+            modifier = Modifier.align(Alignment.Center),
+            animateOnClick = false,
+            enabled = true,
+            state = actions.sparkState
         ) {
-            PoppedStar(onEnd = { actions.starAt = null })
+            Image(
+                imageVector = ActionIcons.star,
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+                colorFilter = ColorFilter.tint(STAR_GOLD)
+            )
         }
     }
 }
 
-/** A button of the pill: its motion plays, then the action runs. */
-@Composable
-private fun PillButton(
-    icon: ImageVector,
-    label: String,
-    tint: Color?,
-    motion: Motion,
-    modifier: Modifier = Modifier,
-    onPress: () -> Unit = {},
-    onDone: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    val scale = remember { Animatable(1f) }
-    val drop = remember { Animatable(0f) }
-    val turn = remember { Animatable(0f) }
-    val turnY = remember { Animatable(0f) }
-    var busy by remember { mutableStateOf(false) }
-    IconButton(
-        onClick = {
-            if (busy) return@IconButton
-            busy = true
-            onPress()
-            scope.launch {
-                when (motion) {
-                    // A full turn about its upright axis, like a coin spun.
-                    Motion.FLIP -> turnY.animateTo(360f, tween(520))
-                    Motion.DROP -> drop.animateTo(1f, tween(180))
-                    Motion.WIGGLE -> {
-                        turn.animateTo(-20f, tween(70))
-                        turn.animateTo(20f, tween(110))
-                        turn.animateTo(0f, tween(70))
-                    }
-                    Motion.BOUNCE -> {
-                        drop.animateTo(0.6f, tween(110))
-                        drop.animateTo(0f, spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessMedium))
-                    }
-                }
-                onDone()
-            }
-        },
-        modifier = modifier.size(48.dp)
-    ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            tint = tint ?: MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(24.dp).graphicsLayer {
-                scaleX = scale.value
-                scaleY = scale.value
-                translationY = drop.value * 12.dp.toPx()
-                rotationZ = turn.value
-                rotationY = turnY.value
-                cameraDistance = 12 * density
-                if (motion == Motion.DROP) alpha = 1f - drop.value * 0.8f
-            }
-        )
-    }
-}
-
-/**
- * One glass star popping out of the star button: it swells out of the
- * button with a little overshoot, rises just above it and spins on the spot
- * about its upright axis, twice, like a coin, then fades. Its back, seen
- * while it turns, is a shade deeper, as in the reference animation.
- */
-@Composable
-private fun PoppedStar(onEnd: () -> Unit) {
-    val clock = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        clock.animateTo(1f, tween(STAR_MS, easing = LinearEasing))
-        delay(16)
-        onEnd()
-    }
-    val star = ImageBitmap.imageResource(R.drawable.star_glass)
-    val back = remember { ColorFilter.tint(Color(0x40B34700), BlendMode.SrcAtop) }
-    Canvas(Modifier.size(width = STAR_SIDE * 2, height = STAR_SIDE + STAR_RISE)) {
-        val p = clock.value
-        // Swells out of the button, overshooting a touch.
-        val grow = OvershootEasing.transform((p / 0.28f).coerceAtMost(1f))
-        val side = STAR_SIDE.toPx() * (0.25f + 0.75f * grow)
-        // Rises above the button and stays there while it spins.
-        val rise = FastOutSlowInEasing.transform((p / 0.4f).coerceAtMost(1f)) * STAR_RISE.toPx()
-        // Two full turns, starting slow and ending slow.
-        val spin = FastOutSlowInEasing.transform(((p - 0.15f) / 0.7f).coerceIn(0f, 1f)) * 2f * 2f * PI.toFloat()
-        val face = cos(spin)
-        val width = (side * abs(face)).coerceAtLeast(side * 0.06f)
-        val alpha = if (p > 0.82f) (1f - p) / 0.18f else 1f
-        val cx = size.width / 2
-        val cy = size.height - STAR_SIDE.toPx() / 2 - rise
-        drawImage(
-            star,
-            dstOffset = IntOffset((cx - width / 2).toInt(), (cy - side / 2).toInt()),
-            dstSize = IntSize(width.toInt(), side.toInt()),
-            alpha = alpha,
-            colorFilter = if (face < 0f) back else null,
-            filterQuality = FilterQuality.High
-        )
-    }
-}
-
-private val OvershootEasing = Easing { t -> val u = t - 1f; 1f + u * u * (2.6f * u + 1.6f) }
-
-/** Places a popup's point ([fx], [fy] of its size) on [point] of its anchor, kept on screen. */
-private class AtPoint(val point: IntOffset, val fx: Float, val fy: Float, val margin: Int) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize
-    ): IntOffset {
-        val x = anchorBounds.left + point.x - (popupContentSize.width * fx).toInt()
-        val y = anchorBounds.top + point.y - (popupContentSize.height * fy).toInt()
-        if (margin == 0) return IntOffset(x, y)
-        return IntOffset(
-            x.coerceIn(margin, (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)),
-            y.coerceIn(margin, (windowSize.height - popupContentSize.height - margin).coerceAtLeast(margin))
-        )
-    }
-}
-
-private const val STAR_MS = 1300
-private val STAR_SIDE = 56.dp
-private val STAR_RISE = 64.dp
 private val STAR_GOLD = Color(0xFFFFB300)
 
-/** The pill's icons, drawn here so every app has the same ones. */
+/** The menu's icons, drawn here so every app has the same ones. */
 private object ActionIcons {
     val star by lazy { icon("Star", "M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2 9.19,8.63 2,9.24l5.46,4.73L5.82,21z") }
     val archive by lazy {

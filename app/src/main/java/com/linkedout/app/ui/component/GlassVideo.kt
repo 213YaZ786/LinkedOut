@@ -39,7 +39,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -63,7 +62,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -74,6 +75,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -322,16 +324,14 @@ fun GlassVideo(
         }
 
         if (failed) {
-            CompositionLocalProvider(LocalGlassBackdrop provides backdrop.takeIf { look != null }) {
-                GlassPane(shape = RoundedCornerShape(28.dp), modifier = Modifier.align(Alignment.Center).padding(24.dp)) {
-                    Text(
-                        "Can't play this video",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-                    )
-                }
-            }
+            // It does nothing, so no pane: plain text with a soft shadow.
+            Text(
+                "Can't play this video",
+                style = MaterialTheme.typography.titleMedium.overVideo(),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp, vertical = 40.dp)
+            )
             return@Box
         }
 
@@ -405,13 +405,13 @@ fun GlassVideo(
                     .align(if (jumped < 0) Alignment.CenterStart else Alignment.CenterEnd)
                     .padding(horizontal = 40.dp)
             ) {
-                GlassPane(shape = CircleShape) {
-                    Text(
-                        if (jumped < 0) "−10 s" else "+10 s",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
-                    )
-                }
+                // Plain text with a soft shadow, no pane: it does nothing.
+                Text(
+                    if (jumped < 0) "−10 s" else "+10 s",
+                    style = MaterialTheme.typography.labelLarge.overVideo(),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+                )
             }
 
             // The level while the finger drags brightness or volume, and a moment after (mpv-android's gestureTextView,
@@ -424,42 +424,43 @@ fun GlassVideo(
                     .align(Alignment.Center)
                     .offset(y = if (shown) (-96).dp else 0.dp)
             ) {
-                GlassPane(shape = RoundedCornerShape(24.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+                // It does nothing, so no pane: the icon, the bar and the level straight on the film, the text with a soft shadow.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
+                ) {
+                    Icon(
+                        when {
+                            !levelVolume -> PlayerIcons.Brightness
+                            levelValue <= 0f -> PlayerIcons.VolumeOff
+                            else -> PlayerIcons.VolumeOn
+                        },
+                        contentDescription = if (levelVolume) "Volume" else "Brightness",
+                        tint = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Box(
+                        Modifier
+                            .width(120.dp)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f))
                     ) {
-                        Icon(
-                            when {
-                                !levelVolume -> PlayerIcons.Brightness
-                                levelValue <= 0f -> PlayerIcons.VolumeOff
-                                else -> PlayerIcons.VolumeOn
-                            },
-                            contentDescription = if (levelVolume) "Volume" else "Brightness",
-                            modifier = Modifier.size(24.dp)
-                        )
                         Box(
                             Modifier
-                                .width(120.dp)
-                                .height(4.dp)
-                                .clip(CircleShape)
-                                .background(LocalContentColor.current.copy(alpha = 0.25f))
-                        ) {
-                            Box(
-                                Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(levelValue.coerceIn(0f, 1f))
-                                    .background(MaterialTheme.colorScheme.primary)
-                            )
-                        }
-                        Text(
-                            "${(levelValue * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.labelLarge,
-                            textAlign = TextAlign.End,
-                            modifier = Modifier.widthIn(min = 44.dp)
+                                .fillMaxHeight()
+                                .fillMaxWidth(levelValue.coerceIn(0f, 1f))
+                                .background(MaterialTheme.colorScheme.primary)
                         )
                     }
+                    Text(
+                        "${(levelValue * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelLarge.overVideo(),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.widthIn(min = 44.dp)
+                    )
                 }
             }
 
@@ -518,7 +519,7 @@ fun GlassVideo(
                         enter = fadeIn() + scaleIn(initialScale = 0.85f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f)),
                         exit = fadeOut() + scaleOut(targetScale = 0.9f, transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 1f))
                     ) {
-                        GlassPane(shape = RoundedCornerShape(22.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+                        GlassPane(shape = androidx.compose.material3.ShapeDefaults.ExtraLarge, modifier = Modifier.padding(bottom = 10.dp)) {
                             Column(Modifier.padding(vertical = 6.dp)) {
                                 SPEEDS.forEach { choice ->
                                     val chosen = choice == speed
@@ -541,7 +542,7 @@ fun GlassVideo(
                             }
                         }
                     }
-                    GlassPane(shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
+                    GlassPane(shape = androidx.compose.material3.ShapeDefaults.ExtraLarge, modifier = Modifier.fillMaxWidth()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(start = 18.dp, end = 6.dp, top = 4.dp, bottom = 4.dp)
@@ -622,7 +623,9 @@ fun GlassVideo(
 fun DarkGround(content: @Composable () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val night = remember(scheme) { scheme.onDarkGround() }
-    val look = rememberGlassLook(night, enabled = LocalGlass.current != null)
+    // The page's quiet glass goes on in the player (Haze's materials, https://github.com/chrisbanes/haze/blob/main/haze-materials/src/commonMain/kotlin/dev/chrisbanes/haze/blur/materials/HazeMaterials.kt;
+    // the long press menu's pane, dialogGlass; the user, 2026-11-01).
+    val look = rememberGlassLook(night, enabled = LocalGlass.current != null, quiet = LocalGlass.current?.quiet == true)
     MaterialTheme(colorScheme = night) {
         CompositionLocalProvider(LocalGlass provides look, content = content)
     }
@@ -733,6 +736,13 @@ private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
 private const val HIDE_AFTER_MS = 3_000L
 private const val POSITION_EVERY_MS = 250L
 private const val JUMP_MS = 10_000L
+
+/**
+ * A text that does nothing sits straight on the film, no pane (a pane means a tap): a soft shadow keeps it readable
+ * over any picture. Compose's TextStyle shadow, https://developer.android.com/develop/ui/compose/text/style-text#add-shadow
+ */
+private fun TextStyle.overVideo(): TextStyle =
+    copy(shadow = Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(0f, 2f), blurRadius = 8f))
 private const val JUMP_BUBBLE_MS = 700L
 
 // mpv-android (MIT, https://github.com/mpv-android/mpv-android at 2540110), TouchGestures.kt companion: CONTROL_VOLUME_MAX
