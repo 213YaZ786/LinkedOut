@@ -80,7 +80,8 @@ fun DebugLogScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 // The page's ground where the bar sits, ambient light included.
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
+                // Every title in the accent (the user, 2026-10-31), as Modules' SettingsSectionTitle.
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent, titleContentColor = MaterialTheme.colorScheme.primary),
                 // Over the reading column, like the content under it.
                 modifier = Modifier.groundHere(LocalGlass.current, MaterialTheme.colorScheme.background).padding(horizontal = LocalReadableInset.current),
                 title = { Text("Activity log") },

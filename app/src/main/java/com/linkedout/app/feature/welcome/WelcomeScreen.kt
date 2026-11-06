@@ -295,6 +295,8 @@ private fun PageContent(page: WelcomePage, choice: @Composable () -> Unit) {
         Text(
             page.title,
             style = MaterialTheme.typography.headlineSmall,
+            // Every title in the accent (the user, 2026-10-31), as Modules' SettingsSectionTitle.
+            color = MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.Center,
             modifier = Modifier.semantics { heading() }
         )
