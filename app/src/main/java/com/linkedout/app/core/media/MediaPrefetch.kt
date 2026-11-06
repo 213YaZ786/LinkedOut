@@ -82,7 +82,7 @@ class MediaPrefetch(
                             item.downloadUrl
                         }
                         when {
-                            url.isBlank() || url.looksLikePlaylist() -> unsaveable++
+                            url.isBlank() || MediaDownloader.isPlaylist(url) -> unsaveable++
                             offline.has(url) -> present++
                             else -> when (val result = enqueue(manager, url, choice)) {
                                 is Enqueued.Accepted -> {
@@ -149,9 +149,4 @@ class MediaPrefetch(
                 Enqueued.Rejected("${error::class.simpleName}: ${error.message.orEmpty().take(120)}")
             }
         )
-
-    private fun String.looksLikePlaylist(): Boolean {
-        val lower = lowercase()
-        return lower.contains(".m3u8") || lower.contains("%2em3u8") || lower.contains(".mpd")
-    }
 }

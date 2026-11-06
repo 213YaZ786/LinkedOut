@@ -2,8 +2,11 @@ package com.linkedout.app.data.repository
 
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.MediaType
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import com.linkedout.app.core.network.SingleFlight
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /**
  * Finds the address of a video that a profile page named but did not carry.
@@ -18,13 +21,16 @@ import kotlinx.coroutines.sync.withLock
  * when it has had enough, for films nobody may watch.
  *
  * Answers are kept for the life of the process. Opening the same video twice,
- * or scrolling away and back, costs one request in total. The lock makes two
- * taps in a row wait on one request rather than sending two.
+ * or scrolling away and back, costs one request in total. Two taps in a row
+ * share one request through SingleFlight, keyed by post, as MTGA's archive
+ * lookups do (one global lock made every post wait on any other's request):
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/archive/ArchiveSource.kt#ArchiveSource
  */
 class VideoSources(private val feeds: FeedRepository) {
 
-    private val known = mutableMapOf<String, String>()
-    private val lock = Mutex()
+    private val known = ConcurrentHashMap<String, String>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val flight = SingleFlight<String, String>(scope)
 
     /**
      * What is already known, without asking anything. Used by the saver,
@@ -36,7 +42,7 @@ class VideoSources(private val feeds: FeedRepository) {
     /** The playable address for [postId], or null when the page had none. */
     suspend fun sourceFor(postId: String): String? {
         known[postId]?.let { return it }
-        return lock.withLock {
+        return flight.run(postId) {
             known[postId] ?: fetch(postId)?.also { known[postId] = it }
         }
     }

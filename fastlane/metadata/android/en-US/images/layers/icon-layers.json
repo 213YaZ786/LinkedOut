@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "ground": {"day": "system_accent1_50", "night": "system_neutral1_800"},
+  "layers": [
+    {"png": "lo_body.png", "sha256": "32c0aaedef5752593f425d714b8595e95c297593ec9575427f3cd305c73bcef6", "day": "system_accent1_300", "night": "system_accent1_300"},
+    {"png": "lo_shine.png", "sha256": "c03945446c5926369c98a6e07935188ce2c20e6300b5af50a017f1608763854e"}
+  ]
+}

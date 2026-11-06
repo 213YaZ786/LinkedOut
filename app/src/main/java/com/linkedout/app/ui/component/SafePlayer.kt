@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -22,10 +23,22 @@ import androidx.media3.extractor.ExtractorsFactory
  */
 object SafePlayer {
 
+    /**
+     * [dataSourceFactory] is where the bytes come from: an app that plays from a disk cache
+     * (a CacheDataSource.Factory over a SimpleCache) passes it here and plays offline too.
+     * Left null, Media3's own network source is used. The allow list of [extractors] holds either way.
+     *
+     * Taken from androidx/media (Apache-2.0), a cache data source factory handed to
+     * DefaultMediaSourceFactory: https://github.com/androidx/media/blob/release/demos/main/src/main/java/androidx/media3/demo/main/DemoUtil.java
+     * and https://developer.android.com/media/media3/exoplayer/downloading-media
+     */
     @OptIn(UnstableApi::class)
-    fun build(context: Context): ExoPlayer =
+    fun build(context: Context, dataSourceFactory: DataSource.Factory? = null): ExoPlayer =
         ExoPlayer.Builder(context)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(context, extractors()))
+            .setMediaSourceFactory(
+                if (dataSourceFactory != null) DefaultMediaSourceFactory(dataSourceFactory, extractors())
+                else DefaultMediaSourceFactory(context, extractors())
+            )
             .build()
             .also(::track)
 

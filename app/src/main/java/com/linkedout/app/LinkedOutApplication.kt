@@ -4,6 +4,9 @@ import com.linkedout.app.core.security.SafeCoilDecoder
 import coil3.SingletonImageLoader
 import coil3.ImageLoader
 import android.app.Application
+import coil3.disk.DiskCache
+import okio.Path.Companion.toOkioPath
+import java.io.File
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
@@ -29,9 +32,18 @@ class LinkedOutApplication : Application() {
         // Every picture decoded in the isolated decoder, never in the app.
         SingletonImageLoader.setSafe { context ->
             // The network side first, pictures capped in bytes before the decoder.
+            // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/MtgaApplication.kt#MtgaApplication
             ImageLoader.Builder(context).components {
                 add(SafeCoilDecoder.network())
                 add(SafeCoilDecoder.Factory(context))
+            }.diskCache {
+                // Opened on first use, off the main thread. In filesDir, not cacheDir:
+                // Android empties cacheDir when space is short, and a post read
+                // on the train needs its pictures.
+                DiskCache.Builder()
+                    .directory(File(context.filesDir, IMAGE_CACHE).toOkioPath())
+                    .maxSizeBytes(IMAGE_CACHE_BYTES)
+                    .build()
             }.build()
         }
         startKoin {
@@ -55,5 +67,10 @@ class LinkedOutApplication : Application() {
                 settings.current.syncOnWifiOnly
             )
         }
+    }
+
+    companion object {
+        private const val IMAGE_CACHE = "coil3_disk_cache"
+        private const val IMAGE_CACHE_BYTES = 500L * 1024 * 1024
     }
 }

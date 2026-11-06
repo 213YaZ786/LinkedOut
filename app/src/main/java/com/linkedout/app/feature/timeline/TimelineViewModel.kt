@@ -312,6 +312,15 @@ class TimelineViewModel(
     private fun filedIn(): Map<String, String> =
         accounts.accounts.value.associate { it.handle.lowercase() to it.folder }
 
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/timeline/TimelineViewModel.kt#loadMore
+    /**
+     * When the last paging attempt gave up. A failed attempt has just asked
+     * every server of the pool, and a second sweep right after deepens the
+     * very rate limits that caused the failure. Automatic attempts wait this
+     * out, a deliberate one from the reader does not.
+     */
+    private var pagingFailedAtMillis = 0L
+
     /**
      * Called when the reader nears the bottom, and by the retry button.
      * [manual] bypasses the failure latch, so a person can insist, but a scroll
@@ -322,6 +331,11 @@ class TimelineViewModel(
         val current = _state.value
         if (current.loadingMore || current.loading || !current.canLoadMore) return
         if (current.pagingFailed && !manual) return
+        if (!manual &&
+            System.currentTimeMillis() - pagingFailedAtMillis < PAGING_RETRY_PAUSE_MS
+        ) {
+            return
+        }
         if (!work.tryLock()) return
 
         _state.value = current.copy(loadingMore = true, pagingFailed = false)
@@ -329,12 +343,14 @@ class TimelineViewModel(
             try {
                 val before = current.allPosts.size
                 val merged = repository.loadMore(folder)
+                val failed = merged.errors.isNotEmpty() || merged.posts.size <= before
+                if (failed) pagingFailedAtMillis = System.currentTimeMillis()
                 _state.value = _state.value.copy(
                     allPosts = merged.posts,
                     loadingMore = false,
                     canLoadMore = merged.canLoadMore,
                     errors = merged.errors.ifEmpty { _state.value.errors },
-                    pagingFailed = merged.errors.isNotEmpty() || merged.posts.size <= before
+                    pagingFailed = failed
                 )
             } finally {
                 work.unlock()
@@ -342,3 +358,6 @@ class TimelineViewModel(
         }
     }
 }
+
+/** A failed sweep of the whole pool is not worth repeating sooner. */
+private const val PAGING_RETRY_PAUSE_MS = 30_000L

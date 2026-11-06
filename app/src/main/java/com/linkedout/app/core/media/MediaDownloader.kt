@@ -7,6 +7,10 @@ import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.media3.common.C
+import androidx.media3.common.util.Util
+import java.net.URI
+import java.net.URLDecoder
 import com.linkedout.app.core.link.SafeLinks
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
@@ -72,7 +76,7 @@ class MediaDownloader(
         // DownloadManager would happily save it as an .mp4 that no player can
         // open. Refusing is the honest answer, and this is the one rendition
         // shape the parser can hand over without a source of its own.
-        if (item.type != MediaType.PHOTO && url.looksLikePlaylist()) {
+        if (item.type != MediaType.PHOTO && isPlaylist(url)) {
             toast("This video is streamed in pieces and cannot be saved whole")
             return
         }
@@ -124,15 +128,58 @@ class MediaDownloader(
             ?: fallback
     }
 
-    private fun String.looksLikePlaylist(): Boolean {
-        val lower = lowercase()
-        return lower.contains(".m3u8") || lower.contains("%2em3u8") || lower.contains(".mpd")
-    }
-
     /** Always from the main thread, since a save can now finish on another. */
     private fun toast(message: String) {
         Handler(Looper.getMainLooper()).post {
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    companion object {
+        /**
+         * Whether [url] is an HLS playlist, told by Media3's own rule: the
+         * extension of the path's last segment, after the last dot, through
+         * `Util.inferContentTypeForExtension` (m3u8 is HLS), see
+         * https://github.com/androidx/media/blob/release/libraries/common/src/main/java/androidx/media3/common/util/Util.java#inferContentType
+         *
+         * `inferContentType(Uri)` itself needs android.net.Uri, which unit tests
+         * on the JVM cannot run, so the last segment is cut with java.net.URI
+         * the same way `Uri.getLastPathSegment` does and only the extension
+         * goes to Media3.
+         *
+         * One shape Media3 does not cover: a proxy can carry a file as
+         * `/video/<sig>/<whole address, percent encoded>`, so the last segment
+         * decodes to a full address with its own `?tag=` query and the
+         * extension then reads `m3u8?tag=1`. That segment is judged again as
+         * an address of its own.
+         *
+         * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/core/media/MediaDownloader.kt#isHls
+         */
+        internal fun isHls(url: String): Boolean {
+            val segment = runCatching {
+                // Uri.getLastPathSegment: the encoded path cut at its last slash, then decoded.
+                val last = URI(url).rawPath.orEmpty().substringAfterLast('/')
+                URLDecoder.decode(last.replace("+", "%2B"), Charsets.UTF_8)
+            }.getOrNull() ?: return false
+            val extension = segment.substringAfterLast('.', "")
+            if (Util.inferContentTypeForExtension(extension) == C.CONTENT_TYPE_HLS) return true
+            // The proxied shape, see above. The decoded segment is shorter
+            // than the address it came from, so this ends.
+            return segment.contains("://") && isHls(segment)
+        }
+
+        /** The same rule for a DASH manifest (mpd), which no save can keep whole either. */
+        internal fun isDash(url: String): Boolean {
+            val segment = runCatching {
+                val last = URI(url).rawPath.orEmpty().substringAfterLast('/')
+                URLDecoder.decode(last.replace("+", "%2B"), Charsets.UTF_8)
+            }.getOrNull() ?: return false
+            val extension = segment.substringAfterLast('.', "")
+            if (Util.inferContentTypeForExtension(extension) == C.CONTENT_TYPE_DASH) return true
+            return segment.contains("://") && isDash(segment)
+        }
+
+        /** A rendition that is a list of pieces, not a file. */
+        internal fun isPlaylist(url: String): Boolean = isHls(url) || isDash(url)
     }
 }

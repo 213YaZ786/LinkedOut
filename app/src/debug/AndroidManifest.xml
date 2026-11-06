@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: the debug Store is a separate package, invisible without its own line
+     (core/update/StoreLink.kt's header). Ported from Launcher (https://github.com/213YaZ786/Launcher/blob/main/app/src/main/AndroidManifest.xml). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <package android:name="com.yaz.store.debug" />
+    </queries>
+</manifest>

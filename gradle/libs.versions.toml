@@ -2,19 +2,19 @@
 # 2.0.0 moved the build to AGP 9 (built-in Kotlin, new DSL) and compileSdk 37.
 # Library versions are kept up to date by Dependabot, see .github/dependabot.yml.
 [versions]
-# AGP 9.4 refuses any Gradle below 9.6.0. The wrapper names 9.8.0, and the
+# AGP 9.5 refuses any Gradle below 9.6.0. The wrapper names 9.8.2, and the
 # CI workflow reads its Gradle version from the wrapper, so the two cannot
 # drift apart.
-agp = "9.4.1"
+agp = "9.5.0"
 kotlin = "2.4.21"
 coreKtx = "1.19.1"
-lifecycle = "2.9.4"
-activityCompose = "1.11.0"
+lifecycle = "2.11.0"
+activityCompose = "1.13.0"
 # Compose that compiles against API 37. Moved by Dependabot.
 composeBom = "2026.09.00"
 navigation = "2.10.2"
 koin = "4.2.2"
-ktor = "3.6.0"
+ktor = "3.6.1"
 coil = "3.6.3"
 media3 = "1.11.1"
 # Glide's GIF decoder (pure Java), run only inside the isolated DecoderService.
@@ -22,12 +22,12 @@ gifdecoder = "5.0.9"
 # Material 3 Expressive's shapes (EmptyZone's Sunny) until material3 ships MaterialShapes stable.
 graphicsShapes = "1.1.0"
 # The browser engine library, used by the apps that need one.
-webkit = "1.17.0"
+webkit = "1.18.0"
 junit = "4.13.2"
 # Screens tested on the JVM, as Now in Android does (core/screenshot-testing): Robolectric
 # draws them, Roborazzi compares the pictures; no emulator, nothing for anyone to look at.
 robolectric = "4.17"
-roborazzi = "1.76.0"
+roborazzi = "1.77.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -46,7 +46,7 @@ androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "u
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-graphics-shapes = { group = "androidx.graphics", name = "graphics-shapes", version.ref = "graphicsShapes" }
 androidx-navigation-compose ={ group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
-kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.11.0" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version = "1.12.0" }
 koin-android = { group = "io.insert-koin", name = "koin-android", version.ref = "koin" }
 koin-compose = { group = "io.insert-koin", name = "koin-androidx-compose", version.ref = "koin" }
 ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
@@ -69,6 +69,9 @@ roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+# For an app built with library modules of its own (Passwords: KeePassDX's database and crypto).
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-parcelize = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }
 # Never applied to a module: AGP 9 compiles Kotlin itself. Declared only so the
 # root build puts Kotlin Gradle plugin 2.4.0 on the classpath, the version the
 # Compose and serialization plugins below expect, instead of AGP's older default.

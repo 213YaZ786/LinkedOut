@@ -117,10 +117,12 @@ jobs:
         run: gradle --stacktrace assembleDebug assembleRelease testDebugUnitTest
 
       # No ABI splits: LinkedOut ships no native code of its own, so every
-      # split would be the same bytes under a different name. The two builds
-      # that do differ are the signed release and the debug one, and both are
-      # named and hashed.
-      - name: Name the files and note their fingerprints
+      # split would be the same bytes under a different name. A release holds
+      # the signed APK and SHA256SUMS.txt, nothing else: the app's words and
+      # icon stay in the repo (fastlane/metadata/android, the layout F-Droid
+      # reads, f-droid.org/docs/All_About_Descriptions_Graphics_and_Screenshots)
+      # and a store reads them there.
+      - name: Name the file and note its fingerprint
         run: |
           mkdir -p release
           # Without the signing secrets, as on a pull request from Dependabot,
@@ -129,7 +131,6 @@ jobs:
           RELEASE=app/build/outputs/apk/release/app-release.apk
           [ -f "$RELEASE" ] || RELEASE=app/build/outputs/apk/release/app-release-unsigned.apk
           cp "$RELEASE" "release/LinkedOut-$VERSION.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "release/LinkedOut-$VERSION-debug.apk"
           ( cd release && sha256sum ./*.apk > SHA256SUMS.txt )
           cat release/SHA256SUMS.txt
 

@@ -84,7 +84,7 @@ Kotlin and Jetpack Compose, single module. Build with Android Studio or:
 gradle :app:assembleDebug
 ```
 
-Built with AGP 9.4 (built-in Kotlin) and Gradle 9.7.1, compiling against API 37
+Built with AGP 9.5 (built-in Kotlin) and Gradle 9.8.2, compiling against API 37
 with a minimum of API 31. Library updates arrive as Dependabot pull requests.
 CI builds a debug APK on every pull request, and on a push to `main` it builds a
 signed release, tags it `v<versionName>` and publishes the APK. That needs the
@@ -100,5 +100,7 @@ Forked from [MTGA](https://github.com/213YaZ786/MTGA), which reads X the same
 way.
 
 Links are checked before they open, after [URLCheck](https://github.com/TrianguloY/URLCheck) (CC BY 4.0). The tracking rules are [ClearURLs](https://github.com/ClearURLs/Rules) (LGPL-3.0), the site names come from the [Public Suffix List](https://publicsuffix.org) (MPL-2.0).
+
+Code is ported from [SparkButton](https://github.com/connyduck/sparkbutton) (Apache-2.0), [FlorisBoard](https://github.com/florisboard/florisboard) (Apache-2.0, the setup steps) and [AndroidX](https://github.com/androidx/androidx) (Apache-2.0, the wavy progress).
 
 MIT licensed.

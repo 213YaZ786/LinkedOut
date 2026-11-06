@@ -26,6 +26,15 @@
         Granted at install, it asks the reader nothing.
     -->
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
+    <!-- Ported from Launcher (https://github.com/213YaZ786/Launcher/blob/main/app/src/main/AndroidManifest.xml).
+         Store's door (update kit, StoreLink): the app tells Store when it opens and when the user leaves it. -->
+    <uses-permission android:name="com.yaz.store.permission.DOOR" />
+
+    <!-- Package visibility (https://developer.android.com/training/package-visibility) without QUERY_ALL_PACKAGES:
+         Store only (StoreLink's header). -->
+    <queries>
+        <package android:name="com.yaz.store" />
+    </queries>
 
     <application
         android:memtagMode="sync"
