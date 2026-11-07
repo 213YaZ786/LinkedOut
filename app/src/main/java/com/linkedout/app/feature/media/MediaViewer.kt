@@ -14,7 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,7 +32,9 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import coil3.compose.AsyncImage
 import com.linkedout.app.core.debug.RequestLog
-import com.linkedout.app.core.media.OfflineMedia
+import com.linkedout.app.core.media.MediaSource
+import com.linkedout.app.core.media.VideoCache
+import com.linkedout.app.core.media.rememberMediaSource
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.data.repository.VideoSources
@@ -63,6 +64,8 @@ import androidx.media3.common.MediaItem as PlayableItem
  */
 @Composable
 fun MediaViewer(
+    /** The post the media belongs to, so a saved copy can be found. */
+    postId: String,
     media: List<MediaItem>,
     startIndex: Int,
     onDownload: (MediaItem) -> Unit,
@@ -119,33 +122,28 @@ fun MediaViewer(
         }
     ) { index, active, onZoomChanged ->
         val item = media[index]
+        // The saved copy when there is one, so a post read on the train
+        // opens without touching the network.
+        // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/media/MediaViewer.kt#MediaViewer
+        val saved = rememberMediaSource(postId, index, item)
         when (item.type) {
-            MediaType.PHOTO -> SavedPhoto(url = item.downloadUrl, onZoomChanged = onZoomChanged)
-            MediaType.VIDEO, MediaType.GIF -> VideoPage(item = item, active = active)
+            MediaType.PHOTO -> ZoomableImage(model = saved.playback, onZoomChanged = onZoomChanged)
+            MediaType.VIDEO, MediaType.GIF -> VideoPage(item = item, saved = saved, active = active)
         }
     }
-}
-
-/** A photo, from the saved copy when there is one. */
-@Composable
-private fun SavedPhoto(url: String, onZoomChanged: (Boolean) -> Unit) {
-    val offline: OfflineMedia = koinInject()
-    val saved by offline.names.collectAsState()
-    val model = remember(url, saved) { offline.modelFor(url) }
-    // The saved copy when there is one, so a picture already on the
-    // phone opens with no network at all.
-    ZoomableImage(model = model, onZoomChanged = onZoomChanged)
 }
 
 /**
  * One player per page, created when the page is composed and released when
  * it leaves. Plays only while its page is current and the app is in front.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun VideoPage(item: MediaItem, active: Boolean) {
+private fun VideoPage(item: MediaItem, saved: MediaSource, active: Boolean) {
     val context = LocalContext.current
     val log: RequestLog = koinInject()
     val sources: VideoSources = koinInject()
+    val videoCache: VideoCache = koinInject()
     val uriHandler = LocalUriHandler.current
     val policy = rememberMediaPolicy()
     val isGif = item.type == MediaType.GIF
@@ -157,10 +155,16 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
     var fetched by remember(item.downloadUrl) { mutableStateOf<String?>(null) }
     var looking by remember(item.downloadUrl) { mutableStateOf(false) }
     var lost by remember(item.downloadUrl) { mutableStateOf(false) }
-    val source = if (item.playable) item.downloadUrl else fetched
+    // A saved copy the reader deleted since fails to open: the network
+    // address takes over for this page.
+    var fellBack by remember(item.downloadUrl, saved.playback) { mutableStateOf(false) }
+    // A video saved on the phone plays from its file and never asks the
+    // network for its address first.
+    val local = saved.offline && !fellBack
+    val source = if (local) saved.playback else if (item.playable) item.downloadUrl else fetched
 
-    LaunchedEffect(item.downloadUrl, item.sourcePostId, item.playable) {
-        if (item.playable || item.sourcePostId == null || fetched != null) return@LaunchedEffect
+    LaunchedEffect(item.downloadUrl, item.sourcePostId, item.playable, local) {
+        if (local || item.playable || item.sourcePostId == null || fetched != null) return@LaunchedEffect
         looking = true
         val found = sources.sourceFor(item.sourcePostId)
         looking = false
@@ -174,7 +178,7 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             AsyncImage(
-                model = item.previewUrl,
+                model = saved.preview,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth()
@@ -198,13 +202,15 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
 
     // On mobile data with Wi-Fi only on, nothing is fetched until the reader
     // taps play. Otherwise the player prepares as soon as the page exists.
-    var started by remember(source) { mutableStateOf(!policy.hold) }
+    // A saved file costs no data, so "Wi-Fi only" never holds it back.
+    var started by remember(source) { mutableStateOf(!policy.hold || local) }
     var tappedPlay by remember(source) { mutableStateOf(false) }
     // GIFs have no sound. Videos follow the setting, and the button below.
     var muted by remember(source) { mutableStateOf(isGif || policy.startMuted) }
 
     val exo = remember(source) {
-        SafePlayer.build(context).apply {
+        // One cache behind the network, so a video seen online plays again offline.
+        SafePlayer.build(context, videoCache.dataSourceFactory()).apply {
             setMediaItem(PlayableItem.fromUri(source))
             if (isGif) repeatMode = Player.REPEAT_MODE_ALL
         }
@@ -213,6 +219,10 @@ private fun VideoPage(item: MediaItem, active: Boolean) {
     DisposableEffect(exo) {
         val listener = object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
+                if (local) {
+                    fellBack = true
+                    return
+                }
                 failed = true
                 // Recorded with its address. Until now the failure was a
                 // boolean and the reason died with it, so "the video does not

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.Conversation
+import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.repository.FeedRepository
@@ -92,6 +93,16 @@ class PostDetailViewModel(
                     post = if (known != null && page != null) known.completedBy(page) else known ?: page,
                     thread = ThreadState.Ready(conversation)
                 )
+                // The page's video address goes into the stored post too, when
+                // the stored list is empty or holds a video without one: the
+                // saving pass reads the stored posts, and the address is lost
+                // with this screen otherwise. See FeedCache.replaceMedia.
+                if (known != null && page != null && page.media.isNotEmpty() &&
+                    (known.media.isEmpty() || known.media.any { it.type == MediaType.VIDEO && !it.playable })
+                ) {
+                    cache.replaceMedia(hint, known.id, page.media) ||
+                        (hint != null && cache.replaceMedia(null, known.id, page.media))
+                }
             }
             is Outcome.Failure -> _state.value = _state.value.copy(thread = ThreadState.Failed(outcome.error))
         }

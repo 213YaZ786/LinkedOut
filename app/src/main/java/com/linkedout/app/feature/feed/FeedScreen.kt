@@ -131,14 +131,15 @@ fun FeedScreen(
     val name = feed?.displayName?.takeIf { it.isNotBlank() && it != handle }
 
     viewing?.let { (media, index) ->
+        // The viewer holds the pictures only (the avatar belongs to no
+        // post): the post carrying them gives its address and its id, which
+        // finds the saved copy. The avatar has none and so no saved copy.
+        val owner = feed?.posts?.firstOrNull { post -> post.media == media }
         MediaViewer(
+            postId = owner?.id.orEmpty(),
             media = media,
             startIndex = index,
-            // The viewer holds the pictures only (the avatar belongs to no
-            // post): the post's address is the one of the post carrying them.
-            onDownload = {
-                downloader.download(it, handle, feed?.posts?.firstOrNull { post -> post.media == media }?.permalink)
-            },
+            onDownload = { downloader.download(it, handle, owner?.permalink) },
             onDismiss = { viewing = null }
         )
     }

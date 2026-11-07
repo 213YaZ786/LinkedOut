@@ -48,6 +48,9 @@ class SettingsViewModel(
         store.update { it.copy(keepPostsDays = days) }
         viewModelScope.launch {
             cache.applyRetention()
+            // The saved media of the posts retention just dropped go with them:
+            // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/settings/SettingsViewModel.kt#setKeepPostsDays
+            offline.keepOnly(cache.storedPostIds())
             measureStorage()
         }
     }
@@ -215,16 +218,21 @@ class SettingsViewModel(
         viewModelScope.launch { _storageBytes.value = cache.sizeBytes() }
         viewModelScope.launch(Dispatchers.IO) {
             offline.refresh()
-            val files = offline.saved()
-            _savedMedia.value = files.size to files.sumOf { it.length() }
+            _savedMedia.value = offline.entries().size to offline.sizeBytes()
         }
         _guestCookies.value = cookies.count()
     }
 
     fun setUpdates(mode: UpdateMode) = store.update { it.copy(updates = mode) }
 
+    /**
+     * The watermark is cleared either way. Zero means "first pass", and the
+     * first pass saves the newest posts already on screen rather than waiting
+     * for the next one to be published.
+     * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/settings/SettingsViewModel.kt#setAutoDownloadMedia
+     */
     fun setAutoDownloadMedia(choice: AutoDownload) =
-        store.update { it.copy(autoDownloadMedia = choice) }
+        store.update { it.copy(autoDownloadMedia = choice, autoDownloadedUntilMillis = 0) }
 
     private fun applySchedule() {
         val current = store.current

@@ -6,7 +6,7 @@ import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.accounts.AccountStore
-import com.linkedout.app.core.media.MediaPrefetch
+import com.linkedout.app.core.media.AutoMediaDownloader
 import com.linkedout.app.data.cache.FeedCache
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -25,7 +25,7 @@ class TimelineRepository(
     private val accounts: AccountStore,
     private val feeds: FeedRepository,
     private val cache: FeedCache,
-    private val media: MediaPrefetch
+    private val media: AutoMediaDownloader
 ) {
 
     /** Null means every account, which is the stream with no folder chosen. */
@@ -91,7 +91,6 @@ class TimelineRepository(
         }.map { it.await() }
 
         val errors = mutableMapOf<String, AppError>()
-        val fresh = mutableListOf<Post>()
         var oldest: Long? = null
         var more = false
 
@@ -105,7 +104,6 @@ class TimelineRepository(
                     // Merge rather than overwrite, so a refresh does not throw
                     // away every page the reader already scrolled through.
                     val merged = cache.append(outcome.value)
-                    fresh += outcome.value.posts
                     accounts.updateDisplayName(handle, outcome.value.displayName)
                     if (merged.nextCursor != null) more = true
                     oldest = minOf(oldest ?: outcome.value.fetchedAtMillis, outcome.value.fetchedAtMillis)
@@ -125,11 +123,12 @@ class TimelineRepository(
         val stored = accounts.accounts.value.inFolder(folder).mapNotNull { cache.read(it.handle) }
         val posts = merge(stored.flatMap { it.posts })
 
-        // Only what this pass actually read, not the whole merged archive: a
-        // first run would otherwise queue every picture ever cached at once.
-        // Here rather than in the screen, so a background check saves media
-        // too. It returns at once, the work is handed to DownloadManager.
-        media.queue(fresh)
+        // Fed from the cache, so the ids are the canonical ones the files are
+        // named by. The pass itself caps what it queues (25 posts, 40 files)
+        // and moves its watermark, so a first run does not queue every
+        // picture ever cached at once. Here rather than in the screen, so a
+        // background check saves media too. The work is handed to DownloadManager.
+        media.consider(posts)
 
         Merged(
             posts = posts,
@@ -193,8 +192,11 @@ class TimelineRepository(
         }
 
         val refreshed = handles.mapNotNull { cache.read(it) }
+        val older = merge(refreshed.flatMap { it.posts })
+        // The older pages are posts to keep offline too.
+        media.consider(older)
         Merged(
-            posts = merge(refreshed.flatMap { it.posts }),
+            posts = older,
             errors = errors,
             fromCache = false,
             oldestFetchedAtMillis = refreshed.minOfOrNull { it.fetchedAtMillis },

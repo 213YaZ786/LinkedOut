@@ -46,6 +46,9 @@ import com.linkedout.app.core.link.LinkSheet
 import com.linkedout.app.core.link.RedirectResolver
 import com.linkedout.app.core.link.SafeUriHandler
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.linkedout.app.core.media.LocalOfflineMedia
+import com.linkedout.app.core.media.OfflineMedia
 import androidx.navigation.NavHostController
 import com.linkedout.app.core.link.LinkRouter
 import com.linkedout.app.core.link.LinkedInLink
@@ -92,6 +95,17 @@ fun LinkedOutApp() {
     val pending by links.pending.collectAsState()
     val platformUris = LocalUriHandler.current
 
+    // Re-read on every return to the app, because DownloadManager finishes in
+    // its own time: files queued during the last visit are on disk now, and
+    // files the reader deleted from a file manager are not.
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/navigation/MtgaApp.kt#MtgaApp
+    val offlineMedia: OfflineMedia = koinInject()
+    val appScope = rememberCoroutineScope()
+    LifecycleResumeEffect(offlineMedia) {
+        appScope.launch { offlineMedia.refresh() }
+        onPauseOrDispose { }
+    }
+
     fun show(link: LinkedInLink) {
         when (link) {
             is LinkedInLink.Profile -> navController.open(Routes.feed(link.handle))
@@ -132,7 +146,11 @@ fun LinkedOutApp() {
         LinkSheet(url = url, onDismiss = { asked = null }, onOpen = uris::openOut, expand = resolver::expand)
     }
 
-    CompositionLocalProvider(LocalUriHandler provides uris) {
+    CompositionLocalProvider(
+        LocalUriHandler provides uris,
+        // Every screen that shows media can now ask for the saved copy.
+        LocalOfflineMedia provides offlineMedia
+    ) {
         LinkedOutNavHost(navController)
     }
 }

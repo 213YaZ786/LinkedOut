@@ -199,6 +199,7 @@ private fun ConversationView(
 
     viewing?.let { (shown, index) ->
         MediaViewer(
+            postId = shown.id,
             media = shown.media,
             startIndex = index,
             onDownload = { downloader.download(it, shown.authorHandle, shown.permalink) },

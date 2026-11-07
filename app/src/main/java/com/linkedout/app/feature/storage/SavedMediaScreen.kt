@@ -26,6 +26,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,10 +57,15 @@ fun SavedMediaScreen(onBack: () -> Unit) {
     val offline: OfflineMedia = koinInject()
     val context = LocalContext.current
     var files by remember { mutableStateOf<List<File>>(emptyList()) }
+    var total by remember { mutableStateOf(0L) }
     var confirmAll by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    fun reload() {
-        files = offline.saved()
+    // The copies on disk, newest first; the covers of videos count in the size, not in the list.
+    suspend fun reload() {
+        offline.refresh()
+        files = offline.entries().map { it.file }.sortedByDescending { it.lastModified() }
+        total = offline.sizeBytes()
     }
 
     LaunchedEffect(Unit) { reload() }
@@ -75,16 +82,16 @@ fun SavedMediaScreen(onBack: () -> Unit) {
             },
             confirmButton = {
                 BoldButton(filled = true, onClick = {
-                    offline.deleteAll()
                     confirmAll = false
-                    reload()
+                    scope.launch {
+                        offline.clear()
+                        reload()
+                    }
                 }) { Text("Delete") }
             },
             dismissButton = { QuietButton(onClick = { confirmAll = false }) { Text("Cancel") } }
         )
     }
-
-    val total = files.sumOf { it.length() }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -136,7 +143,7 @@ fun SavedMediaScreen(onBack: () -> Unit) {
             return@LazyColumn
         }
 
-        items(files, key = { it.name }) { file ->
+        items(files, key = { it.absolutePath }) { file ->
             Zone(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -163,8 +170,10 @@ fun SavedMediaScreen(onBack: () -> Unit) {
                         )
                     }
                     IconButton(onClick = {
-                        offline.delete(file.name)
-                        reload()
+                        scope.launch {
+                            offline.delete(file)
+                            reload()
+                        }
                     }) {
                         Icon(
                             LinkedOutIcons.Delete,

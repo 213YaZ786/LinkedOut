@@ -37,9 +37,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
-import com.linkedout.app.core.media.OfflineMedia
+import com.linkedout.app.core.media.rememberMediaSource
 import com.linkedout.app.data.repository.VideoSources
 import com.linkedout.app.core.model.CommunityNote
 import com.linkedout.app.core.model.LinkCard
@@ -261,10 +260,7 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
     // Compact trades some picture for a list that moves faster.
     val ratio = if (LocalDisplayPrefs.current.compact) 2f else 16f / 9f
     val hold = rememberMediaPolicy().hold
-    val offline: OfflineMedia = koinInject()
     val haptics = rememberHaptics()
-    // Read here so the block redraws when a download lands under it.
-    val saved by offline.names.collectAsState()
     // Only the first video or GIF of the post chosen by the list plays inline.
     val inlineIndex = if (LocalInlinePlaying.current == post.id) {
         post.media.indexOfFirst { it.type != MediaType.PHOTO }
@@ -277,7 +273,11 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
             // reader taps. One tap loads the preview, the next opens it.
             var revealed by remember(item.previewUrl) { mutableStateOf(false) }
             val waiting = hold && !revealed
-            val model = remember(item.previewUrl, saved) { offline.modelFor(item.previewUrl) }
+            // The saved copy when there is one, so a post read on the train
+            // opens with no network. It redraws when a download lands under
+            // it: the source is keyed on the store's version.
+            // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/ui/component/PostCard.kt#MediaBlock
+            val source = rememberMediaSource(post.id, index, item)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -292,7 +292,7 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
                         // The saved copy when there is one, the address
                         // otherwise. A post read offline still shows its
                         // pictures, and a downloaded one costs no request.
-                        model = model,
+                        model = source.preview,
                         contentDescription = null,
                         contentScale = ContentScale.FillWidth,
                         modifier = Modifier.fillMaxWidth().aspectRatio(ratio)
@@ -308,13 +308,17 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
                         // may watch. Answers are kept for the run, so
                         // scrolling away and back costs nothing.
                         val sources: VideoSources = koinInject()
-                        var source by remember(item.downloadUrl) {
-                            mutableStateOf(item.downloadUrl.takeIf { item.playable })
+                        // A video saved on the phone plays from its file first and
+                        // never asks the network for its address.
+                        var playing by remember(item.downloadUrl, source.playback) {
+                            mutableStateOf(
+                                if (source.offline) source.playback else item.downloadUrl.takeIf { item.playable }
+                            )
                         }
-                        LaunchedEffect(post.id, item.playable) {
-                            if (source == null) source = sources.sourceFor(post.id)
+                        LaunchedEffect(post.id, item.playable, source.offline) {
+                            if (playing == null) playing = sources.sourceFor(post.id)
                         }
-                        source?.let { address ->
+                        playing?.let { address ->
                             InlineVideo(
                                 url = address,
                                 onClick = { onOpen(index) },

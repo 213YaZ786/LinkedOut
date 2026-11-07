@@ -9,6 +9,7 @@ import android.os.Looper
 import android.widget.Toast
 import androidx.media3.common.C
 import androidx.media3.common.util.Util
+import java.io.File
 import java.net.URI
 import java.net.URLDecoder
 import com.linkedout.app.core.link.SafeLinks
@@ -104,6 +105,46 @@ class MediaDownloader(
                 toast("Saving $fileName")
             }
             .onFailure { toast("Could not start the download") }
+    }
+
+    /**
+     * A file saved without being asked, for offline reading.
+     *
+     * No toast and no line of its own in the shade: a reader who turned on
+     * automatic saving does not want forty lines for one refresh. The batch
+     * gets one line instead, see [MediaSavingNotice]. Hiding the per file line
+     * needs DOWNLOAD_WITHOUT_NOTIFICATION in the manifest, without it the
+     * enqueue itself throws.
+     *
+     * Returns the download id to follow, or null when the file was already
+     * there or could not even be queued, so the caller can say so in the log
+     * rather than guess.
+     *
+     * Ported from MTGA, https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/core/media/MediaDownloader.kt#cache
+     * [allowMetered] is LinkedOut's addition: "Wi-Fi only" must hold for the
+     * transfer too, which DownloadManager may run later on another network.
+     */
+    fun cache(target: File, item: MediaItem, allowMetered: Boolean = true): Long? =
+        cache(target, item.downloadUrl, allowMetered)
+
+    /** The same for any address: the file of a video, or its still. */
+    fun cache(target: File, address: String, allowMetered: Boolean = true): Long? {
+        if (target.exists()) return null
+        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager ?: return null
+        // Same check as download.
+        val url = SafeLinks.openable(address) ?: return null
+        // A playlist is a list of pieces, not a file: nothing to keep as one.
+        if (isPlaylist(url)) return null
+        // The account's folder, made before the download lands in it.
+        target.parentFile?.mkdirs()
+        val request = DownloadManager.Request(Uri.parse(url))
+            .setTitle(target.name)
+            .setDescription("Saving from LinkedOut")
+            .setAllowedOverMetered(allowMetered)
+            .setAllowedOverRoaming(allowMetered)
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN)
+            .setDestinationInExternalFilesDir(context, OfflineMedia.FOLDER, "${target.parentFile?.name}/${target.name}")
+        return runCatching { manager.enqueue(request) }.getOrNull()
     }
 
     /**

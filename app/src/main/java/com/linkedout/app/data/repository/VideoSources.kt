@@ -3,6 +3,7 @@ package com.linkedout.app.data.repository
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.network.SingleFlight
+import com.linkedout.app.data.cache.FeedCache
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,7 @@ import kotlinx.coroutines.SupervisorJob
  * lookups do (one global lock made every post wait on any other's request):
  * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/archive/ArchiveSource.kt#ArchiveSource
  */
-class VideoSources(private val feeds: FeedRepository) {
+class VideoSources(private val feeds: FeedRepository, private val cache: FeedCache) {
 
     private val known = ConcurrentHashMap<String, String>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -43,7 +44,21 @@ class VideoSources(private val feeds: FeedRepository) {
     suspend fun sourceFor(postId: String): String? {
         known[postId]?.let { return it }
         return flight.run(postId) {
-            known[postId] ?: fetch(postId)?.also { known[postId] = it }
+            known[postId] ?: fetch(postId)?.also { found ->
+                known[postId] = found
+                // Written into the stored post too, so the video is saved for
+                // offline reading by the next saving pass and survives a
+                // restart: the memory above is lost at each one, the stored
+                // post is not. Only a post holding a video without an address
+                // is touched, see FeedCache.replaceMedia.
+                val stored = cache.find(postId, null)?.media.orEmpty()
+                if (stored.any { it.type == MediaType.VIDEO && !it.playable }) {
+                    // Only the video without an address takes it: a picture beside it keeps its own.
+                    cache.replaceMedia(null, postId, stored.map {
+                        if (it.type == MediaType.VIDEO && !it.playable) it.copy(downloadUrl = found, playable = true) else it
+                    })
+                }
+            }
         }
     }
 

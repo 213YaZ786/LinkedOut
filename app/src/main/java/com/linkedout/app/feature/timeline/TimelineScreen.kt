@@ -147,6 +147,7 @@ fun TimelineScreen(
 
     viewing?.let { (post, index) ->
         MediaViewer(
+            postId = post.id,
             media = post.media,
             startIndex = index,
             onDownload = { downloader.download(it, post.authorHandle, post.permalink) },

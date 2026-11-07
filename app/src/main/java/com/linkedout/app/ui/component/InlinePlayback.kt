@@ -24,6 +24,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.linkedout.app.core.debug.RequestLog
+import com.linkedout.app.core.media.VideoCache
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.model.Post
@@ -93,9 +94,13 @@ fun rememberInlineTarget(
 internal fun InlineVideo(url: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val log: RequestLog = koinInject()
+    val videoCache: VideoCache = koinInject()
     var failed by remember(url) { mutableStateOf(false) }
     val exo = remember(url) {
-        SafePlayer.build(context).apply {
+        // One cache behind the network, so a video seen online plays again offline.
+        // A saved file (a path) goes straight to disk, see VideoCache.dataSourceFactory.
+        // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/ui/component/InlinePlayback.kt#InlineVideo
+        SafePlayer.build(context, videoCache.dataSourceFactory()).apply {
             setMediaItem(PlayableItem.fromUri(url))
             repeatMode = Player.REPEAT_MODE_ALL
             volume = 0f

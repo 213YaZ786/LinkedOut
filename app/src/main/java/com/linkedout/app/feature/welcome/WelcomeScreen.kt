@@ -136,7 +136,8 @@ private fun rememberSetup(): Setup {
     val askDownloadNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { checks++ }
 
     val chooseMedia: (AutoDownload) -> Unit = { choice ->
-        store.update { it.copy(autoDownloadMedia = choice) }
+        // The watermark back to zero, as Settings does: the first pass saves what is on screen now.
+        store.update { it.copy(autoDownloadMedia = choice, autoDownloadedUntilMillis = 0) }
         // The progress of a download is a notification like any other, and Android 13 and later want the
         // permission for it. Asked here because here is where the reader asked for downloads.
         if (choice != AutoDownload.NEVER && !hasNotificationPermission) {

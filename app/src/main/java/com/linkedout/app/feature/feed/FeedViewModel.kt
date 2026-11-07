@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.common.Outcome
+import com.linkedout.app.core.media.AutoMediaDownloader
 import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Feed
 import com.linkedout.app.core.model.FollowedAccount
@@ -32,7 +33,8 @@ data class FeedUiState(
 class FeedViewModel(
     private val repository: FeedRepository,
     private val accounts: AccountStore,
-    private val cache: FeedCache
+    private val cache: FeedCache,
+    private val media: AutoMediaDownloader
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(FeedUiState())
@@ -89,6 +91,8 @@ class FeedViewModel(
                         error = null,
                         pagingFailed = false
                     )
+                    // A profile's posts are saved for offline reading like Home's.
+                    media.consider(merged.posts)
                 }
                 is Outcome.Failure -> _state.value = _state.value.copy(
                     loading = false,
@@ -115,6 +119,7 @@ class FeedViewModel(
                         loadingMore = false,
                         pagingFailed = merged.posts.size <= before
                     )
+                    media.consider(merged.posts)
                 }
                 is Outcome.Failure -> _state.value = _state.value.copy(
                     loadingMore = false,

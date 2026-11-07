@@ -67,6 +67,15 @@ data class Settings(
      */
     val autoDownloadMedia: AutoDownload = AutoDownload.NEVER,
     /**
+     * The publication time of the newest post whose media automatic saving has
+     * handled, so only newer posts are ever the first pass's business. Zero
+     * means no pass yet: the first one takes the newest posts already on
+     * screen. Reset to zero when the choice above changes.
+     *
+     * Ported from MTGA, https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/settings/SettingsStore.kt#autoDownloadedUntilMillis
+     */
+    val autoDownloadedUntilMillis: Long = 0,
+    /**
      * The folder Home was last showing. Null is every account. Kept across
      * launches because reopening on a different stream than the one you left
      * is disorienting.

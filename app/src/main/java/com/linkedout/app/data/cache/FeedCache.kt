@@ -4,6 +4,8 @@ import com.linkedout.app.data.linkedin.Markup
 import com.linkedout.app.core.common.writeTextAtomically
 import android.content.Context
 import com.linkedout.app.core.model.Feed
+import com.linkedout.app.core.model.MediaItem
+import com.linkedout.app.core.model.MediaType
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.core.model.PostId
 import kotlinx.coroutines.Dispatchers
@@ -182,6 +184,55 @@ class FeedCache(
             .toList()
     }
 
+    /**
+     * The id of every post held on disk, whichever account holds it. What the
+     * saved media is checked against: retention is set once, in "Keep posts",
+     * and it governs the files as well as the text.
+     *
+     * Ported from MTGA, https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/cache/FeedCache.kt#storedPostIds
+     */
+    suspend fun storedPostIds(): Set<String> = withContext(Dispatchers.IO) {
+        feedFiles().flatMapTo(HashSet()) { file ->
+            runCatching { canonical(json.decodeFromString<Feed>(file.readText())).posts.map { it.id } }
+                .getOrDefault(emptyList())
+        }
+    }
+
+    /**
+     * Completes the media of the post [postId] in the stored feed of [handle]
+     * with [media], or in every stored feed holding it when [handle] is null:
+     * update by id, one write per feed, see [FeedMedia.withMedia]. Returns
+     * whether a feed held the post.
+     *
+     * A re-seen post keeps its first media list (see [Post.mergedWith]), and a
+     * profile page names its video without an address, so what is stored
+     * stays an unplayable cover until the post's own page was read. Once
+     * the address is known it is written here, and the saving pass, which
+     * reads the stored posts, then fetches the video.
+     *
+     * MTGA's replaceTexts, the same update of a stored post by id with one
+     * write, for the media instead of the texts:
+     * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/cache/FeedCache.kt#replaceTexts
+     * not ported: replaceTexts (by name: its texts and quoted texts are the
+     * media here; the whole text is already completed by LinkedIn's own page),
+     * markAsFullTextDownloaded (no full text pass in LinkedOut)
+     */
+    suspend fun replaceMedia(handle: String?, postId: String, media: List<MediaItem>): Boolean =
+        withContext(Dispatchers.IO) {
+            val files = if (handle != null) listOf(fileFor(handle)).filter { it.exists() } else feedFiles()
+            var found = false
+            files.forEach { file ->
+                val feed = runCatching { json.decodeFromString<Feed>(file.readText()) }.getOrNull()
+                    ?: return@forEach
+                val stored = canonical(feed)
+                if (stored.posts.none { it.id == postId }) return@forEach
+                found = true
+                val replaced = FeedMedia.withMedia(stored, postId, media)
+                if (replaced != stored) runCatching { file.writeTextAtomically(json.encodeToString(replaced)) }
+            }
+            found
+        }
+
     suspend fun forget(handle: String) = withContext(Dispatchers.IO) {
         scrolledBack.remove(handle.lowercase())
         runCatching { fileFor(handle).delete() }
@@ -255,4 +306,46 @@ class FeedCache(
         const val MAX_SCROLLED_BACK_PER_ACCOUNT = 1_000
         const val DAY_MS = 24L * 60 * 60 * 1000
     }
+}
+
+/**
+ * The media of a stored post, rewritten. Pure, so it can be tested without a
+ * phone: [FeedCache.replaceMedia] reads, calls this, and writes. Taken from
+ * MTGA's FeedMerge, the pure half of replaceTexts, with the media where it
+ * has the texts:
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/cache/FeedCache.kt#withWholeTexts
+ */
+object FeedMedia {
+
+    /**
+     * [feed] with the media of the post [postId] completed by [media], the
+     * media of the post's own page (or the same list with an address found
+     * since). The page's list when nothing was stored, else each stored video
+     * without an address takes the address of the playable video at the same
+     * position, keeping its own cover: the saved cover is named by position,
+     * not by address. [feed] itself when the page adds nothing.
+     */
+    fun withMedia(feed: Feed, postId: String, media: List<MediaItem>): Feed =
+        feed.copy(posts = feed.posts.map { post ->
+            var next = post
+            if (post.id == postId && media.isNotEmpty()) {
+                next = if (post.media.isEmpty()) {
+                    post.copy(media = media)
+                } else {
+                    post.copy(media = post.media.mapIndexed { index, stored ->
+                        val seen = media.getOrNull(index)
+                        // The page's item at that place must be a video too: a picture's address saved as an mp4
+                        // would never play.
+                        if (stored.type == MediaType.VIDEO && !stored.playable && seen != null &&
+                            seen.type == MediaType.VIDEO && seen.playable
+                        ) {
+                            stored.copy(downloadUrl = seen.downloadUrl, playable = true)
+                        } else {
+                            stored
+                        }
+                    })
+                }
+            }
+            next
+        })
 }
