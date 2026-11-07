@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -24,24 +25,27 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * The zone a screen opens with: its name in the middle, one round action on
+ * What a screen opens with: its name in the middle, one round action on
  * each side.
  *
  * It is an item of the list, not a bar over it. It leaves when the reader
  * scrolls down and comes back only once they are back at the top. A bar that
  * reappears on the first upward flick steals the line being read.
  *
- * Both sides reserve the same width whether or not they hold anything, so the
- * title is centred on the screen and not on what is left of the row.
+ * The title is plain text in the accent, drawn straight on the page, with no
+ * zone (the user, 2026-11-07): a zone means a tap, and a title is not tapped.
+ * Only the round actions on each side are glass, each its own.
  *
- * The title is a label and nothing else: a title that can be tapped still
- * looks like a title, and a control hidden in it is never found.
+ * Both slots reserve the same width whether or not they hold anything, so the
+ * title is centred on the screen and not on what is left of the row.
  *
  * Shared across the apps of this base: edit Modules/shared, then run sync.sh.
  */
@@ -53,51 +57,49 @@ fun ScreenBanner(
     leading: @Composable (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null
 ) {
-    ZoneSurface(
-        modifier = modifier
+    // https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/ui/component/FloatingPane.kt#FloatingTop
+    // The row has a minimum height only, so a title on two lines makes it grow.
+    // Not ported: LocalTitleCollapse's cross fade (no large title here, the banner scrolls with its list),
+    // the `center` slot (no caller needs it).
+    Row(
+        modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = BannerGap),
-        shape = BannerShape
+            .heightIn(min = BannerActionSize + 16.dp)
+            .padding(horizontal = 16.dp, vertical = BannerGap),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // Both action slots keep their room, so the name stays centred.
+        Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { leading?.invoke() }
+        // A gap on each side; a long name wraps between words on two lines, and a word too wide for the
+        // room shrinks as the last resort: Compose's TextAutoSize.StepBased
+        // (https://developer.android.com/develop/ui/compose/text/autosize), never an ellipsis first.
+        Column(
+            modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
-            Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) {
-                leading?.invoke()
-            }
-            Column(
-                modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(1.dp)
-            ) {
-                // The title wraps between words on two lines, the zone grows with it; a word too wide for the
-                // line shrinks as the last resort (Compose's TextAutoSize.StepBased,
-                // https://developer.android.com/develop/ui/compose/text/autosize), never an ellipsis first.
-                val titleStyle = MaterialTheme.typography.headlineSmall
-                BasicText(
-                    title,
-                    // Every title in the accent (the user, 2026-10-31), as SettingsTiles' SettingsSectionTitle.
-                    style = titleStyle.copy(color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center),
+            val titleStyle = MaterialTheme.typography.headlineSmall
+            BasicText(
+                title,
+                // Every title in the accent (the user, 2026-10-31), as SettingsTiles' SettingsSectionTitle.
+                style = titleStyle.copy(color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = titleStyle.fontSize, stepSize = 0.5.sp),
+                modifier = Modifier.semantics { heading() }
+            )
+            subtitle?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
                     maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = titleStyle.fontSize, stepSize = 0.5.sp)
+                    overflow = TextOverflow.Ellipsis
                 )
-                subtitle?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) {
-                trailing?.invoke()
             }
         }
+        Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { trailing?.invoke() }
     }
 }
 
@@ -135,14 +137,8 @@ fun BannerAction(
     }
 }
 
-/**
- * The corner of every standalone zone in these apps: Material 3's extra large, 28 dp (ShapeDefaults,
- * https://developer.android.com/reference/kotlin/androidx/compose/material3/ShapeDefaults).
- */
-private val BannerShape = androidx.compose.material3.ShapeDefaults.ExtraLarge
-
-/** Space the banner leaves around itself, so it never touches what follows. */
-private val BannerGap = 6.dp
+/** Space the banner leaves above and below itself, so it never touches what follows. */
+private val BannerGap = 8.dp
 
 /** Both slots of the banner, so an empty one still holds the title centred. */
 private val BannerActionSize = 44.dp

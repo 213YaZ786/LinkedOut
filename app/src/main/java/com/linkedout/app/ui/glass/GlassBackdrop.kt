@@ -138,6 +138,7 @@ private class GlassFloatingNode(
     private var position = Offset.Zero
     private var layer: GraphicsLayer? = null
     private var shader: Any? = null
+    private var quietShader: Any? = null
     private var effectKey: Any? = null
     private var shaderFailed = false
 
@@ -171,17 +172,19 @@ private class GlassFloatingNode(
             }
         }
         val radius = cornerRadius(outline)
-        val key = listOf(area, radius, tint, lens, look.dark, density, look.quiet)
+        val radii = cornerRadii(outline)
+        val key = listOf(area, radius, radii.toList(), tint, lens, look.dark, density, look.quiet)
         if (key != effectKey) {
-            own.renderEffect = runCatching { effect(area, margin.toFloat(), radius) }
+            own.renderEffect = runCatching { effect(area, margin.toFloat(), radius, radii) }
                 .onFailure { shaderFailed = true; android.util.Log.w("Glass", "lens failed", it) }
                 .getOrNull()
             effectKey = key
         }
         // The zones' soft shadow (GlassZone), so a round action over the white of the ground still shows
         // as glass (the user, 2026-10-28: "on dirait pas du liquid glass"), as iOS 26's buttons keep theirs.
-        // Quiet glass has no shadow (Haze's materials, https://github.com/chrisbanes/haze/blob/main/haze-materials/src/commonMain/kotlin/dev/chrisbanes/haze/blur/materials/HazeMaterials.kt;
-        // the long press menu's pane, dialogGlass; the user, 2026-11-01).
+        // Quiet glass has no shadow (Kyant0's DialogContent draws its dialog with none,
+        // https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/destinations/DialogContent.kt;
+        // the user, 2026-11-01).
         if (!look.quiet) drawIntoCanvas { canvas ->
             val paint = androidx.compose.ui.graphics.Paint().apply { color = look.ground }
             paint.asFrameworkPaint().setShadowLayer(10f * density, 0f, 3.5f * density, android.graphics.Color.argb(if (look.dark) 110 else 34, 0, 0, 0))
@@ -191,7 +194,7 @@ private class GlassFloatingNode(
             translate(-margin.toFloat(), -margin.toFloat()) { drawLayer(own) }
         }
         if (look.quiet) {
-            // The blurred layer, one flat tint, the hairline (as dialogGlass).
+            // The layer with its colour controls, blur and lens, DialogContent's flat tint (onDrawSurface), the hairline.
             drawOutline(outline, tint)
             drawOutline(outline, rimBrush(look, size.height), style = Stroke(width = 1.4f * density))
         } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || shaderFailed) {
@@ -201,12 +204,63 @@ private class GlassFloatingNode(
         drawContent()
     }
 
-    private fun ContentDrawScope.effect(area: IntSize, margin: Float, radius: Float): androidx.compose.ui.graphics.RenderEffect {
+    private fun ContentDrawScope.effect(area: IntSize, margin: Float, radius: Float, cornerRadii: FloatArray): androidx.compose.ui.graphics.RenderEffect {
         if (look.quiet) {
-            // Only the blur, at the dialog's BlurBehind radii (Haze's materials, https://github.com/chrisbanes/haze/blob/main/haze-materials/src/commonMain/kotlin/dev/chrisbanes/haze/blur/materials/HazeMaterials.kt;
-            // the long press menu's pane, dialogGlass; the user, 2026-11-01): no lens.
-            val r = (if (look.dark) 8f else 16f) * density
-            return RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP).asComposeRenderEffect()
+            // Kyant0's dialog, effects in DialogContent's order, each over the previous one as BackdropEffectScope
+            // does: colorControls innermost, then blur, then the lens outermost.
+            // https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/destinations/DialogContent.kt#DialogContent
+            // not ported: DialogContent (its scaffold, title, text and buttons are the app's own; its effects, tint and shape come over)
+            var renderEffect: RenderEffect? = null
+            val padding = margin
+            val size = Size(area.width - 2 * padding, area.height - 2 * padding)
+
+            // https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/backdrop/src/commonMain/kotlin/com/kyant/backdrop/effects/ColorFilter.kt#colorControls
+            fun colorControls(brightness: Float = 0f, contrast: Float = 1f, saturation: Float = 1f) {
+                if (brightness == 0f && contrast == 1f && saturation == 1f) {
+                    return
+                }
+
+                val colorFilter = colorControlsColorFilter(brightness, contrast, saturation)
+                renderEffect = renderEffect?.let { RenderEffect.createColorFilterEffect(colorFilter, it) }
+                    ?: RenderEffect.createColorFilterEffect(colorFilter)
+            }
+
+            // https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/backdrop/src/commonMain/kotlin/com/kyant/backdrop/effects/Blur.kt#blur
+            fun blur(radius: Float, edgeTreatment: Shader.TileMode = Shader.TileMode.CLAMP) {
+                if (radius <= 0f) return
+                renderEffect = renderEffect?.let { RenderEffect.createBlurEffect(radius, radius, it, edgeTreatment) }
+                    ?: RenderEffect.createBlurEffect(radius, radius, edgeTreatment)
+            }
+
+            // https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/backdrop/src/commonMain/kotlin/com/kyant/backdrop/effects/Lens.kt#lens
+            // not ported: RoundedRectRefractionWithDispersionShaderString (Kyant0's dialog passes chromaticAberration false);
+            // not ported: lens's padding reduction and its shape switch (our margin is fixed, cornerRadii(outline) takes any outline)
+            fun lens(refractionHeight: Float, refractionAmount: Float, depthEffect: Boolean = false) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || shaderFailed) return
+                if (refractionHeight <= 0f || refractionAmount <= 0f) return
+                // A shader the phone's engine refuses leaves colour controls and blur, never a crash.
+                val shader = (quietShader as? RuntimeShader) ?: runCatching { RuntimeShader(QUIET_LENS_AGSL) }
+                    .onFailure { shaderFailed = true; android.util.Log.w("Glass", "lens shader refused", it) }
+                    .getOrNull()?.also { quietShader = it } ?: return
+                shader.apply {
+                    setFloatUniform("size", size.width, size.height)
+                    setFloatUniform("offset", -padding, -padding)
+                    setFloatUniform("cornerRadii", cornerRadii)
+                    setFloatUniform("refractionHeight", refractionHeight)
+                    setFloatUniform("refractionAmount", -refractionAmount)
+                    setFloatUniform("depthEffect", if (depthEffect) 1f else 0f)
+                }
+                val effect = RenderEffect.createRuntimeShaderEffect(shader, "content")
+                renderEffect = renderEffect?.let { RenderEffect.createChainEffect(effect, it) } ?: effect
+            }
+
+            colorControls(
+                brightness = if (look.dark) 0f else 0.2f,
+                saturation = 1.5f
+            )
+            blur(if (look.dark) 8f * density else 16f * density)
+            lens(24f * density, 48f * density, depthEffect = true)
+            return renderEffect!!.asComposeRenderEffect()
         }
         val frost = RenderEffect.createBlurEffect(2f * density, 2f * density, Shader.TileMode.CLAMP)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return frost.asComposeRenderEffect()
@@ -225,6 +279,106 @@ private class GlassFloatingNode(
         return RenderEffect.createChainEffect(lensing, frost).asComposeRenderEffect()
     }
 }
+
+// https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/backdrop/src/commonMain/kotlin/com/kyant/backdrop/effects/ColorFilter.kt#colorControlsColorFilter
+// not ported: colorFilter, opacity, colorControls, vibrancy (DialogContent's colorControls is applied in effect() below)
+private fun colorControlsColorFilter(
+    brightness: Float = 0f,
+    contrast: Float = 1f,
+    saturation: Float = 1f
+): android.graphics.ColorFilter {
+    val invSat = 1f - saturation
+    val r = 0.213f * invSat
+    val g = 0.715f * invSat
+    val b = 0.072f * invSat
+
+    val c = contrast
+    val t = (0.5f - c * 0.5f + brightness) * 255f
+    val s = saturation
+
+    val cr = c * r
+    val cg = c * g
+    val cb = c * b
+    val cs = c * s
+
+    val colorMatrix = android.graphics.ColorMatrix(
+        floatArrayOf(
+            cr + cs, cg, cb, 0f, t,
+            cr, cg + cs, cb, 0f, t,
+            cr, cg, cb + cs, 0f, t,
+            0f, 0f, 0f, 1f, 0f
+        )
+    )
+    return android.graphics.ColorMatrixColorFilter(colorMatrix)
+}
+
+// Kyant0/AndroidLiquidGlass (Apache-2.0), backdrop/src/commonMain/kotlin/com/kyant/backdrop/internal/Shaders.kt:
+// RoundedRectSDF and RoundedRectRefractionShaderString, as they are.
+// https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/backdrop/src/commonMain/kotlin/com/kyant/backdrop/internal/Shaders.kt#RoundedRectRefractionShaderString
+// not ported: RoundedRectRefractionWithDispersionShaderString (Kyant0's dialog passes chromaticAberration false),
+// DefaultHighlightShaderString and the other highlight shaders (our rim is rimBrush)
+private const val RoundedRectSDF = """
+float radiusAt(float2 coord, float4 radii) {
+    if (coord.x >= 0.0) {
+        if (coord.y <= 0.0) return radii.y;
+        else return radii.z;
+    } else {
+        if (coord.y <= 0.0) return radii.x;
+        else return radii.w;
+    }
+}
+
+float sdRoundedRect(float2 coord, float2 halfSize, float radius) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
+    float outside = length(max(cornerCoord, 0.0)) - radius;
+    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
+    return outside + inside;
+}
+
+float2 gradSdRoundedRect(float2 coord, float2 halfSize, float radius) {
+    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
+    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
+        return sign(coord) * normalize(max(cornerCoord, 0.0));
+    } else {
+        float gradX = step(cornerCoord.y, cornerCoord.x);
+        return sign(coord) * float2(gradX, 1.0 - gradX);
+    }
+}"""
+
+private const val QUIET_LENS_AGSL = """
+uniform shader content;
+
+uniform float2 size;
+uniform float2 offset;
+uniform float4 cornerRadii;
+uniform float refractionHeight;
+uniform float refractionAmount;
+uniform float depthEffect;
+
+""" + RoundedRectSDF + """
+
+float circleMap(float x) {
+    return 1.0 - sqrt(1.0 - x * x);
+}
+
+half4 main(float2 coord) {
+    float2 halfSize = size * 0.5;
+    float2 centeredCoord = (coord + offset) - halfSize;
+    float radius = radiusAt(coord, cornerRadii);
+
+    float sd = sdRoundedRect(centeredCoord, halfSize, radius);
+    if (-sd >= refractionHeight) {
+        return content.eval(coord);
+    }
+    sd = min(sd, 0.0);
+
+    float d = circleMap(1.0 - -sd / refractionHeight) * refractionAmount;
+    float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
+    float2 grad = normalize(gradSdRoundedRect(centeredCoord, halfSize, gradRadius) + depthEffect * normalize(centeredCoord));
+
+    float2 refractedCoord = coord + d * grad;
+    return content.eval(refractedCoord);
+}"""
 
 private const val LENS_AGSL = """
     uniform shader content;

@@ -61,9 +61,11 @@ class GlassLook(
     /** The tint of the drop that marks the chosen tab or the switched on state. */
     val accentTint: Color,
     /**
-     * The quiet glass: a blur, one flat translucent tint and the hairline rim, nothing else (no lens,
-     * bevel, specular or shadow). Haze's materials, https://github.com/chrisbanes/haze/blob/main/haze-materials/src/commonMain/kotlin/dev/chrisbanes/haze/blur/materials/HazeMaterials.kt
-     * (Apache-2.0); the long press menu's pane (dialogGlass), the user, 2026-11-01.
+     * The quiet glass: what lies behind, with Kyant0's colour controls, a blur and its lens (a floating
+     * pane over a backdrop, see GlassBackdrop), one flat translucent tint (DialogContent's containerColor)
+     * and the hairline rim; no bevel, specular or shadow. Kyant0/AndroidLiquidGlass's DialogContent
+     * (Apache-2.0), https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/destinations/DialogContent.kt
+     * (the user, 2026-11-06: too opaque, no liquid inside).
      */
     val quiet: Boolean = false
 )
@@ -84,9 +86,10 @@ fun rememberGlassLook(scheme: ColorScheme, enabled: Boolean, quiet: Boolean = fa
  */
 fun glassLookOf(scheme: ColorScheme, quiet: Boolean = false): GlassLook {
     val dark = scheme.background.luminance() < 0.5f
-    // Quiet: the fill of the long press menu's pane (dialogGlass), between Haze's thin and regular
-    // tints (https://github.com/chrisbanes/haze/blob/main/haze-materials/src/commonMain/kotlin/dev/chrisbanes/haze/blur/materials/HazeMaterials.kt), the user, 2026-11-01.
-    val quietFill = if (dark) Color(0xFF121212).copy(alpha = 0.62f) else Color(0xFFFAFAFA).copy(alpha = 0.72f)
+    // Quiet: DialogContent's containerColor, Kyant0/AndroidLiquidGlass (Apache-2.0),
+    // https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/destinations/DialogContent.kt
+    // (0xFFFAFAFA at 0.6 by day, 0xFF121212 at 0.4 by night), laid over its blur, colour controls and lens.
+    val quietFill = if (dark) Color(0xFF121212).copy(alpha = 0.4f) else Color(0xFFFAFAFA).copy(alpha = 0.6f)
     return GlassLook(
         dark = dark,
         ground = scheme.background,
