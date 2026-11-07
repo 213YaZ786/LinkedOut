@@ -196,7 +196,12 @@ fun TimelineScreen(
     }
 
     // The folder choice, under the banner: what the folder dialog answered, now answered by a tap on a chip.
-    val chips: @Composable () -> Unit = {
+    // The chips are items of the list that records listBackdrop: floating on it, a chip would draw the recording
+    // that holds it, a layer inside itself, and Android's renderer overflows its stack at the first frame. So no
+    // backdrop here, and each chip is a zone as on Accounts. SMS's FloatingFrame provides its backdrop only
+    // outside what records it:
+    // https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/ui/component/FloatingPane.kt#FloatingFrame
+    val chips: @Composable () -> Unit = { CompositionLocalProvider(LocalGlassBackdrop provides null) {
         FeedChips(
             folders = state.folders,
             selected = state.folder,
@@ -210,7 +215,7 @@ fun TimelineScreen(
                 }
             }
         )
-    }
+    } }
 
     val banner: @Composable () -> Unit = {
         ScreenBanner(
