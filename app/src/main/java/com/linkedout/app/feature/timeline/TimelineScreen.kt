@@ -14,6 +14,7 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.EmptyZone
+import com.linkedout.app.ui.component.FeedChips
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
@@ -198,6 +199,7 @@ fun TimelineScreen(
         FeedChips(
             folders = state.folders,
             selected = state.folder,
+            extras = listOf(LIKED, ARCHIVED),
             onSelect = { name ->
                 if (name == LIKED || name == ARCHIVED) {
                     special = name
@@ -211,7 +213,7 @@ fun TimelineScreen(
 
     val banner: @Composable () -> Unit = {
         ScreenBanner(
-            title = state.folder ?: "Everything",
+            title = "Home",
             subtitle = subtitle(state),
             leading = if (somethingWrong) {
                 {
@@ -525,40 +527,6 @@ private fun EmptyState(
         onAction = onAction,
         modifier = modifier
     )
-}
-
-/**
- * The places to switch between on Home, in glass under the banner: everything, each folder, then the Liked and
- * Archived views. Ported from SMS's Filters, its chipsRow:
- * https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/feature/conversations/ConversationsScreen.kt#Filters
- * not ported: SearchPill (Home's search stays the banner's action)
- * not ported: stacked (the chips always wrap onto more lines when the width is short, never sideways)
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FeedChips(folders: List<String>, selected: String?, onSelect: (String?) -> Unit) {
-    val haptics = rememberHaptics()
-    val chips: List<Pair<String?, String>> =
-        listOf<Pair<String?, String>>(null to "All") + folders.map { it to it } + listOf(LIKED to LIKED, ARCHIVED to ARCHIVED)
-    // Wrapped by a FlowRow (Jetpack Compose, https://developer.android.com/develop/ui/compose/layouts/flow).
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
-    ) {
-        chips.forEach { (value, label) ->
-            FloatingPane(
-                shape = CircleShape,
-                accent = selected == value,
-                onClick = {
-                    haptics.tick()
-                    onSelect(value)
-                }
-            ) {
-                Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp))
-            }
-        }
-    }
 }
 
 private const val LIKED = "Liked"

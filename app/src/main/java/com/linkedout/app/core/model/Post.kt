@@ -242,7 +242,12 @@ data class Feed(
     val currentCompany: String? = null,
     /** The most recent school on the top card, under the same restriction. */
     val school: String? = null,
-    val stats: ProfileStats? = null
+    val stats: ProfileStats? = null,
+    /**
+     * The line under a person's name on the guest top card ("CEO at Google"). Null for a company, whose
+     * line is [currentCompany], and for files written before it was read.
+     */
+    val headline: String? = null
 )
 
 /** The numbers on a profile card. Any may be missing. */

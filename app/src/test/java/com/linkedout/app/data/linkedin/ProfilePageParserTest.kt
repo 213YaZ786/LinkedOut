@@ -30,6 +30,19 @@ class ProfilePageParserTest {
         assertEquals("https://fr.linkedin.com/posts/someone-a1b2_delivery-activity-7507123671249879040-HLW2", newest.permalink)
     }
 
+    // The headline is the text of h2.top-card-layout__headline, the selector open source scrapers read
+    // (https://github.com/microfox-ai/microfox/blob/main/packages/puppeteer-linkedin/src/public/people.ts#L282-L283).
+    @Test
+    fun `the headline is read from the top card`() {
+        val page = PAGE.replace(
+            """<body class="public_profile_v3"></body>""",
+            """<body class="public_profile_v3"><h1 class="top-card-layout__title">Some One</h1>""" +
+                """<h2 class="top-card-layout__headline break-words font-sans text-md leading-open text-color-text">CEO at Google and Alphabet</h2></body>"""
+        )
+        assertEquals("CEO at Google and Alphabet", ProfilePageParser().parse(page, "someone-a1b2")!!.headline)
+        assertEquals(null, ProfilePageParser().parse(PAGE, "someone-a1b2")!!.headline)
+    }
+
     private companion object {
         val PAGE = """
             <html><head><script type="application/ld+json">{"@context":"http://schema.org","@graph":[

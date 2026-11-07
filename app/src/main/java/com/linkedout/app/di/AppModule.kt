@@ -105,7 +105,7 @@ val appModule = module {
     }
     single { TimelineRepository(get(), get(), get(), get()) }
 
-    viewModel { AccountsViewModel(get(), get(), get()) }
+    viewModel { AccountsViewModel(get(), get(), get(), get()) }
     viewModel { JobsViewModel(get(), get()) }
     viewModel { JobDetailViewModel(get()) }
     viewModel { PostDetailViewModel(get(), get()) }

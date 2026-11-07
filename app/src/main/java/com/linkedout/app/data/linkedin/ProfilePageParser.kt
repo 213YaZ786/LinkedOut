@@ -100,7 +100,8 @@ class ProfilePageParser {
             location = person?.let { graph.addressLocality(it) },
             currentCompany = extractCurrentCompany(html),
             school = extractSchool(html),
-            stats = ProfileStats(followers = extractFollowers(graph, person))
+            stats = ProfileStats(followers = extractFollowers(graph, person)),
+            headline = extractHeadline(html)
         )
     }
 
@@ -126,6 +127,14 @@ class ProfilePageParser {
     /** The person's own name, from the top card. */
     private fun extractName(html: String): String? =
         html.textAfter("top-card-layout__title", "</h1>")?.takeIf { it.isNotBlank() }
+
+    /**
+     * The line under the name on the guest top card, h2.top-card-layout__headline, the selector the open source
+     * scrapers read for the logged out view, beside h1.top-card-layout__title:
+     * https://github.com/microfox-ai/microfox/blob/main/packages/puppeteer-linkedin/src/public/people.ts#L282-L283
+     */
+    private fun extractHeadline(html: String): String? =
+        html.textAfter("top-card-layout__headline", "</h2>")?.takeIf { it.isNotBlank() }
 
     private fun extractAvatar(html: String): String? =
         html.url("top-card__profile-image", "data-delayed-url")

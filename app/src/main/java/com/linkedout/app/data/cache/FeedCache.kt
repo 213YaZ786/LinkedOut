@@ -142,6 +142,7 @@ class FeedCache(
             displayName = incoming.displayName.ifBlank { existing.displayName },
             avatarUrl = incoming.avatarUrl ?: existing.avatarUrl,
             bio = incoming.bio ?: existing.bio,
+            headline = incoming.headline ?: existing.headline,
             bannerUrl = incoming.bannerUrl ?: existing.bannerUrl,
             location = incoming.location ?: existing.location,
             currentCompany = incoming.currentCompany ?: existing.currentCompany,

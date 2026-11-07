@@ -57,6 +57,20 @@ import com.linkedout.app.ui.component.BannerAction
 import com.linkedout.app.ui.component.FolderDialog
 import com.linkedout.app.ui.component.ScreenBanner
 import com.linkedout.app.ui.component.Zone
+import com.linkedout.app.ui.component.FeedChips
+import com.linkedout.app.ui.component.HoldAction
+import com.linkedout.app.ui.component.HoldMenu
+import com.linkedout.app.ui.component.QuietButton
+import com.linkedout.app.ui.component.ZoneAlertDialog
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.font.FontWeight
 import com.linkedout.app.ui.component.relativeTime
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.androidx.compose.koinViewModel
@@ -86,6 +100,7 @@ fun AccountsScreen(
     val rows by viewModel.rows.collectAsState()
     val folders by viewModel.folders.collectAsState()
     var filing by remember { mutableStateOf<AccountRow?>(null) }
+    val haptics = rememberHaptics()
 
     filing?.let { row ->
         FolderDialog(
@@ -100,11 +115,30 @@ fun AccountsScreen(
             onDismiss = { filing = null }
         )
     }
+    // Unfollowing asks first, as the profile's button does, a held row must not drop an account by a stray tap:
+    // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L113-L127
+    var confirmUnfollow by remember { mutableStateOf<AccountRow?>(null) }
+    confirmUnfollow?.let { row ->
+        ZoneAlertDialog(
+            onDismissRequest = { confirmUnfollow = null },
+            title = { Text("Unfollow ${row.name ?: row.handle}?") },
+            confirmButton = {
+                QuietButton(onClick = {
+                    confirmUnfollow = null
+                    haptics.done()
+                    viewModel.unfollow(row.handle)
+                }) { Text("Unfollow") }
+            },
+            dismissButton = { QuietButton(onClick = { confirmUnfollow = null }) { Text("Cancel") } }
+        )
+    }
     var query by rememberSaveable { mutableStateOf("") }
+    // The folder chip chosen under the field, null for All. A folder deleted since is All again.
+    var chosenFolder by rememberSaveable { mutableStateOf<String?>(null) }
+    val folder = chosenFolder?.takeIf { it in folders }
     var notice by remember { mutableStateOf<String?>(null) }
     val focus = LocalFocusManager.current
     val context = LocalContext.current
-    val haptics = rememberHaptics()
 
     // Coming back from a profile may have brought new posts or an avatar.
     LaunchedEffect(Unit) { viewModel.refresh() }
@@ -120,10 +154,11 @@ fun AccountsScreen(
     // someone you already follow would vanish from the list the moment you
     // paste their link.
     val needle = candidate ?: trimmed
+    val inFolder = if (folder == null) rows else rows.filter { it.folder == folder }
     val visible = if (trimmed.isEmpty()) {
-        rows
+        inFolder
     } else {
-        rows.filter {
+        inFolder.filter {
             it.handle.contains(needle, ignoreCase = true) ||
                 it.name?.contains(trimmed, ignoreCase = true) == true
         }
@@ -227,7 +262,7 @@ fun AccountsScreen(
                         query = it
                         notice = null
                     },
-                    placeholder = "Paste a full profile address",
+                    placeholder = "Profile address",
                     leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
                     trailingIcon = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -239,8 +274,25 @@ fun AccountsScreen(
                                     Icon(LinkedOutIcons.Close, contentDescription = "Clear")
                                 }
                             }
-                            IconButton(onClick = { paste() }) {
-                                Icon(LinkedOutIcons.Paste, contentDescription = "Paste an address")
+                            // The paste action of MTGA's field, always there and the clipboard read only on a tap
+                            // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/accounts/AccountsScreen.kt#L209-L226),
+                            // as a word instead of its icon: a transparent tap target in the field's own glass,
+                            // never a second pane.
+                            Surface(
+                                onClick = { paste() },
+                                shape = ButtonDefaults.textShape,
+                                color = Color.Transparent,
+                                contentColor = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .heightIn(min = ButtonDefaults.MinHeight)
+                                        .padding(horizontal = 12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("Paste", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     },
@@ -255,18 +307,16 @@ fun AccountsScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + LocalReadableInset.current)
                 )
 
-                // Said under the field and not only in the empty screen, because the
-                // rule is the opposite of every other social app: there is no handle
-                // to guess here, "@chu-nantes" is not an address and never resolves.
-                if (trimmed.isEmpty()) {
-                    Text(
-                        "LinkedIn has no @handle. Paste the whole address, " +
-                            "linkedin.com/in/name or linkedin.com/company/name.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp + LocalReadableInset.current, vertical = 8.dp)
-                    )
+                // The folders as chips under the field, Home's FeedChips without its Liked and Archived views:
+                // they filter the list, and wrap onto more lines, never sideways.
+                if (rows.isNotEmpty()) {
+                    Box(Modifier.padding(horizontal = LocalReadableInset.current)) {
+                        FeedChips(
+                            folders = folders,
+                            selected = folder,
+                            onSelect = { chosenFolder = it }
+                        )
+                    }
                 }
                 }
             }
@@ -295,7 +345,8 @@ fun AccountsScreen(
                 AccountCard(
                     row = row,
                     onClick = { open(row.handle, row.kind) },
-                    onFile = { filing = row }
+                    onFile = { filing = row },
+                    onUnfollow = { confirmUnfollow = row }
                 )
             }
 
@@ -306,67 +357,97 @@ fun AccountsScreen(
     }
 }
 
+/**
+ * One followed account: the avatar, the name with its headline under it, and at the end the age of its last post
+ * with the unread count under it. The folder label is gone, the chips under the field stand for it. A tap opens
+ * the account, a long press the suite's HoldMenu (Open, File, Unfollow), the zone drawn twice and the menu opened
+ * as the post card does, no swipe because the tabs swipe sideways. This card as it was, then the post card's
+ * zone and menu:
+ * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/accounts/AccountsScreen.kt#AccountCard
+ * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/ui/component/PostCard.kt#L146-L159
+ */
 @Composable
-private fun AccountCard(row: AccountRow, onClick: () -> Unit, onFile: () -> Unit) {
-    Zone(
-        onClick = onClick,
-        color = MaterialTheme.colorScheme.zone,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+private fun AccountCard(row: AccountRow, onClick: () -> Unit, onFile: () -> Unit, onUnfollow: () -> Unit) {
+    val haptics = rememberHaptics()
+    var menuOpen by remember { mutableStateOf(false) }
+    // The zone's place in its window, which HoldMenu lifts the copy from.
+    var bounds by remember { mutableStateOf(Rect.Zero) }
+    val zone: @Composable (Modifier, Modifier) -> Unit = { outer, clicks ->
+        Zone(
+            color = MaterialTheme.colorScheme.zone,
+            modifier = outer.fillMaxWidth()
         ) {
-            Avatar(url = row.avatarUrl, name = row.name ?: row.handle, size = 44.dp)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    row.name ?: row.handle,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (row.name != null) {
+            Row(
+                modifier = clicks.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Avatar(url = row.avatarUrl, name = row.name ?: row.handle, size = 44.dp)
+                Column(Modifier.weight(1f)) {
                     Text(
-                        "${row.kind.segment}/${row.handle}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        row.name ?: row.handle,
+                        style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    row.lastPostMillis?.let(::relativeTime) ?: "Not read yet",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                // The folder is a control, not a label. Tapping the card opens
-                // the account, so filing it needs a target of its own.
-                // A tap target inside the account's zone: androidx Surface(onClick), transparent,
-                // in TextButton's shape and height, never a second glass zone.
-                Surface(
-                    onClick = onFile,
-                    shape = ButtonDefaults.textShape,
-                    color = Color.Transparent,
-                    contentColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .heightIn(min = ButtonDefaults.MinHeight)
-                            .padding(horizontal = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    // The headline when a page gave one, else where the account lives on LinkedIn.
+                    val line = row.headline ?: row.name?.let { "${row.kind.segment}/${row.handle}" }
+                    if (line != null) {
                         Text(
-                            row.folder,
-                            style = MaterialTheme.typography.labelMedium,
+                            line,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        row.lastPostMillis?.let(::relativeTime) ?: "Not read yet",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (row.unread > 0) {
+                        Box(
+                            modifier = Modifier
+                                .widthIn(min = 28.dp)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                row.unread.toString(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
             }
+        }
+    }
+    Box {
+        zone(
+            Modifier
+                .onGloballyPositioned { bounds = it.boundsInWindow() }
+                .graphicsLayer { alpha = if (menuOpen) 0f else 1f },
+            Modifier.combinedClickable(
+                onClick = { haptics.tick(); onClick() },
+                onLongClick = { haptics.firm(); menuOpen = true }
+            )
+        )
+        if (menuOpen) {
+            HoldMenu(
+                bounds = bounds,
+                actions = listOf(
+                    HoldAction(LinkedOutIcons.Person, "Open", run = onClick),
+                    HoldAction(LinkedOutIcons.Folder, "File", run = onFile),
+                    HoldAction(LinkedOutIcons.Delete, "Unfollow", danger = true, run = onUnfollow)
+                ),
+                onDismiss = { menuOpen = false }
+            ) { zone(Modifier, Modifier) }
         }
     }
 }
@@ -434,15 +515,19 @@ private fun Hint(text: String) {
     )
 }
 
+/**
+ * The round mark and one line, nothing else: the field above already says what to paste. MTGA's EmptyState, its
+ * EmptyZone with the title and the message cut to the one line, the mark on a circle as EmptyZone holds its icon:
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/accounts/AccountsScreen.kt#EmptyState
+ */
 @Composable
 private fun EmptyState(modifier: Modifier = Modifier) {
     EmptyZone(
-        title = "No accounts yet",
-        message = "LinkedIn has no @handle. Open a profile or a company page in a browser and " +
-            "paste its address above, or type just the part after /in/. Reading it once " +
-            "is enough to follow it and build your timeline. Who you follow stays on this " +
-            "phone and is never sent anywhere but to linkedin.com itself.",
+        // The line is the message, grey as in the picture, the accent title stays empty.
+        title = "",
+        message = "Nobody followed yet",
         icon = LinkedOutIcons.Person,
+        iconShape = CircleShape,
         modifier = modifier
     )
 }

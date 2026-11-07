@@ -7,6 +7,8 @@ import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.cache.FeedCache
+import com.linkedout.app.data.read.ReadPosts
+import com.linkedout.app.data.read.ReadState
 import com.linkedout.app.data.settings.SettingsStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,7 +45,11 @@ data class AccountRow(
     val name: String?,
     val avatarUrl: String?,
     val lastPostMillis: Long?,
-    val folder: String = FollowedAccount.MAIN
+    val folder: String = FollowedAccount.MAIN,
+    /** The line under the name: a person's headline, a company's industry line. Null until a page gave one. */
+    val headline: String? = null,
+    /** Cached posts the reader has not gone past on Home. Zero until the read marks are loaded. */
+    val unread: Int = 0
 )
 
 /**
@@ -54,10 +60,17 @@ data class AccountRow(
 class AccountsViewModel(
     private val store: AccountStore,
     private val cache: FeedCache,
-    private val settings: SettingsStore
+    private val settings: SettingsStore,
+    private val readPosts: ReadPosts
 ) : ViewModel() {
 
-    private data class Summary(val name: String?, val avatarUrl: String?, val lastPostMillis: Long?)
+    private data class Summary(
+        val name: String?,
+        val avatarUrl: String?,
+        val lastPostMillis: Long?,
+        val headline: String?,
+        val postIds: List<String>
+    )
 
     private val summaries = MutableStateFlow<Map<String, Summary>>(emptyMap())
 
@@ -86,8 +99,11 @@ class AccountsViewModel(
         return renamed
     }
 
-    /** Sorted by name, because this list is for finding an account, not for reading. */
-    val rows: StateFlow<List<AccountRow>> = combine(store.accounts, summaries) { accounts, known ->
+    /**
+     * Newest post first, as on the mockup the user validated (2026-11-07): the unread counts beside them make this
+     * list a place to read from. Accounts never read come last, by name, so a new one is found at the bottom.
+     */
+    val rows: StateFlow<List<AccountRow>> = combine(store.accounts, summaries, readPosts.state) { accounts, known, read ->
         accounts.map { account ->
             val summary = known[account.handle.lowercase()]
             AccountRow(
@@ -96,9 +112,14 @@ class AccountsViewModel(
                 name = summary?.name ?: account.displayName,
                 avatarUrl = summary?.avatarUrl,
                 lastPostMillis = summary?.lastPostMillis,
-                folder = account.folder
+                folder = account.folder,
+                headline = summary?.headline,
+                unread = summary?.let { getFeedItemCount(it.postIds, read) } ?: 0
             )
-        }.sortedBy { (it.name ?: it.handle).lowercase() }
+        }.sortedWith(
+            compareByDescending<AccountRow> { it.lastPostMillis ?: Long.MIN_VALUE }
+                .thenBy { (it.name ?: it.handle).lowercase() }
+        )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
@@ -115,7 +136,11 @@ class AccountsViewModel(
                     avatarUrl = feed?.avatarUrl,
                     lastPostMillis = feed?.posts
                         ?.maxOfOrNull { it.publishedAtMillis }
-                        ?.takeIf { it > 0L }
+                        ?.takeIf { it > 0L },
+                    // A company's line is its industry, kept in currentCompany by its parser.
+                    headline = (if (account.kind == AccountKind.PERSON) feed?.headline else feed?.currentCompany)
+                        ?.takeIf { it.isNotBlank() },
+                    postIds = feed?.posts?.map { it.id }.orEmpty()
                 )
             }
         }
@@ -126,6 +151,17 @@ class AccountsViewModel(
 
     fun follow(handle: String, kind: AccountKind) {
         store.add(handle, kind)
+    }
+
+    /**
+     * Stops following, as the profile's own button does, FeedViewModel.toggleFollow's remove branch:
+     * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedViewModel.kt#toggleFollow
+     * not ported: the follow branch (this menu only unfollows)
+     */
+    fun unfollow(handle: String) {
+        if (store.accounts.value.any { it.handle.equals(handle, ignoreCase = true) }) {
+            store.remove(handle)
+        }
     }
 
     companion object {
@@ -177,3 +213,14 @@ class AccountsViewModel(
         }
     }
 }
+
+/**
+ * Feeder's count of a feed's items with no read time, FeedItemDao.getFeedItemCount(feedId, minReadTime, bookmarked):
+ * https://github.com/spacecowboy/Feeder/blob/master/app/src/main/java/com/nononsenseapps/feeder/db/room/FeedItemDao.kt#getFeedItemCount
+ * Here over one account's cached post ids and the read marks. The tag variant, a count per tag, is the folder chip
+ * filtering the rows on the screen. Zero until the marks are read back, as [ReadState.isUnread].
+ * not ported: bookmarked (a like or an archive leaves the read mark alone)
+ * not ported: block_time (no blocked posts here)
+ */
+fun getFeedItemCount(feedItems: List<String>, minReadTime: ReadState): Int =
+    if (minReadTime.ready) feedItems.count { feedItem -> minReadTime.isUnread(feedItem) } else 0
