@@ -11,6 +11,8 @@ import android.widget.Toast
 import com.linkedout.app.core.link.LinkRouter
 import org.koin.android.ext.android.inject
 import android.os.Bundle
+import android.os.Looper
+import com.linkedout.app.core.web.WebViewStartup
 import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
@@ -40,6 +42,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Only on a real launch. A recreated activity already showed its link.
         if (savedInstanceState == null) receive(intent)
+        // The WebView engine starts up once the main thread is idle, after the first frame, so a wall met later
+        // finds Chromium loaded (WebViewStartup). Not before the frame: a cold start pays nothing for it.
+        Looper.myQueue().addIdleHandler {
+            WebViewStartup.initializeWebView(applicationContext)
+            false
+        }
         setContent {
             val store: SettingsStore = koinInject()
             val settings by store.settings.collectAsState()
