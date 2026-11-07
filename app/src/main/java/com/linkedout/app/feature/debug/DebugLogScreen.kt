@@ -1,9 +1,10 @@
 package com.linkedout.app.feature.debug
 
-import com.linkedout.app.ui.glass.LocalGlass
-import com.linkedout.app.ui.glass.groundHere
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material3.TopAppBarDefaults
+import com.linkedout.app.ui.component.BannerAction
+import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.linkedout.app.ui.component.ZoneSurface
 import com.linkedout.app.ui.component.rememberHaptics
@@ -18,16 +19,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,7 +51,6 @@ import androidx.compose.foundation.layout.WindowInsets
  * The point is that a bug report can carry evidence rather than a description.
  * Nothing here leaves the device unless you export it and send it yourself.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DebugLogScreen(onBack: () -> Unit) {
     val log: RequestLog = koinInject()
@@ -72,34 +68,45 @@ fun DebugLogScreen(onBack: () -> Unit) {
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         // The NavHost's own Scaffold already stands clear of the status and
-        // navigation bars. A nested Scaffold applies them a second time, and a
-        // TopAppBar a third, which is where the empty band above and below the
-        // content came from. Insets are owned once, up there.
+        // navigation bars. A nested Scaffold applies them a second time, which
+        // is where the empty band above and below the content came from. The
+        // list below owns them once, in its content padding.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbar) },
-        topBar = {
-            TopAppBar(
-                // The page's ground where the bar sits, ambient light included.
-                // Every title in the accent (the user, 2026-10-31), as Modules' SettingsSectionTitle.
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent, titleContentColor = MaterialTheme.colorScheme.primary),
-                // Over the reading column, like the content under it.
-                modifier = Modifier.groundHere(LocalGlass.current, MaterialTheme.colorScheme.background).padding(horizontal = LocalReadableInset.current),
-                title = { Text("Activity log") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(LinkedOutIcons.ArrowBack, contentDescription = "Back")
+        snackbarHost = { SnackbarHost(snackbar) }
+    ) {
+        // The whole page is one list, the banner of the profile page its first row
+        // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L173-L206
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = LocalReadableInset.current,
+                end = LocalReadableInset.current,
+                top = statusBarTop(),
+                bottom = 12.dp + navigationBarBottom()
+            ),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item(key = "banner") {
+                ScreenBanner(
+                    title = "Activity log",
+                    leading = {
+                        BannerAction(
+                            icon = LinkedOutIcons.ArrowBack,
+                            label = "Back",
+                            onClick = onBack
+                        )
+                    },
+                    trailing = {
+                        BannerAction(
+                            icon = LinkedOutIcons.Delete,
+                            label = "Clear",
+                            onClick = log::clear
+                        )
                     }
-                },
-                actions = {
-                    IconButton(onClick = log::clear) {
-                        Icon(LinkedOutIcons.Delete, contentDescription = "Clear")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
+                )
+            }
 
+            item(key = "actions") {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -135,37 +142,33 @@ fun DebugLogScreen(onBack: () -> Unit) {
                     }) { Text("Save page") }
                 }
             }
+            }
 
             lastBody?.let { body ->
+                item(key = "lastpage") {
                 Text(
                     "Last page received: ${body.url}, ${body.text.length} characters.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp + LocalReadableInset.current, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                 )
+                }
             }
 
             if (entries.isEmpty()) {
+                item(key = "empty") {
                 Text(
                     "Nothing recorded yet. Open an account or scroll for older posts, then " +
                         "come back here.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 24.dp + LocalReadableInset.current, vertical = 24.dp)
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp)
                 )
+                }
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(
-                        start = 12.dp + LocalReadableInset.current,
-                        end = 12.dp + LocalReadableInset.current,
-                        top = 12.dp,
-                        bottom = 12.dp + padding.calculateBottomPadding()
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
                     items(entries.reversed()) { entry ->
                         ZoneSurface(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surfaceContainer
                         ) {
@@ -203,7 +206,6 @@ fun DebugLogScreen(onBack: () -> Unit) {
                             }
                         }
                     }
-                }
             }
         }
     }

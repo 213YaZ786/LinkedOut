@@ -1,12 +1,12 @@
 package com.linkedout.app.feature.post
 
-import com.linkedout.app.ui.glass.LocalGlass
-import com.linkedout.app.ui.glass.groundHere
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material3.TopAppBarDefaults
+import com.linkedout.app.ui.component.BannerAction
+import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.RejectOnFailure
 import com.linkedout.app.ui.component.LoadingMark
-import com.linkedout.app.ui.component.plus
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.theme.zone
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,17 +32,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -94,7 +90,6 @@ import androidx.compose.foundation.layout.WindowInsets
  * profile in the app, links open the real URL, and sharing uses the x.com
  * address so the recipient needs nothing special to open it.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(
     id: String,
@@ -117,37 +112,16 @@ fun PostDetailScreen(
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         // The NavHost's own Scaffold already stands clear of the status and
-        // navigation bars. A nested Scaffold applies them a second time, and a
-        // TopAppBar a third, which is where the empty band above and below the
-        // content came from. Insets are owned once, up there.
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                // The page's ground where the bar sits, ambient light included.
-                // Every title in the accent (the user, 2026-10-31), as Modules' SettingsSectionTitle.
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent, titleContentColor = MaterialTheme.colorScheme.primary),
-                // Over the reading column, like the content under it.
-                modifier = Modifier.groundHere(LocalGlass.current, MaterialTheme.colorScheme.background).padding(horizontal = LocalReadableInset.current),
-                title = { Text("Post") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(LinkedOutIcons.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    if (post != null) {
-                        IconButton(onClick = { share(context, viewModel.shareLink(post)) }) {
-                            Icon(LinkedOutIcons.Share, contentDescription = "Share")
-                        }
-                    }
-                }
-            )
-        }
-    ) { padding ->
+        // navigation bars. A nested Scaffold applies them a second time, which
+        // is where the empty band above and below the content came from. The
+        // page below owns them once, in its own padding.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) {
         Box(Modifier.fillMaxSize()) {
-            when {
-                post != null -> ConversationView(
-                    contentPadding = padding,
+            if (post != null) {
+                ConversationView(
+                    onBack = onBack,
+                    onShare = { share(context, viewModel.shareLink(post)) },
                     post = post,
                     thread = state.thread,
                     onOpenProfile = onOpenProfile,
@@ -155,33 +129,79 @@ fun PostDetailScreen(
                     onRetry = viewModel::retryThread,
                     shareLink = viewModel.shareLink(post)
                 )
-                state.missing -> {
-                    val error = (state.thread as? ThreadState.Failed)?.error
-                    Text(
-                        // LinkedIn's own reason when the page gave one, a deletion
-                        // or a profile gone private, rather than a guess.
-                        (error as? AppError.PostUnavailable)
-                            ?.present()?.let { "${it.headline}. ${it.explanation}" }
-                            ?: "This post can't be shown. It may have been deleted, and it is not saved on this phone.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.align(Alignment.Center).padding(32.dp)
+            } else {
+                Column(
+                    Modifier.fillMaxSize().padding(
+                        start = LocalReadableInset.current,
+                        end = LocalReadableInset.current,
+                        top = statusBarTop(),
+                        bottom = navigationBarBottom()
                     )
+                ) {
+                    // A way back while the post loads and when it is gone.
+                    PostBanner(onBack = onBack, onShare = null)
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        if (state.missing) {
+                            val error = (state.thread as? ThreadState.Failed)?.error
+                            Text(
+                                // LinkedIn's own reason when the page gave one, a deletion
+                                // or a profile gone private, rather than a guess.
+                                (error as? AppError.PostUnavailable)
+                                    ?.present()?.let { "${it.headline}. ${it.explanation}" }
+                                    ?: "This post can't be shown. It may have been deleted, and it is not saved on this phone.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.align(Alignment.Center).padding(32.dp)
+                            )
+                        } else {
+                            LoadingMark(Modifier.align(Alignment.Center), size = 96.dp)
+                        }
+                    }
                 }
-                else -> LoadingMark(Modifier.align(Alignment.Center), size = 96.dp)
             }
         }
     }
 }
 
 /**
+ * The page's top, the profile page's banner: a round glass Back, "Post" as plain
+ * text in the accent, and Share once the post is known.
+ * Ported from FeedScreen's banner
+ * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L178-L209
+ */
+@Composable
+private fun PostBanner(onBack: () -> Unit, onShare: (() -> Unit)?) {
+    ScreenBanner(
+        title = "Post",
+        leading = {
+            BannerAction(
+                icon = LinkedOutIcons.ArrowBack,
+                label = "Back",
+                onClick = onBack
+            )
+        },
+        trailing = {
+            if (onShare != null) {
+                BannerAction(
+                    icon = LinkedOutIcons.Share,
+                    label = "Share",
+                    onClick = onShare
+                )
+            }
+        }
+    )
+}
+
+/**
  * The post in the middle of its conversation: what it answers above, then
  * the post itself in full, the author's own thread, and the replies.
  */
+// Internal so PostDetailScreenshotTest draws the real page with fixed data, the screen itself needing its ViewModel.
 @Composable
-private fun ConversationView(
-    contentPadding: PaddingValues,
+internal fun ConversationView(
+    onBack: () -> Unit,
+    onShare: () -> Unit,
     post: Post,
     thread: ThreadState,
     onOpenProfile: (String) -> Unit,
@@ -222,8 +242,16 @@ private fun ConversationView(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = LocalReadableInset.current).plus(contentPadding)
+        contentPadding = PaddingValues(
+            start = LocalReadableInset.current,
+            end = LocalReadableInset.current,
+            top = statusBarTop(),
+            bottom = navigationBarBottom()
+        )
     ) {
+        // The banner is the list's first row, so the whole page scrolls with it.
+        item(key = "banner") { PostBanner(onBack = onBack, onShare = onShare) }
+
         val ancestors = conversation?.ancestors.orEmpty()
         if (ancestors.isNotEmpty()) {
             item(key = "earlier") { SectionLabel("Earlier in the conversation") }

@@ -1,10 +1,10 @@
 package com.linkedout.app.feature.search
 
 import com.linkedout.app.ui.component.GlassSearchField
-import com.linkedout.app.ui.glass.LocalGlass
-import com.linkedout.app.ui.glass.groundHere
-import androidx.compose.material3.TopAppBarDefaults
-import com.linkedout.app.ui.component.plus
+import com.linkedout.app.ui.component.BannerAction
+import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.foundation.layout.PaddingValues
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,13 +14,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,7 +48,6 @@ import org.koin.compose.koinInject
 import androidx.compose.foundation.layout.WindowInsets
 
 /** Search through every post saved on this phone, instantly and offline. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     onBack: () -> Unit,
@@ -81,44 +81,11 @@ fun SearchScreen(
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         // The NavHost's own Scaffold already stands clear of the status and
-        // navigation bars. A nested Scaffold applies them a second time, and a
-        // TopAppBar a third, which is where the empty band above and below the
-        // content came from. Insets are owned once, up there.
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                // The page's ground where the bar sits, ambient light included.
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
-                // Over the reading column, like the content under it.
-                modifier = Modifier.groundHere(LocalGlass.current, MaterialTheme.colorScheme.background).padding(horizontal = LocalReadableInset.current),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(LinkedOutIcons.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                title = {
-                    GlassSearchField(
-                        value = typed,
-                        onValueChange = viewModel::setQuery,
-                        placeholder = "Search saved posts",
-                        trailingIcon = {
-                            if (typed.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.setQuery("") }) {
-                                    Icon(LinkedOutIcons.Close, contentDescription = "Clear")
-                                }
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
-                        focusRequester = focusRequester,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(end = 12.dp)
-                    )
-                }
-            )
-        }
-    ) { padding ->
+        // navigation bars. A nested Scaffold applies them a second time, which
+        // is where the empty band above and below the content came from. The
+        // list below owns them once, in its content padding.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
+    ) {
         val hint = when {
             !state.loaded -> null
             state.savedCount == 0 -> "Nothing saved yet. Posts you read are kept here and can be searched offline."
@@ -130,8 +97,55 @@ fun SearchScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = LocalReadableInset.current).plus(padding)
+            contentPadding = PaddingValues(
+                start = LocalReadableInset.current,
+                end = LocalReadableInset.current,
+                top = statusBarTop(),
+                bottom = navigationBarBottom()
+            )
         ) {
+            // The banner of the profile page, the first row of the list so the whole page scrolls with it
+            // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L178-L209
+            item(key = "banner") {
+                ScreenBanner(
+                    title = "Search",
+                    leading = {
+                        BannerAction(
+                            icon = LinkedOutIcons.ArrowBack,
+                            label = "Back",
+                            onClick = onBack
+                        )
+                    }
+                )
+            }
+
+            // Just under the banner, as Accounts sets its field
+            // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/accounts/AccountsScreen.kt#L224-L256
+            item(key = "field") {
+                GlassSearchField(
+                    value = typed,
+                    onValueChange = viewModel::setQuery,
+                    placeholder = "Search saved posts",
+                    trailingIcon = {
+                        if (typed.isNotEmpty()) {
+                            // A tap target of 48 dp in the field's glass, without a Material icon button.
+                            Icon(
+                                LinkedOutIcons.Close,
+                                contentDescription = "Clear",
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable(role = Role.Button) { viewModel.setQuery("") }
+                                    .padding(12.dp)
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { focus.clearFocus() }),
+                    focusRequester = focusRequester,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                )
+            }
+
             if (hint != null) {
                 item(key = "hint") {
                     Text(

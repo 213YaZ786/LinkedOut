@@ -1,23 +1,21 @@
 package com.linkedout.app.feature.connection
 
-import com.linkedout.app.ui.glass.LocalGlass
-import com.linkedout.app.ui.glass.groundHere
-import androidx.compose.ui.graphics.Color
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.linkedout.app.ui.component.BannerAction
+import com.linkedout.app.ui.component.ScreenBanner
 import com.linkedout.app.ui.component.ZoneSurface
+import com.linkedout.app.ui.component.navigationBarBottom
+import com.linkedout.app.ui.component.statusBarTop
+import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -40,33 +38,39 @@ import org.koin.compose.koinInject
  * its state, whether the referrer retry was needed and whether the offscreen
  * browser had to take over, is what belongs on this screen once it exists.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionScreen(onBack: () -> Unit) {
     val throttle: HostThrottle = koinInject()
     val cooldownMs = throttle.cooldownRemainingMs(LinkedInHost.HOST)
 
-    Scaffold(
-        // The page's ground is painted under the whole app, see MainActivity.
-        containerColor = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onBackground,
-        topBar = {
-            TopAppBar(
-                // The page's ground where the bar sits, ambient light included.
-                // Every title in the accent (the user, 2026-10-31), as Modules' SettingsSectionTitle.
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent, titleContentColor = MaterialTheme.colorScheme.primary),
-                modifier = Modifier.groundHere(LocalGlass.current, MaterialTheme.colorScheme.background),
-                title = { Text("Connection") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(LinkedOutIcons.ArrowBack, contentDescription = "Back")
-                    }
+    // The page's ground is painted under the whole app, see MainActivity. The whole page is one list, the banner
+    // of the profile page its first row, so it scrolls with the rest
+    // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L173-L206
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = LocalReadableInset.current,
+            end = LocalReadableInset.current,
+            top = statusBarTop(),
+            bottom = navigationBarBottom()
+        )
+    ) {
+        item(key = "banner") {
+            ScreenBanner(
+                title = "Connection",
+                leading = {
+                    BannerAction(
+                        icon = LinkedOutIcons.ArrowBack,
+                        label = "Back",
+                        onClick = onBack
+                    )
                 }
             )
         }
-    ) { padding ->
+
+        item(key = "host") {
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ZoneSurface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
@@ -97,6 +101,7 @@ fun ConnectionScreen(onBack: () -> Unit) {
                 text = "Profile selector set ${ProfilePageParser.SELECTOR_SET_VERSION}",
                 style = MaterialTheme.typography.bodySmall
             )
+        }
         }
     }
 }
