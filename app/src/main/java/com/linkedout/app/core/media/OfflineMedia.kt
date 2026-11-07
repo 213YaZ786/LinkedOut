@@ -1,6 +1,10 @@
 package com.linkedout.app.core.media
 
+import android.app.DownloadManager
 import android.content.Context
+import android.database.Cursor
+import android.net.Uri
+import android.util.Log
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +42,9 @@ import java.io.File
  * not ported: getMediafilename as such (its place is taken by [name] and [stillName])
  */
 class OfflineMedia(context: Context) {
+
+    /** Kept for DownloadManager, which [refresh] asks which transfers are still going. */
+    private val appContext: Context = context.applicationContext ?: context
 
     /**
      * getExternalFilesDir can be null when external storage is not mounted.
@@ -87,12 +94,26 @@ class OfflineMedia(context: Context) {
      * says which post or position it belongs to, so none can be matched to
      * anything and they are deleted here: the next pass saves the media again
      * under the new names.
+     *
+     * A file DownloadManager is still writing is no copy yet, and the part
+     * file of a transfer that failed is removed, otherwise the downloader
+     * finds it there and never tries again.
      */
     suspend fun refresh() = withContext(Dispatchers.IO) {
         directory.listFiles().orEmpty().filter { it.isFile }.forEach { runCatching { it.delete() } }
         val main = HashMap<String, String>()
         val still = HashMap<String, String>()
-        files().forEach { file ->
+        val transfers = isDownloadActive()
+        val listed = files()
+        val active = Companion.isDownloadActive(listed, transfers.unfinished, transfers.failed.keys, cancel = false)
+        val cancelled = Companion.isDownloadActive(listed, transfers.unfinished, transfers.failed.keys, cancel = true)
+        val manager = appContext.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+        cancelled.forEach { file ->
+            // remove() also deletes the file, the delete covers a row already gone.
+            transfers.failed[file.absolutePath]?.let { id -> runCatching { manager?.remove(id) } }
+            runCatching { file.delete() }
+        }
+        (listed - active.toSet() - cancelled.toSet()).forEach { file ->
             val parsed = parseFile(file) ?: return@forEach
             // A file DownloadManager has not finished writing is no copy yet.
             if (file.length() == 0L) return@forEach
@@ -192,6 +213,79 @@ class OfflineMedia(context: Context) {
         removed
     }
 
+    /**
+     * The transfers of this folder that DownloadManager has not finished: the
+     * paths of those paused, pending or running, and the id of each failed one
+     * by its path.
+     * https://github.com/rdoeffinger/Dictionary/blob/main/src/com/hughes/android/dictionary/DictionaryManagerActivity.kt#isDownloadActive
+     * Dictionary asks the same question (the same query, filtered on status)
+     * for one address. Here the answer is every unfinished file of the folder,
+     * read from the destination, since the names are ours and the addresses
+     * are not. Dictionary's cancel flag and its alert dialogs are not ported:
+     * nothing is cancelled here and a reader that cannot ask simply knows
+     * nothing, see [downloadManagerQuery].
+     * not ported: the match on COLUMN_URI and COLUMN_TITLE (it looks for one
+     * address, here every file of the folder is wanted)
+     * not ported: finishedDownloadIds (Dictionary's own bookkeeping of ids it
+     * cancelled, nothing here reads it)
+     */
+    private fun isDownloadActive(): Transfers {
+        val downloadManager = appContext.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+            ?: return Transfers()
+        val query = DownloadManager.Query()
+        query.setFilterByStatus(
+            DownloadManager.STATUS_PAUSED or DownloadManager.STATUS_PENDING or
+                DownloadManager.STATUS_RUNNING or DownloadManager.STATUS_FAILED
+        )
+        val cursor = downloadManagerQuery(downloadManager, query) ?: return Transfers()
+
+        val unfinished = HashSet<String>()
+        val failed = HashMap<String, Long>()
+        val prefix = directory.absolutePath + File.separator
+        cursor.use {
+            val id = it.getColumnIndex(DownloadManager.COLUMN_ID)
+            val status = it.getColumnIndex(DownloadManager.COLUMN_STATUS)
+            val localUri = it.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+            if (id < 0 || status < 0 || localUri < 0) return Transfers()
+            while (it.moveToNext()) {
+                // LOCAL_URI is a file:// address, and null until the transfer has a destination.
+                val path = it.getString(localUri)?.let { uri -> Uri.parse(uri).path } ?: continue
+                if (!path.startsWith(prefix)) continue
+                if (it.getInt(status) == DownloadManager.STATUS_FAILED) failed[path] = it.getLong(id)
+                else unfinished.add(path)
+            }
+        }
+        return Transfers(unfinished, failed)
+    }
+
+    /**
+     * Runs the query. A SecurityException or a null cursor, which is what the
+     * manager gives when it is disabled (a bug Dictionary notes), mean that
+     * nothing is known: the caller carries on as if no transfer were running.
+     * https://github.com/rdoeffinger/Dictionary/blob/main/src/com/hughes/android/dictionary/DictionaryManagerActivity.kt#downloadManagerQuery
+     * not ported: showDownloadFailedAlert (this is a quiet pass at each
+     * refresh, an alert for it would only get in the way)
+     */
+    private fun downloadManagerQuery(
+        downloadManager: DownloadManager,
+        query: DownloadManager.Query?
+    ): Cursor? {
+        val cursor: Cursor?
+        try {
+            cursor = downloadManager.query(query)
+        } catch (se: SecurityException) {
+            Log.w(LOG, "Failed to query download manager", se)
+            return null
+        }
+        return cursor
+    }
+
+    /** What DownloadManager has not finished: the paths still being written, the id of each failed one by path. */
+    private data class Transfers(
+        val unfinished: Set<String> = emptySet(),
+        val failed: Map<String, Long> = emptyMap()
+    )
+
     /** One saved file, with the post it came from. */
     data class Entry(val file: File, val handle: String, val postId: String, val index: Int)
 
@@ -203,6 +297,22 @@ class OfflineMedia(context: Context) {
         const val FOLDER = "media"
 
         private const val STILL = "still"
+
+        private const val LOG = "OfflineMedia"
+
+        /**
+         * Dictionary's isDownloadActive without Android, so a JVM test can run
+         * it. Without [cancel] it answers which listed files a transfer is
+         * still writing (paused, pending or running): they stay on disk and
+         * out of the index. With [cancel] it answers which listed files belong
+         * to a failed transfer: those are to be removed, their part file would
+         * block any retry.
+         * https://github.com/rdoeffinger/Dictionary/blob/main/src/com/hughes/android/dictionary/DictionaryManagerActivity.kt#isDownloadActive
+         */
+        internal fun isDownloadActive(files: List<File>, active: Set<String>, failed: Set<String>, cancel: Boolean): List<File> {
+            val downloads = if (cancel) failed else active
+            return files.filter { destFile -> destFile.absolutePath in downloads }
+        }
 
         /**
          * The account's folder under the media folder, one for every account
