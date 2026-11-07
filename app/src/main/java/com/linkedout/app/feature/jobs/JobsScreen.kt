@@ -22,6 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,10 +33,27 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.linkedout.app.core.model.ExperienceLevelFilters
 import com.linkedout.app.core.model.JobCard
+import com.linkedout.app.core.model.JobFilters
+import com.linkedout.app.core.model.OnSiteOrRemoteFilters
+import com.linkedout.app.core.model.TimeFilters
+import com.linkedout.app.core.model.TypeFilters
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.linkedout.app.data.marks.SavedJob
+import com.linkedout.app.data.marks.SavedJobs
 import com.linkedout.app.navigation.LocalReadableInset
+import org.koin.compose.koinInject
 import com.linkedout.app.ui.component.Avatar
 import com.linkedout.app.ui.component.BoldButton
+import com.linkedout.app.ui.component.CheckableDropdownMenuItem
+import com.linkedout.app.ui.component.DropdownMenuGroup
+import com.linkedout.app.ui.component.DropdownMenuItem
+import com.linkedout.app.ui.component.GlassMenu
+import com.linkedout.app.ui.component.MenuPill
+import com.linkedout.app.ui.component.SelectableDropdownMenuItem
+import com.linkedout.app.ui.component.SubmenuHeader
+import com.linkedout.app.ui.component.ValueMenuItem
 import com.linkedout.app.ui.component.ErrorPanel
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.ScreenBanner
@@ -60,9 +80,26 @@ fun JobsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val focus = LocalFocusManager.current
+    // The saved offers are shown in place of the results until the Saved pill is tapped again or a search is made.
+    var showSaved by rememberSaveable { mutableStateOf(false) }
+    val savedJobs: SavedJobs = koinInject()
+    val saved by savedJobs.saved.collectAsState()
     val search = {
         focus.clearFocus()
+        showSaved = false
         viewModel.search()
+    }
+    // The menu edits a draft of the filters and applies it when it closes: each applied change is a request to LinkedIn,
+    // and two toggles in a row must be one.
+    var filtersOpen by remember { mutableStateOf(false) }
+    var submenu by remember { mutableStateOf<FilterKind?>(null) }
+    var draft by remember { mutableStateOf(state.filters) }
+    val closeFilters = {
+        filtersOpen = false
+        submenu = null
+        // A changed filter searches again, which brings the results back.
+        if (draft != state.filters && state.searched != null) showSaved = false
+        viewModel.setFilters(draft)
     }
 
     LazyColumn(
@@ -113,7 +150,74 @@ fun JobsScreen(
             }
         }
 
-        state.error?.let { error ->
+        // JobsScreen's list, with the filters' pill and the count between the search pane and the offers:
+        // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/jobs/JobsScreen.kt#JobsScreen
+        // One pill under the search pane, centred: Filters, with the number set, in the accent while any is. It opens the
+        // menu under it. The Box is the menu's anchor.
+        item(key = "filters") {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                Box {
+                    MenuPill(
+                        icon = LinkedOutIcons.Tune,
+                        label = if (state.filters.count > 0) "Filters, ${state.filters.count}" else "Filters",
+                        expanded = filtersOpen,
+                        accent = state.filters.count > 0,
+                        onClick = {
+                            draft = state.filters
+                            filtersOpen = true
+                        }
+                    )
+                    GlassMenu(
+                        expanded = filtersOpen,
+                        onDismissRequest = closeFilters,
+                        onBack = { if (submenu != null) submenu = null else closeFilters() }
+                    ) {
+                        JobFiltersMenu(
+                            filters = draft,
+                            submenu = submenu,
+                            onSubmenu = { submenu = it },
+                            onFilters = { draft = it },
+                            // A choice made in a submenu closes the menu and searches, as iOS's pull-down menus do.
+                            onPick = {
+                                draft = it
+                                closeFilters()
+                            },
+                            onClear = {
+                                draft = JobFilters()
+                                closeFilters()
+                            }
+                        )
+                    }
+                }
+                // Saved, beside Filters (the validated mockup): the offers kept on this phone, in the accent while shown.
+                MenuPill(
+                    icon = LinkedOutIcons.Bookmark,
+                    label = "Saved",
+                    expanded = showSaved,
+                    accent = showSaved,
+                    onClick = { showSaved = !showSaved }
+                )
+            }
+        }
+
+        // What LinkedIn says of the results, as it words it, plain text: it does nothing, so it has no zone.
+        state.count?.takeIf { !showSaved && !state.loading && state.cards.isNotEmpty() }?.let { count ->
+            item(key = "count") {
+                Text(
+                    count,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp)
+                )
+            }
+        }
+
+        state.error?.takeIf { !showSaved }?.let { error ->
             item(key = "error") {
                 ErrorPanel(
                     error = error,
@@ -124,6 +228,9 @@ fun JobsScreen(
         }
 
         when {
+            showSaved -> {
+                if (saved.jobs.isEmpty()) item(key = "no-saved") { Hint("No saved offer") }
+            }
             state.loading -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
                     LoadingMark(size = 96.dp)
@@ -140,11 +247,12 @@ fun JobsScreen(
             }
         }
 
-        items(state.cards, key = { it.id }) { card ->
+        // The saved cards open the offer as the others.
+        items(if (showSaved) saved.jobs.map(SavedJob::toCard) else state.cards, key = { it.id }) { card ->
             JobCardZone(card = card, onClick = { onOpenJob(card) })
         }
 
-        if (state.cards.isNotEmpty()) {
+        if (!showSaved && state.cards.isNotEmpty()) {
             item(key = "more") {
                 Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                     when {
@@ -205,9 +313,80 @@ private fun JobCardZone(card: JobCard, onClick: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                // The first badge LinkedIn gives the offer ("Actively hiring"), one line in the accent.
+                card.badges.firstOrNull()?.let {
+                    Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+                }
             }
         }
     }
+}
+
+// The filters' menu: one row per argument of search_linkedin_jobs that LinkedIn's guest filter bar has (date_posted,
+// workplace, experience, job_type, easy_apply, under_10_applicants), in the three groups of Material 3 Expressive's
+// grouped menu, apart by GroupSpacing. A row that has choices shows its value and a chevron and opens them in place
+// ([submenu] set), where the row it came from is the header with Back and the choices are SelectableDropdownMenuItems, one
+// selected; Easy Apply and Under 10 applicants are CheckableDropdownMenuItems; Clear filters is the last group, in the
+// error colour. [filters] is the draft the menu edits, applied when it closes.
+// https://github.com/Averyy/fetchaller-mcp/blob/main/src/fetchaller/linkedin/search.py#search_linkedin_jobs
+// https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Menu.kt#DropdownMenuGroup
+// not ported: dropdownmenugroup (GlassMenu.kt's, called here for each group)
+// not ported: search_linkedin_jobs (JobsSource's, the search itself)
+// not ported: DropdownMenuPopup (GlassMenu, which holds this content), MenuGroupShapes and MenuDefaults.groupShape
+// (segmentedShape gives the shape by index and count), keywords, location, geo_id, strict_location, min_salary, sort,
+// start, limit, max_tokens, timeout, browser_solver (not filters)
+@Composable
+private fun JobFiltersMenu(
+    filters: JobFilters,
+    submenu: FilterKind?,
+    onSubmenu: (FilterKind?) -> Unit,
+    onFilters: (JobFilters) -> Unit,
+    onPick: (JobFilters) -> Unit,
+    onClear: () -> Unit
+) {
+    if (submenu == null) {
+        DropdownMenuGroup(index = 0, count = 3) {
+            ValueMenuItem("Date posted", filters.date_posted.label) { onSubmenu(FilterKind.date_posted) }
+            ValueMenuItem("Workplace", filters.workplace.label) { onSubmenu(FilterKind.workplace) }
+            ValueMenuItem("Experience", filters.experience.label) { onSubmenu(FilterKind.experience) }
+            ValueMenuItem("Job type", filters.job_type.label) { onSubmenu(FilterKind.job_type) }
+        }
+        DropdownMenuGroup(index = 1, count = 3) {
+            CheckableDropdownMenuItem(filters.easy_apply, { onFilters(filters.copy(easy_apply = it)) }, "Easy Apply")
+            CheckableDropdownMenuItem(
+                filters.under_10_applicants,
+                { onFilters(filters.copy(under_10_applicants = it)) },
+                "Under 10 applicants"
+            )
+        }
+        DropdownMenuGroup(index = 2, count = 3) {
+            DropdownMenuItem(text = "Clear filters", color = MaterialTheme.colorScheme.error, onClick = onClear)
+        }
+        return
+    }
+    DropdownMenuGroup(index = 0, count = 2) { SubmenuHeader(title = submenu.label, onBack = { onSubmenu(null) }) }
+    DropdownMenuGroup(index = 1, count = 2) {
+        when (submenu) {
+            FilterKind.date_posted -> TimeFilters.entries.forEach {
+                SelectableDropdownMenuItem(filters.date_posted == it, { onPick(filters.copy(date_posted = it)) }, it.label)
+            }
+            FilterKind.workplace -> OnSiteOrRemoteFilters.entries.forEach {
+                SelectableDropdownMenuItem(filters.workplace == it, { onPick(filters.copy(workplace = it)) }, it.label)
+            }
+            FilterKind.experience -> ExperienceLevelFilters.entries.forEach {
+                SelectableDropdownMenuItem(filters.experience == it, { onPick(filters.copy(experience = it)) }, it.label)
+            }
+            FilterKind.job_type -> TypeFilters.entries.forEach {
+                SelectableDropdownMenuItem(filters.job_type == it, { onPick(filters.copy(job_type = it)) }, it.label)
+            }
+        }
+    }
+}
+
+/** The filters that open their choices in place, with the words of their row. */
+@Suppress("EnumEntryName")
+private enum class FilterKind(val label: String) {
+    date_posted("Date posted"), workplace("Workplace"), experience("Experience"), job_type("Job type")
 }
 
 @Composable

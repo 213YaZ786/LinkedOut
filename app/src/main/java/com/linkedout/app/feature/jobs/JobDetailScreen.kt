@@ -23,8 +23,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.CircleShape
 import com.linkedout.app.core.link.LinkRouter
+import com.linkedout.app.core.link.LinkedInLink
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.JobDetail
+import com.linkedout.app.data.marks.SavedJobs
+import org.koin.compose.koinInject
 import com.linkedout.app.data.linkedin.JobsParser
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
@@ -45,11 +50,16 @@ import org.koin.androidx.compose.koinViewModel
 fun JobDetailScreen(
     id: String,
     onBack: () -> Unit,
-    viewModel: JobDetailViewModel = koinViewModel()
+    onOpenCompany: (handle: String, kind: AccountKind) -> Unit,
+    viewModel: JobDetailViewModel = koinViewModel(),
+    savedJobs: SavedJobs = koinInject()
 ) {
     val state by viewModel.state.collectAsState()
+    val saved by savedJobs.saved.collectAsState()
     val context = LocalContext.current
     LaunchedEffect(id) { viewModel.load(id) }
+    val offer = state.detail
+    val kept = offer != null && saved.isSaved(offer.id)
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -63,7 +73,22 @@ fun JobDetailScreen(
         item(key = "banner") {
             ScreenBanner(
                 title = "Offer",
-                leading = { BannerAction(icon = LinkedOutIcons.ArrowBack, label = "Back", onClick = onBack) }
+                leading = { BannerAction(icon = LinkedOutIcons.ArrowBack, label = "Back", onClick = onBack) },
+                // Save on the trailing side, as Refresh on a profile and Share on a post
+                // (FeedScreen's banner): the bookmark in the accent while the offer is kept. BannerAction
+                // gives the haptic tick itself, so none is added here.
+                // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#FeedScreen
+                // not ported: FeedScreen's other banner and list pieces (the profile, its posts, Follow, media saving)
+                trailing = if (offer == null) null else {
+                    {
+                        BannerAction(
+                            icon = LinkedOutIcons.Bookmark,
+                            label = if (kept) "Saved" else "Save",
+                            onClick = { savedJobs.toggle(offer) },
+                            tint = if (kept) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
             )
         }
 
@@ -84,7 +109,13 @@ fun JobDetailScreen(
                 }
             }
             else -> {
-                item(key = "head") { Head(detail, onApply = { LinkRouter.openOutside(context, detail.url) }) }
+                item(key = "head") {
+                    Head(
+                        detail,
+                        onApply = { LinkRouter.openOutside(context, detail.url) },
+                        onOpenCompany = onOpenCompany
+                    )
+                }
                 if (detail.criteria.isNotEmpty()) item(key = "criteria") { Criteria(detail.criteria) }
                 if (detail.description.isNotBlank()) item(key = "description") { Description(detail.description) }
             }
@@ -93,7 +124,14 @@ fun JobDetailScreen(
 }
 
 @Composable
-private fun Head(detail: JobDetail, onApply: () -> Unit) {
+private fun Head(
+    detail: JobDetail,
+    onApply: () -> Unit,
+    onOpenCompany: (handle: String, kind: AccountKind) -> Unit
+) {
+    // The company is a tap when its address is a page the app shows (a company, a school or a showcase page); the
+    // page's kind rides with the handle, as Accounts opens a profile. Otherwise it stays plain text.
+    val company = LinkedInLink.parse(detail.companyUrl) as? LinkedInLink.Company
     Zone(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = ZoneGap)) {
         Column(
             Modifier.padding(20.dp),
@@ -103,11 +141,29 @@ private fun Head(detail: JobDetail, onApply: () -> Unit) {
             // Centred: the offer's name and owner are data, not rows of a list.
             Text(detail.title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
             if (detail.company.isNotBlank()) {
-                Text(detail.company, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                if (company != null) {
+                    // A small zone of its own, so that it reads as a tap (the validated mockup).
+                    Zone(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        onClick = { onOpenCompany(company.slug, AccountKind.ofSegment(company.segment)) }
+                    ) {
+                        Text(
+                            detail.company,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                } else {
+                    Text(detail.company, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                }
             }
             // Joined with a comma, as AOSP Dialer's CallLogEntryText.java joinSecondaryTextComponents (https://android.googlesource.com/platform/packages/apps/Dialer/+/refs/heads/main/java/com/android/dialer/calllogutils/CallLogEntryText.java).
             Text(
-                listOfNotNull(detail.location.takeIf { it.isNotBlank() }, detail.postedAgo).joinToString(", "),
+                listOfNotNull(detail.location.takeIf { it.isNotBlank() }, detail.postedAgo, detail.applicants.takeIf { it.isNotBlank() })
+                    .joinToString(", "),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center

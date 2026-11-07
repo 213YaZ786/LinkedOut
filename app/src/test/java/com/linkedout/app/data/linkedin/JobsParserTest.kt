@@ -13,7 +13,7 @@ class JobsParserTest {
 
     @Test
     fun `reads every card of a search page`() {
-        val cards = JobsParser.cards(SEARCH)
+        val cards = JobsParser.parse_search_fragment(SEARCH)
 
         assertEquals(listOf("4455683589", "4311721135"), cards.map { it.id })
         val first = cards.first()
@@ -27,7 +27,7 @@ class JobsParserTest {
 
     @Test
     fun `a card without a date or a logo still reads`() {
-        val second = JobsParser.cards(SEARCH)[1]
+        val second = JobsParser.parse_search_fragment(SEARCH)[1]
 
         assertNull(second.postedDate)
         assertNull(second.logoUrl)
@@ -36,7 +36,7 @@ class JobsParserTest {
 
     @Test
     fun `reads a posting with its criteria and paragraphs`() {
-        val detail = JobsParser.detail("4455683589", POSTING)!!
+        val detail = JobsParser.parse_job_detail("4455683589", POSTING)!!
 
         assertEquals("Medical physicist (M/F)", detail.title)
         assertEquals("Example Hospital", detail.company)
@@ -51,7 +51,7 @@ class JobsParserTest {
 
     @Test
     fun `a page without a title is not a posting`() {
-        assertNull(JobsParser.detail("1", "<html><body>Sign in to see this job</body></html>"))
+        assertNull(JobsParser.parse_job_detail("1", "<html><body>Sign in to see this job</body></html>"))
     }
 
     private companion object {

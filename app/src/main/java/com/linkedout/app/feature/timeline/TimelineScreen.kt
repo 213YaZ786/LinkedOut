@@ -14,7 +14,17 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.EmptyZone
-import com.linkedout.app.ui.component.FeedChips
+import com.linkedout.app.ui.component.DropdownMenuGroup
+import com.linkedout.app.ui.component.GlassMenu
+import com.linkedout.app.ui.component.MenuPill
+import com.linkedout.app.ui.component.SelectableDropdownMenuItem
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
@@ -22,7 +32,6 @@ import com.linkedout.app.ui.component.FloatingPane
 import com.linkedout.app.ui.component.ScrollUpButton
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.LocalInlinePlaying
-import com.linkedout.app.ui.component.ScreenBanner
 import com.linkedout.app.ui.component.rememberHaptics
 import com.linkedout.app.ui.component.rememberInlineTarget
 import androidx.compose.foundation.layout.PaddingValues
@@ -195,30 +204,62 @@ fun TimelineScreen(
         }
     }
 
-    // The folder choice, under the banner: what the folder dialog answered, now answered by a tap on a chip.
-    // The chips are items of the list that records listBackdrop: floating on it, a chip would draw the recording
-    // that holds it, a layer inside itself, and Android's renderer overflows its stack at the first frame. So no
-    // backdrop here, and each chip is a zone as on Accounts. SMS's FloatingFrame provides its backdrop only
+    // The feed choice, under the banner (requests.md point 10): one pill with the folder icon, the feed's name and a
+    // chevron, which opens a menu under it: All and the folders, then Liked and Archived, the shown one checked
+    // (Material 3 Expressive's grouped menu in glass, GlassMenu). Picking does what a tap on a chip did.
+    // The pill is an item of the list that records listBackdrop: floating on it, it would draw the recording that holds
+    // it, a layer inside itself, and Android's renderer overflows its stack at the first frame. So MenuPill draws it with
+    // no backdrop, as a zone, and the menu lives in a window of its own. SMS's FloatingFrame provides its backdrop only
     // outside what records it:
     // https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/ui/component/FloatingPane.kt#FloatingFrame
-    val chips: @Composable () -> Unit = { CompositionLocalProvider(LocalGlassBackdrop provides null) {
-        FeedChips(
-            folders = state.folders,
-            selected = state.folder,
-            extras = listOf(LIKED, ARCHIVED),
-            onSelect = { name ->
-                if (name == LIKED || name == ARCHIVED) {
-                    special = name
-                } else {
-                    special = null
-                    viewModel.showFolder(name)
+    // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/timeline/TimelineScreen.kt#TimelineScreen
+    // not ported: FloatingFrame (SMS's frame; here the pill draws itself with no backdrop)
+    // not ported: onPostScroll (SMS's nested scroll of the frame; Home's list has its own)
+    // not ported: TimelineScreen (the screen itself is this file's, only the feed choice is rebuilt here)
+    var feedsOpen by remember { mutableStateOf(false) }
+    val showFeed: (String?) -> Unit = { name ->
+        feedsOpen = false
+        if (name == LIKED || name == ARCHIVED) {
+            special = name
+        } else {
+            special = null
+            viewModel.showFolder(name)
+        }
+    }
+    val chips: @Composable () -> Unit = {
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+        ) {
+            Box {
+                MenuPill(
+                    icon = LinkedOutIcons.Folder,
+                    label = state.folder ?: "All",
+                    expanded = feedsOpen,
+                    trailingIcon = LinkedOutIcons.ExpandMore,
+                    onClick = { feedsOpen = true }
+                )
+                GlassMenu(expanded = feedsOpen, onDismissRequest = { feedsOpen = false }) {
+                    // No Clear row: a feed is chosen, not cleared.
+                    DropdownMenuGroup(index = 0, count = 2) {
+                        SelectableDropdownMenuItem(selected = state.folder == null, onClick = { showFeed(null) }, text = "All")
+                        state.folders.forEach { name ->
+                            SelectableDropdownMenuItem(selected = state.folder == name, onClick = { showFeed(name) }, text = name)
+                        }
+                    }
+                    DropdownMenuGroup(index = 1, count = 2) {
+                        listOf(LIKED, ARCHIVED).forEach { name ->
+                            SelectableDropdownMenuItem(selected = state.folder == name, onClick = { showFeed(name) }, text = name)
+                        }
+                    }
                 }
             }
-        )
-    } }
+        }
+    }
 
     val banner: @Composable () -> Unit = {
-        ScreenBanner(
+        HomeBanner(
             title = "Home",
             subtitle = subtitle(state),
             leading = if (somethingWrong) {
@@ -396,6 +437,89 @@ fun TimelineScreen(
         } }
     }
 }
+
+/**
+ * Home's own top row (requests.md point 9): ScreenBanner's row, the title and the subtitle no longer in a Column but side
+ * by side on one line, 8 dp apart, aligned on their baseline, the pair centred between the two action slots (both slots
+ * keep their room, so the pair is centred on the screen). A pair too long for the line wraps the subtitle under the title
+ * instead of cutting the title.
+ * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/ui/component/ScreenBanner.kt#ScreenBanner
+ * not ported: BannerAction (used as it is), the title's two lines with TextAutoSize (one line, ellipsis), BannerGap and
+ * BannerActionSize (private there, copied below)
+ */
+@Composable
+private fun HomeBanner(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    leading: @Composable (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = BannerActionSize + 16.dp)
+            .padding(horizontal = 16.dp, vertical = BannerGap),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Both action slots keep their room, so the pair stays centred.
+        Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { leading?.invoke() }
+        Layout(
+            content = {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.primary),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() }
+                )
+                subtitle?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            },
+            modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+        ) { measurables, constraints ->
+            val gap = 8.dp.roundToPx()
+            val loose = constraints.copy(minWidth = 0, minHeight = 0)
+            val titleText = measurables[0].measure(loose)
+            val subtitleText = measurables.getOrNull(1)?.measure(loose)
+            if (subtitleText == null || titleText.width + gap + subtitleText.width <= constraints.maxWidth) {
+                // One line: the baselines on one level, the pair centred.
+                val titleBase = titleText[FirstBaseline]
+                val subtitleBase = subtitleText?.get(FirstBaseline) ?: 0
+                val above = maxOf(titleBase, subtitleBase)
+                val below = maxOf(titleText.height - titleBase, (subtitleText?.height ?: 0) - subtitleBase)
+                val width = titleText.width + (subtitleText?.let { gap + it.width } ?: 0)
+                layout(constraints.maxWidth, above + below) {
+                    val start = (constraints.maxWidth - width) / 2
+                    titleText.place(start, above - titleBase)
+                    subtitleText?.place(start + titleText.width + gap, above - subtitleBase)
+                }
+            } else {
+                // Too long: the subtitle under the title, each centred.
+                val under = 1.dp.roundToPx()
+                layout(constraints.maxWidth, titleText.height + under + subtitleText.height) {
+                    titleText.place((constraints.maxWidth - titleText.width) / 2, 0)
+                    subtitleText.place((constraints.maxWidth - subtitleText.width) / 2, titleText.height + under)
+                }
+            }
+        }
+        Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { trailing?.invoke() }
+    }
+}
+
+/** Space the banner leaves above and below itself, as ScreenBanner's. */
+private val BannerGap = 8.dp
+
+/** Both slots of the banner, as ScreenBanner's. */
+private val BannerActionSize = 44.dp
 
 private fun subtitle(state: TimelineUiState): String? = when {
     state.followedCount == 0 -> null

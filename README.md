@@ -101,6 +101,6 @@ way.
 
 Links are checked before they open, after [URLCheck](https://github.com/TrianguloY/URLCheck) (CC BY 4.0). The tracking rules are [ClearURLs](https://github.com/ClearURLs/Rules) (LGPL-3.0), the site names come from the [Public Suffix List](https://publicsuffix.org) (MPL-2.0).
 
-Code is ported from [SparkButton](https://github.com/connyduck/sparkbutton) (Apache-2.0), [FlorisBoard](https://github.com/florisboard/florisboard) (Apache-2.0, the setup steps), [AndroidX](https://github.com/androidx/androidx) (Apache-2.0, the wavy progress) and [Dictionary](https://github.com/rdoeffinger/Dictionary) (Apache-2.0, the download manager query).
+Code is ported from [SparkButton](https://github.com/connyduck/sparkbutton) (Apache-2.0), [FlorisBoard](https://github.com/florisboard/florisboard) (Apache-2.0, the setup steps), [AndroidX](https://github.com/androidx/androidx) (Apache-2.0, the wavy progress and the grouped menu), [Dictionary](https://github.com/rdoeffinger/Dictionary) (Apache-2.0, the download manager query), [fetchaller-mcp](https://github.com/Averyy/fetchaller-mcp) (MIT, the job search parameters and cards) and [linkedin-easy-apply-bot](https://github.com/joaosilvalopes/linkedin-easy-apply-bot) (MIT, the result count).
 
 MIT licensed.

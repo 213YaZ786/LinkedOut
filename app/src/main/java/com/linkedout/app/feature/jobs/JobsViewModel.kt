@@ -6,6 +6,7 @@ import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.common.Outcome
 import com.linkedout.app.core.model.JobCard
 import com.linkedout.app.core.model.JobDetail
+import com.linkedout.app.core.model.JobFilters
 import com.linkedout.app.data.linkedin.JobsSource
 import com.linkedout.app.data.settings.SettingsStore
 import kotlinx.coroutines.Job
@@ -20,6 +21,10 @@ data class JobsUiState(
     /** The search the results belong to, which the fields may have moved on from. */
     val searched: Pair<String, String>? = null,
     val cards: List<JobCard> = emptyList(),
+    /** The filters of the search, which a change of filter makes again. */
+    val filters: JobFilters = JobFilters(),
+    /** The count LinkedIn heads the first page with, as it words it. Null when it gave none. */
+    val count: String? = null,
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val endReached: Boolean = false,
@@ -51,6 +56,15 @@ class JobsViewModel(
         _state.value = _state.value.copy(location = value)
     }
 
+    // A change of filter: once a search was made it is made again with the new filters (the keywords and the location
+    // of the fields), before that they wait for the first search. The filters are the arguments of
+    // https://github.com/Averyy/fetchaller-mcp/blob/main/src/fetchaller/linkedin/search.py#search_linkedin_jobs
+    fun setFilters(filters: JobFilters) {
+        if (filters == _state.value.filters) return
+        _state.value = _state.value.copy(filters = filters)
+        if (_state.value.searched != null) search()
+    }
+
     fun search() {
         val keywords = _state.value.keywords.trim()
         val location = _state.value.location.trim()
@@ -60,17 +74,20 @@ class JobsViewModel(
         _state.value = _state.value.copy(
             searched = keywords to location,
             cards = emptyList(),
+            count = null,
             loading = true,
             loadingMore = false,
             endReached = false,
             error = null
         )
+        val filters = _state.value.filters
         running = viewModelScope.launch {
-            when (val outcome = source.search(keywords, location, start = 0)) {
+            when (val outcome = source.search_linkedin_jobs(keywords, location, filters, start = 0)) {
                 is Outcome.Success -> _state.value = _state.value.copy(
-                    cards = outcome.value,
+                    cards = outcome.value.collected,
+                    count = outcome.value.count,
                     loading = false,
-                    endReached = outcome.value.isEmpty()
+                    endReached = outcome.value.collected.isEmpty()
                 )
                 is Outcome.Failure -> _state.value = _state.value.copy(loading = false, error = outcome.error)
             }
@@ -84,10 +101,10 @@ class JobsViewModel(
         if (current.loading || current.loadingMore || current.endReached) return
         _state.value = current.copy(loadingMore = true, error = null)
         running = viewModelScope.launch {
-            when (val outcome = source.search(keywords, location, start = current.cards.size)) {
+            when (val outcome = source.search_linkedin_jobs(keywords, location, current.filters, start = current.cards.size)) {
                 is Outcome.Success -> {
                     val known = current.cards.map { it.id }.toSet()
-                    val fresh = outcome.value.filterNot { it.id in known }
+                    val fresh = outcome.value.collected.filterNot { it.id in known }
                     _state.value = _state.value.copy(
                         cards = current.cards + fresh,
                         loadingMore = false,

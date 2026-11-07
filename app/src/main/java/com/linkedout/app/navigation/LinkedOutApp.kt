@@ -308,7 +308,8 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                 ReadableScroll {
                     JobDetailScreen(
                         id = entry.arguments?.getString("id").orEmpty(),
-                        onBack = { navController.back() }
+                        onBack = { navController.back() },
+                        onOpenCompany = { handle, kind -> navController.open(Routes.feed(handle, kind)) }
                     )
                 }
             }

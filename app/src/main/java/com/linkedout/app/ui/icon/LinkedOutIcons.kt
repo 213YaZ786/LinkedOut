@@ -204,6 +204,49 @@ object LinkedOutIcons {
         )
     }
 
+    // Material Symbols outlined, a vector file read as it is written: <vector> width and height 24dp, viewportWidth and
+    // viewportHeight 960, then its <path> with fillColor white and pathData; the Icon composable tints it.
+    // https://github.com/google/material-design-icons/blob/master/symbols/android/tune/materialsymbolsoutlined/tune_24px.xml
+    val Tune: ImageVector by lazy {
+        val pathData = "M440,840L440,600L520,600L520,680L840,680L840,760L520,760L520,840L440,840ZM120,760L120,680L360,680" +
+            "L360,760L120,760ZM280,600L280,520L120,520L120,440L280,440L280,360L360,360L360,600L280,600ZM440,520L440,440" +
+            "L840,440L840,520L440,520ZM600,360L600,120L680,120L680,200L840,200L840,280L680,280L680,360L600,360Z" +
+            "M120,280L120,200L520,200L520,280L120,280Z"
+        ImageVector.Builder("Tune", 24.dp, 24.dp, viewportWidth = 960f, viewportHeight = 960f)
+            .addPath(pathData = PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
+            .build()
+    }
+
+    // https://github.com/google/material-design-icons/blob/master/symbols/android/chevron_right/materialsymbolsoutlined/chevron_right_24px.xml
+    // (android:autoMirrored="true"; width and height 24dp, viewportWidth and viewportHeight 960, path fillColor white)
+    val ChevronRight: ImageVector by lazy {
+        val pathData = "M504,480L320,296L376,240L616,480L376,720L320,664L504,480Z"
+        ImageVector.Builder("ChevronRight", 24.dp, 24.dp, viewportWidth = 960f, viewportHeight = 960f, autoMirror = true)
+            .addPath(pathData = PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
+            .build()
+    }
+
+    // https://github.com/google/material-design-icons/blob/master/symbols/android/expand_more/materialsymbolsoutlined/expand_more_24px.xml
+    // (width and height 24dp, viewportWidth and viewportHeight 960, path fillColor white)
+    val ExpandMore: ImageVector by lazy {
+        val pathData = "M480,615L240,375L296,319L480,503L664,319L720,375L480,615Z"
+        ImageVector.Builder("ExpandMore", 24.dp, 24.dp, viewportWidth = 960f, viewportHeight = 960f)
+            .addPath(pathData = PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
+            .build()
+    }
+
+    // https://github.com/google/material-design-icons/blob/master/symbols/android/bookmark/materialsymbolsoutlined/bookmark_24px.xml
+    // (width and height 24dp, viewportWidth and viewportHeight 960, path fillColor white)
+    val Bookmark: ImageVector by lazy {
+        val pathData = "M200,840L200,200Q200,167 223.5,143.5Q247,120 280,120L680,120Q713,120 736.5,143.5Q760,167 760,200L760,840" +
+            "L480,720L200,840ZM280,718L480,632L680,718L680,200Q680,200 680,200Q680,200 680,200L280,200Q280,200 280,200" +
+            "Q280,200 280,200L280,718ZM280,200L280,200Q280,200 280,200Q280,200 280,200L680,200Q680,200 680,200" +
+            "Q680,200 680,200L680,200L480,200L280,200Z"
+        ImageVector.Builder("Bookmark", 24.dp, 24.dp, viewportWidth = 960f, viewportHeight = 960f)
+            .addPath(pathData = PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
+            .build()
+    }
+
     private fun build(name: String, pathData: String): ImageVector =
         ImageVector.Builder(
             name = name,

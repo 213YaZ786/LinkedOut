@@ -1,6 +1,7 @@
 package com.linkedout.app.di
 
 import com.linkedout.app.data.marks.PostMarks
+import com.linkedout.app.data.marks.SavedJobs
 import com.linkedout.app.core.link.RedirectResolver
 import com.linkedout.app.data.linkedin.JobsSource
 import com.linkedout.app.feature.jobs.JobDetailViewModel
@@ -93,6 +94,7 @@ val appModule = module {
     single { AutoMediaDownloader(androidContext(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { AccountStore(androidContext()) }
     single { PostMarks(androidContext()) }
+    single { SavedJobs(androidContext().filesDir) }
     single { ReadPosts(androidContext(), get(named("appScope"))) }
     single { SettingsStore(androidContext()) }
     single { LinkRouter(androidContext()) }
