@@ -148,7 +148,7 @@ dependencies {
     // Guava comes in transitively at 33.3.1-android (GHSA-xxph-c9ww-hj94): forced to the fixed release
     // with a dependency constraint (https://docs.gradle.org/current/userguide/dependency_constraints.html).
     constraints {
-        implementation("com.google.guava:guava:33.7.2-android") {
+        implementation("com.google.guava:guava:33.8.0-android") {
             because("GHSA-xxph-c9ww-hj94")
         }
     }
