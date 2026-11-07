@@ -7,6 +7,7 @@ import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.core.model.Feed
 import com.linkedout.app.data.linkedin.LinkedInSource
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The seam between the screens and the network.
@@ -22,6 +23,15 @@ class FeedRepository(
     private val linkedin: LinkedInSource,
     private val accounts: AccountStore
 ) {
+
+    private val known = ConcurrentHashMap<String, AccountKind>()
+
+    /**
+     * What is already known, without asking anything. Answers are kept for the
+     * life of the process.
+     * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/data/repository/VideoSources.kt#knownSource
+     */
+    fun knownKind(handle: String): AccountKind? = known[handle.lowercase()]
 
     /**
      * A post and the comments a guest is shown.
@@ -52,6 +62,12 @@ class FeedRepository(
     ): Outcome<Feed> {
         if (kind.isOrganisation) return linkedin.fetchOrganisation(handle, kind.segment)
 
+        // Found to be a company earlier in this run: no /in/ request that would
+        // only answer 404 again.
+        if (knownKind(handle) == AccountKind.COMPANY) {
+            return linkedin.fetchOrganisation(handle, AccountKind.COMPANY.segment)
+        }
+
         val asPerson = linkedin.fetchProfile(handle)
         if (asPerson !is Outcome.Failure || asPerson.error !is AppError.AccountNotFound) return asPerson
 
@@ -64,7 +80,10 @@ class FeedRepository(
         // and the answer is filed so the mistake costs one extra read once
         // and never again.
         val asCompany = linkedin.fetchOrganisation(handle, AccountKind.COMPANY.segment)
-        if (asCompany is Outcome.Success) accounts.updateKind(handle, AccountKind.COMPANY)
+        if (asCompany is Outcome.Success) {
+            known[handle.lowercase()] = AccountKind.COMPANY
+            accounts.updateKind(handle, AccountKind.COMPANY)
+        }
         return if (asCompany is Outcome.Success) asCompany else asPerson
     }
 }

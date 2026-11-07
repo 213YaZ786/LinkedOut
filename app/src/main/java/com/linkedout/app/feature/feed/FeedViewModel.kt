@@ -84,7 +84,12 @@ class FeedViewModel(
                 is Outcome.Success -> {
                     val merged = cache.append(outcome.value)
                     accounts.updateDisplayName(handle, outcome.value.displayName)
+                    // A company opened as a person was found out by the 404
+                    // fallback: the state takes the kind so Follow files it as
+                    // a company and the paging asks /company/ directly.
+                    val found = repository.knownKind(handle)
                     _state.value = _state.value.copy(
+                        kind = found ?: _state.value.kind,
                         loading = false,
                         loadingMore = false,
                         feed = merged,

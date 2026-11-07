@@ -54,12 +54,17 @@ data class FollowedAccount(
         const val MAIN = "Main"
 
         /**
-         * A LinkedIn vanity name: the part after /in/. Letters, digits and
-         * hyphens, and long, because LinkedIn appends a hash to duplicates.
-         * Validated locally so a typo fails instantly instead of costing a
-         * request to a host that rate limits guests hard.
+         * A LinkedIn vanity name: the part after /in/ or /company/. Letters of
+         * any script (an association can be named "françaises" or "biomédicaux"),
+         * digits, hyphens, ampersand, underscore, apostrophes and dots, as in
+         * ORKG's LinkedInId, plus `%` for a name copied percent-encoded. Long,
+         * because LinkedIn appends a hash to duplicates, so bounded at 120
+         * instead of ORKG's open end. Validated locally so a typo fails
+         * instantly instead of costing a request to a host that rate limits
+         * guests hard.
+         * https://github.com/TIBHannover/orkg-backend/blob/master/common/external-identifiers/src/main/kotlin/org/orkg/common/LinkedInId.kt#VALID_LINKED_IN_ID_REGEX
          */
-        private val VALID = Regex("^[A-Za-z0-9\\-_%.]{1,120}$")
+        private val VALID = Regex("""^[\p{L}0-9\-&_'’.%]{1,120}$""")
 
         fun normalise(raw: String): String? {
             val cleaned = raw.trim()
