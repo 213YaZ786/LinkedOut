@@ -17,7 +17,8 @@ import com.linkedout.app.ui.component.EmptyZone
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
-import com.linkedout.app.ui.component.FolderDialog
+import com.linkedout.app.ui.component.FloatingPane
+import com.linkedout.app.ui.component.ScrollUpButton
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.LocalInlinePlaying
 import com.linkedout.app.ui.component.ScreenBanner
@@ -27,10 +28,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -126,7 +130,6 @@ fun TimelineScreen(
     val read by readPosts.state.collectAsState()
     var viewing by remember { mutableStateOf<Pair<Post, Int>?>(null) }
     var showFailures by remember { mutableStateOf(false) }
-    var choosingFolder by remember { mutableStateOf(false) }
 
     // Saving media posts a progress notification, and Android can refuse it.
     // A download that runs with no way to say how far it is belongs in the
@@ -164,8 +167,8 @@ fun TimelineScreen(
 
     // Read means passed, nothing else. Everything sitting before the first
     // item still on screen has left by the top, so one pass of the list is one
-    // write and not one per card. The banner is item 0, so the post at list
-    // index n is posts[n - 1].
+    // write and not one per card. The banner is item 0 and the chips item 1, so the post at list
+    // index n is posts[n - 2].
     //
     // Being above the viewport is not enough on its own. A refresh inserts new
     // posts above the reader and the list stays anchored on the post they were
@@ -182,7 +185,7 @@ fun TimelineScreen(
             listState.layoutInfo.visibleItemsInfo.forEach { item ->
                 (item.key as? String)?.let(seen::add)
             }
-            val passed = first - 1
+            val passed = first - 2
             if (passed > 0) {
                 val gone = state.posts.take(passed).map { it.id }.filter { it in seen }
                 if (gone.isNotEmpty()) readPosts.mark(gone)
@@ -190,23 +193,19 @@ fun TimelineScreen(
         }
     }
 
-    if (choosingFolder) {
-        FolderDialog(
-            title = "Show",
+    // The folder choice, under the banner: what the folder dialog answered, now answered by a tap on a chip.
+    val chips: @Composable () -> Unit = {
+        FeedChips(
             folders = state.folders,
             selected = state.folder,
-            everything = "Everything",
             onSelect = { name ->
-                choosingFolder = false
                 if (name == LIKED || name == ARCHIVED) {
                     special = name
                 } else {
                     special = null
                     viewModel.showFolder(name)
                 }
-            },
-            onDismiss = { choosingFolder = false },
-            extras = listOf(LIKED, ARCHIVED)
+            }
         )
     }
 
@@ -243,7 +242,7 @@ fun TimelineScreen(
 
     val pull = rememberPullToRefreshState()
     // In glass, the list is recorded as it scrolls, for the controls that
-    // float over it (the refresh disc, the folder and back to top buttons)
+    // float over it (the chips, the refresh disc and the back to top button)
     // to bend it.
     val look = LocalGlass.current
     val listBackdrop = rememberGlassBackdrop()
@@ -293,6 +292,7 @@ fun TimelineScreen(
                 )
             ) {
                 item(key = "banner") { banner() }
+                item(key = "chips") { chips() }
                 item(key = "nothing") {
                     EmptyState(
                         title = "Nothing could be loaded",
@@ -355,6 +355,7 @@ fun TimelineScreen(
                     modifier = Modifier.fillMaxSize().then(if (look != null) Modifier.glassSource(listBackdrop, look) else Modifier)
                 ) {
                     item(key = "banner") { banner() }
+                    item(key = "chips") { chips() }
 
                     items(state.posts, key = { it.id }) { post ->
                         PostCard(
@@ -374,18 +375,15 @@ fun TimelineScreen(
                 }
             }
 
-            // The folder switch never leaves: it is how the reader moves
-            // from one stream to another, and a control that only appears
-            // once you have scrolled is a control nobody finds. The way
-            // back to the top stacks with it, and only once the way back
-            // is a real chore.
+            // The way back to the top shows only once it is a real chore, placed as FeedScreen places its own.
             val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
-            FolderButton(
-                folderIcon = LinkedOutIcons.Folder,
-                upIcon = LinkedOutIcons.ArrowUp,
-                onClick = { choosingFolder = true },
-                showBackToTop = scrolled,
-                onBackToTop = { scope.launch { listState.animateScrollToItem(0) } }
+            ScrollUpButton(
+                visible = scrolled,
+                icon = LinkedOutIcons.ArrowUp,
+                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp + LocalReadableInset.current, bottom = 16.dp + navigationBarBottom())
             )
         } }
     }
@@ -527,6 +525,40 @@ private fun EmptyState(
         onAction = onAction,
         modifier = modifier
     )
+}
+
+/**
+ * The places to switch between on Home, in glass under the banner: everything, each folder, then the Liked and
+ * Archived views. Ported from SMS's Filters, its chipsRow:
+ * https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/feature/conversations/ConversationsScreen.kt#Filters
+ * not ported: SearchPill (Home's search stays the banner's action)
+ * not ported: stacked (the chips always wrap onto more lines when the width is short, never sideways)
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FeedChips(folders: List<String>, selected: String?, onSelect: (String?) -> Unit) {
+    val haptics = rememberHaptics()
+    val chips: List<Pair<String?, String>> =
+        listOf<Pair<String?, String>>(null to "All") + folders.map { it to it } + listOf(LIKED to LIKED, ARCHIVED to ARCHIVED)
+    // Wrapped by a FlowRow (Jetpack Compose, https://developer.android.com/develop/ui/compose/layouts/flow).
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+    ) {
+        chips.forEach { (value, label) ->
+            FloatingPane(
+                shape = CircleShape,
+                accent = selected == value,
+                onClick = {
+                    haptics.tick()
+                    onSelect(value)
+                }
+            ) {
+                Text(label, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp))
+            }
+        }
+    }
 }
 
 private const val LIKED = "Liked"

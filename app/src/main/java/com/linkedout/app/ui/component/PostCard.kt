@@ -97,51 +97,49 @@ fun PostCard(
         ) {
             post.contextLine()?.let { ContextLine(it) }
 
+            // LinkedIn's post: the avatar and the author in a header, then the text on the whole width of the card
+            // (the layout validated on a mockup, 2026-11-07). X, Threads and Bluesky keep the text in the column
+            // beside the avatar, which is what LinkedOut had.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 12.dp),
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Avatar(post.avatarUrl, post.authorName, size = if (compact) 36.dp else 44.dp)
 
-                Column(
-                    Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 6.dp)
-                ) {
-                    NameRow(post, unread)
-
-                    if (post.text.isNotBlank()) {
-                        Text(post.text, style = MaterialTheme.typography.bodyLarge)
-                    }
-
-                    if (post.media.isNotEmpty()) {
-                        MediaBlock(post = post, onDownload = onDownload, onOpen = onOpenMedia)
-                    }
-
-                    post.document?.let { DocumentBlock(it, post.authorHandle) }
-
-                    // Nitter's order: poll, link card, quote, then the note.
-                    post.poll?.let { PollBlock(it) }
-
-                    post.card?.let { card ->
-                        LinkCardBlock(card = card, onClick = { card.url?.let(onOpenLink) })
-                    }
-
-                    post.quoted?.let { quote ->
-                        QuoteBlock(
-                            handle = quote.handle,
-                            name = quote.name,
-                            text = quote.text,
-                            avatarUrl = quote.avatarUrl,
-                            note = quote.note,
-                            onClick = { onOpenLink(quote.permalink) }
-                        )
-                    }
-
-                    post.note?.let { NoteBlock(it, maxLines = 6) }
-
-                    if (showStats) post.stats?.let { StatsRow(it) }
-                }
+                NameRow(post, unread, Modifier.weight(1f))
             }
+
+            if (post.text.isNotBlank()) {
+                Text(post.text, style = MaterialTheme.typography.bodyLarge)
+            }
+
+            if (post.media.isNotEmpty()) {
+                MediaBlock(post = post, onDownload = onDownload, onOpen = onOpenMedia)
+            }
+
+            post.document?.let { DocumentBlock(it, post.authorHandle) }
+
+            // Nitter's order: poll, link card, quote, then the note.
+            post.poll?.let { PollBlock(it) }
+
+            post.card?.let { card ->
+                LinkCardBlock(card = card, onClick = { card.url?.let(onOpenLink) })
+            }
+
+            post.quoted?.let { quote ->
+                QuoteBlock(
+                    handle = quote.handle,
+                    name = quote.name,
+                    text = quote.text,
+                    avatarUrl = quote.avatarUrl,
+                    note = quote.note,
+                    onClick = { onOpenLink(quote.permalink) }
+                )
+            }
+
+            post.note?.let { NoteBlock(it, maxLines = 6) }
+
+            if (showStats) post.stats?.let { StatsRow(it) }
         }
     }
     }
@@ -191,34 +189,31 @@ internal fun Avatar(url: String?, name: String, size: Dp = 44.dp) {
 }
 
 @Composable
-private fun NameRow(post: Post, unread: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun NameRow(post: Post, unread: Boolean, modifier: Modifier = Modifier) {
+    // The header's text column, name over handle. LinkedIn puts the headline on the second line: LinkedOut shows
+    // the handle and the time there, the headline when the profile parser gives it.
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                post.authorName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            // Arrived since the last visit and not yet scrolled past. The dot sits on
+            // the line it marks, centred on it, as Fossify Messages' unread_count_badge (https://github.com/FossifyOrg/Messages/blob/main/app/src/main/res/layout/item_conversation.xml).
+            NewDot(unread, Modifier.padding(start = 8.dp))
+        }
+        // Handle and time joined with a comma, as AOSP Dialer's CallLogEntryText.java (https://android.googlesource.com/platform/packages/apps/Dialer/+/refs/heads/main/java/com/android/dialer/calllogutils/CallLogEntryText.java).
         Text(
-            post.authorName,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
-        )
-        Text(
-            " @${post.authorHandle}",
+            "@${post.authorHandle}, ${relativeTime(post.publishedAtMillis)}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false)
+            overflow = TextOverflow.Ellipsis
         )
-        // Name and time joined with a comma, as AOSP Dialer's CallLogEntryText.java (https://android.googlesource.com/platform/packages/apps/Dialer/+/refs/heads/main/java/com/android/dialer/calllogutils/CallLogEntryText.java).
-        Text(
-            ", ${relativeTime(post.publishedAtMillis)}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
-        // Arrived since the last visit and not yet scrolled past. The dot sits on
-        // the line it marks, centred on it, as Fossify Messages' unread_count_badge (https://github.com/FossifyOrg/Messages/blob/main/app/src/main/res/layout/item_conversation.xml).
-        NewDot(unread, Modifier.padding(start = 8.dp))
     }
 }
 
