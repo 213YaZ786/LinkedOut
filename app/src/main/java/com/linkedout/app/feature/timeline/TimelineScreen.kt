@@ -178,7 +178,8 @@ fun TimelineScreen(
                 showFailures = false
                 viewModel.refresh()
             },
-            onDismiss = { showFailures = false }
+            onDismiss = { showFailures = false },
+            shape = ZoneShape
         )
     }
 

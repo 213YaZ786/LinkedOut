@@ -10,19 +10,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.core.common.AppError
-import com.linkedout.app.core.common.Blame
 
 /**
  * One message, centred over the screen blurred behind it, naming where the trouble comes from. No
  * profile is listed: with many follows a list helps nobody, and nothing can be done per profile.
  * The dialog is ZoneAlertDialog's (Material's BasicAlertDialog, `onDismissRequest`, `content`:
  * https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AlertDialog.kt#BasicAlertDialog ),
- * its pane in the post card's shape. [site] is the network the app reads, named in the titles.
+ * its pane in the post card's shape ([shape], the app's own). [site] is the network the app reads, named in the titles.
  * not ported: BasicAlertDialog (ZoneAlertDialog, the glass kit's dialog, is used as it is)
  * not ported: AlertDialogContent (ZoneAlertDialog lays the icon, title, text and buttons out; only its slots are filled here)
  */
@@ -33,12 +33,13 @@ fun FailureDialog(
     silentDownloads: Boolean,
     site: String,
     onRetry: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    shape: Shape = MaterialTheme.shapes.extraLarge
 ) {
     val (title, text) = failureMessage(failed, followed, site) ?: (SILENT_DOWNLOADS_TITLE to SILENT_DOWNLOADS_TEXT)
     ZoneAlertDialog(
         onDismissRequest = onDismiss,
-        shape = ZoneShape,
+        shape = shape,
         icon = if (failed.isEmpty()) null else ({ FailureIcon() }),
         title = { Text(title) },
         text = { FailureContent(text, silentDownloads && failed.isNotEmpty()) },
@@ -103,17 +104,19 @@ internal fun detectKnownError(error: AppError?): KnownError? {
     if (error == null) {
         return null
     }
-    // check the blame, as detectKnownError checks the name and the status code
-    if (error.blame == Blame.DEVICE) {
+    // check the blame by its name, as detectKnownError checks the name and the status code: each reader names
+    // the far side its own way (HOST, INSTANCE, SERVICE)
+    val name = error.blame.name
+    if (name == "DEVICE") {
         return KnownError.Device
     }
-    if (error.blame == Blame.NETWORK) {
+    if (name == "NETWORK") {
         return KnownError.Network
     }
-    if (error.blame == Blame.HOST) {
+    if (name == "HOST" || name == "INSTANCE" || name == "SERVICE") {
         return KnownError.Host
     }
-    if (error.blame == Blame.UPSTREAM) {
+    if (name == "UPSTREAM") {
         return KnownError.Upstream
     }
     return KnownError.App
