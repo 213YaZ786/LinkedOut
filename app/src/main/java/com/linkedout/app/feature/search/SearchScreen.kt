@@ -1,10 +1,14 @@
 package com.linkedout.app.feature.search
 
 import com.linkedout.app.ui.component.GlassSearchField
-import com.linkedout.app.ui.component.BannerAction
-import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.feature.BarAction
+import com.linkedout.app.ui.component.BarTitle
+import com.linkedout.app.ui.component.FloatingTopBar
+import com.linkedout.app.ui.component.plus
+import com.linkedout.app.ui.component.scrolledFromTop
+import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.linkedout.app.ui.component.navigationBarBottom
-import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.foundation.layout.PaddingValues
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,6 +52,7 @@ import org.koin.compose.koinInject
 import androidx.compose.foundation.layout.WindowInsets
 
 /** Search through every post saved on this phone, instantly and offline. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     onBack: () -> Unit,
@@ -84,8 +89,17 @@ fun SearchScreen(
         // navigation bars. A nested Scaffold applies them a second time, which
         // is where the empty band above and below the content came from. The
         // list below owns them once, in its content padding.
-        contentWindowInsets = WindowInsets(0, 0, 0, 0)
-    ) {
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        // Ported from MTGA's FeedScreen: the FloatingTopBar as the Scaffold's topBar, the list under it with
+        // underFloatingTopBar
+        // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
+        topBar = {
+            FloatingTopBar(
+                title = { BarTitle("Search") },
+                navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) }
+            )
+        }
+    ) { padding ->
         val hint = when {
             !state.loaded -> null
             state.savedCount == 0 -> "Nothing saved yet. Posts you read are kept here and can be searched offline."
@@ -95,31 +109,20 @@ fun SearchScreen(
             else -> null
         }
 
+        val listState = rememberLazyListState()
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().underFloatingTopBar(
+                barHeight = padding.calculateTopPadding(),
+                scrolled = listState::scrolledFromTop
+            ),
             contentPadding = PaddingValues(
                 start = LocalReadableInset.current,
                 end = LocalReadableInset.current,
-                top = statusBarTop(),
                 bottom = navigationBarBottom()
-            )
+            ).plus(padding)
         ) {
-            // The banner of the profile page, the first row of the list so the whole page scrolls with it
-            // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L178-L209
-            item(key = "banner") {
-                ScreenBanner(
-                    title = "Search",
-                    leading = {
-                        BannerAction(
-                            icon = LinkedOutIcons.ArrowBack,
-                            label = "Back",
-                            onClick = onBack
-                        )
-                    }
-                )
-            }
-
-            // Just under the banner, as Accounts sets its field
+            // The list's first row, under the bar, as Accounts sets its field
             // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/accounts/AccountsScreen.kt#L224-L256
             item(key = "field") {
                 GlassSearchField(

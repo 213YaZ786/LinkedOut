@@ -41,6 +41,7 @@ import com.linkedout.app.feature.feed.FeedViewModel
 import com.linkedout.app.feature.post.PostDetailViewModel
 import com.linkedout.app.feature.search.SearchViewModel
 import com.linkedout.app.feature.settings.SettingsViewModel
+import com.linkedout.app.feature.storage.SavedMediaViewModel
 import com.linkedout.app.feature.timeline.TimelineViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -118,6 +119,7 @@ val appModule = module {
     viewModel { PostDetailViewModel(get(), get()) }
     viewModel { SearchViewModel(get()) }
     viewModel { FeedViewModel(get(), get(), get(), get()) }
+    viewModel { SavedMediaViewModel(get()) }
     viewModel { TimelineViewModel(get(), get(), get(), get()) }
     viewModel { SettingsViewModel(get(), get(), get(), get(), get(), get(), androidContext()) }
 }

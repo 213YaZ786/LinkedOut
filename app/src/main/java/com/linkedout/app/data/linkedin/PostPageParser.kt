@@ -1,6 +1,7 @@
 package com.linkedout.app.data.linkedin
 
 import com.linkedout.app.core.link.LinkedInLink
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Conversation
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
@@ -116,6 +117,7 @@ class PostPageParser {
         return Post(
             id = PostId.normalize(permalink).takeIf { it != permalink } ?: activityId,
             authorHandle = handle.orEmpty(),
+            authorKind = card.authorKind(),
             authorName = card.authorName().orEmpty(),
             // The card is tried first because it is the picture actually on
             // screen, then the graph. A company post is why the fallback
@@ -182,10 +184,17 @@ class PostPageParser {
 
     // ---- the card ----------------------------------------------------------
 
-    private fun String.authorHandle(): String? {
-        val href = attributeAfter(indexOf("public_post_feed-actor-name"), "href", window = 1) ?: linkBeforeActorName()
-        return href?.let(::handleIn)
-    }
+    // Split from the one authorHandle of this file
+    // (https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/data/linkedin/PostPageParser.kt#authorHandle):
+    // the link is read once by authorHref, the handle and now the kind both come from it. The kind is LinkedInLink's
+    // own reading of /in/ and /company/ (school and showcase too) through Markup.kindIn, so a post by a page makes
+    // its author open as a company.
+    private fun String.authorHandle(): String? = authorHref()?.let(::handleIn)
+
+    private fun String.authorKind(): AccountKind = authorHref()?.let(Markup::kindIn) ?: AccountKind.PERSON
+
+    private fun String.authorHref(): String? =
+        attributeAfter(indexOf("public_post_feed-actor-name"), "href", window = 1) ?: linkBeforeActorName()
 
     /**
      * The actor link, read backwards from its tracking name.
@@ -423,6 +432,7 @@ class PostPageParser {
         return Post(
             id = id,
             authorHandle = href?.let(::handleIn).orEmpty(),
+            authorKind = href?.let(Markup::kindIn) ?: AccountKind.PERSON,
             authorName = name,
             avatarUrl = attributeAfter("hue-web-entity__image", "data-delayed-url")?.let(Markup::decodeEntities),
             text = text,

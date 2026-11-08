@@ -298,7 +298,10 @@ private fun LinkedOutNavHost(navController: NavHostController) {
             }
             composable(Routes.SAVED_MEDIA) {
                 ReadableScroll {
-                    SavedMediaScreen(onBack = { navController.back() })
+                    SavedMediaScreen(
+                        onBack = { navController.back() },
+                        onOpenPost = { id, handle -> navController.open(Routes.post(id, handle)) }
+                    )
                 }
             }
             composable(
@@ -357,7 +360,7 @@ private fun LinkedOutNavHost(navController: NavHostController) {
                         id = entry.arguments?.getString("id").orEmpty(),
                         from = entry.arguments?.getString("from"),
                         onBack = { navController.back() },
-                        onOpenProfile = { handle -> navController.open(Routes.feed(handle)) },
+                        onOpenProfile = { handle, kind -> navController.open(Routes.feed(handle, kind)) },
                         onOpenPost = { post -> navController.open(Routes.post(post.id, post.authorHandle)) }
                     )
                 }

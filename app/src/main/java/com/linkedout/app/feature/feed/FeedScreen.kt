@@ -68,7 +68,16 @@ import com.linkedout.app.ui.component.ErrorPanel
 import com.linkedout.app.ui.component.InnerZoneShape
 import com.linkedout.app.ui.component.LocalInlinePlaying
 import com.linkedout.app.ui.component.PostCard
-import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.feature.BarAction
+import com.linkedout.app.ui.component.BarTitle
+import com.linkedout.app.ui.component.FloatingTopBar
+import com.linkedout.app.ui.component.scrolledFromTop
+import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.linkedout.app.ui.component.ScrollUpButton
 import com.linkedout.app.ui.component.Zone
 import com.linkedout.app.ui.component.ZoneGap
@@ -91,6 +100,7 @@ import org.koin.compose.koinInject
  * The profile zone is always there, even before anything loaded, so you can
  * follow an account whose page is momentarily unreachable.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(
     handle: String,
@@ -168,48 +178,67 @@ fun FeedScreen(
     // top to bend it as Home's does.
     val look = LocalGlass.current
     val listBackdrop = rememberGlassBackdrop()
+    // Ported from MTGA's FeedScreen: the Scaffold whose topBar is the FloatingTopBar, the list under it with
+    // underFloatingTopBar, the bar folding by enterAlwaysScrollBehavior
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    // LinkedOut's change: the profile card is the list's first item. While it is on screen it carries Back and
+    // Refresh itself and no bar is drawn, so the room the bar took goes to the profile. Once it has left, the bar
+    // comes in with the name as title (MTGA's headerGone).
+    val headerGone by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     CompositionLocalProvider(LocalInlinePlaying provides inline) {
-        Box(Modifier.fillMaxSize()) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize().then(if (look != null) Modifier.glassSource(listBackdrop, look) else Modifier),
-                contentPadding = PaddingValues(
-                    start = LocalReadableInset.current,
-                    end = LocalReadableInset.current,
-                    top = statusBarTop(),
-                    bottom = navigationBarBottom()
-                )
-            ) {
-                item(key = "banner") {
-                    ScreenBanner(
-                        title = name ?: "@$handle",
-                        subtitle = feed?.let(::sourceLine),
-                        leading = {
-                            BannerAction(
-                                icon = LinkedOutIcons.ArrowBack,
-                                label = "Back",
-                                onClick = onBack
-                            )
-                        },
-                        trailing = {
+        Scaffold(
+            // The page's ground is painted under the whole app, see MainActivity.
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            topBar = {
+                if (headerGone) {
+                    FloatingTopBar(
+                        scrollBehavior = scrollBehavior,
+                        title = { BarTitle(name ?: "@$handle") },
+                        navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
+                        actions = {
                             if (state.loading) {
-                                LoadingMark(size = 24.dp)
+                                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                    LoadingMark(size = 24.dp)
+                                }
                             } else {
-                                BannerAction(
-                                    icon = LinkedOutIcons.Refresh,
-                                    label = "Refresh",
-                                    onClick = viewModel::refresh
-                                )
+                                BarAction(LinkedOutIcons.Refresh, "Refresh", viewModel::refresh)
                             }
                         }
                     )
                 }
-
+            }
+        ) { padding ->
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .underFloatingTopBar(
+                        barHeight = padding.calculateTopPadding(),
+                        scrolled = listState::scrolledFromTop,
+                        foldOffset = { scrollBehavior.state.heightOffset }
+                    )
+                    .then(if (look != null) Modifier.glassSource(listBackdrop, look) else Modifier),
+                // The top is the list's start only: the profile card begins under the status bar, where the bar
+                // would be, and what scrolls up goes under the bar whatever its height.
+                contentPadding = PaddingValues(
+                    start = LocalReadableInset.current,
+                    end = LocalReadableInset.current,
+                    top = statusBarTop() + 2.dp,
+                    bottom = navigationBarBottom()
+                )
+            ) {
                 item(key = "header") {
                     ProfileZone(
                         handle = handle,
                         name = name,
                         feed = feed,
+                        loading = state.loading,
+                        onBack = onBack,
+                        onRefresh = viewModel::refresh,
                         isFollowing = isFollowing,
                         onToggleFollow = {
                         // Following answers at once; unfollowing asks first, a stray
@@ -297,18 +326,24 @@ fun FeedScreen(
                 )
             }
         }
+        }
     }
 }
 
 /**
- * Who this account is, in one zone. The name is in the banner above, so it is
- * not repeated here.
+ * Who this account is, in one zone, with its Back and Refresh in the card's top corners: the same round glass
+ * actions as a banner's, inset 12 dp, so the avatar's top sits on their line and no bar is needed above the card.
+ * They are drawn inside the card as BannerAction draws them, on the card's own glass and not on the backdrop of
+ * the list this card is an item of.
  */
 @Composable
 private fun ProfileZone(
     handle: String,
     name: String?,
     feed: Feed?,
+    loading: Boolean,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
     isFollowing: Boolean,
     onToggleFollow: () -> Unit,
     onOpenAvatar: (String) -> Unit
@@ -320,8 +355,19 @@ private fun ProfileZone(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = ZoneGap)
     ) {
+        Box {
+        Box(Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 12.dp)) {
+            BannerAction(icon = LinkedOutIcons.ArrowBack, label = "Back", onClick = onBack)
+        }
+        Box(Modifier.align(Alignment.TopEnd).padding(end = 12.dp, top = 12.dp)) {
+            if (loading) {
+                Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { LoadingMark(size = 24.dp) }
+            } else {
+                BannerAction(icon = LinkedOutIcons.Refresh, label = "Refresh", onClick = onRefresh)
+            }
+        }
         Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
@@ -347,6 +393,15 @@ private fun ProfileZone(
                     .clickable(enabled = avatar != null) { avatar?.let(onOpenAvatar) }
             ) {
                 Avatar(url = avatar, name = name ?: handle, size = 88.dp)
+            }
+
+            // The bar has no title at rest, so the name is the card's first line (MTGA's ProfileHeader).
+            if (name != null) {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    textAlign = TextAlign.Center
+                )
             }
 
             Text(
@@ -411,6 +466,7 @@ private fun ProfileZone(
                 }
             }
         }
+        }
     }
 }
 
@@ -422,17 +478,6 @@ private fun compactCount(value: Long): String = when {
         val millions = value / 100_000 / 10.0
         String.format(Locale.getDefault(), "%.1fM", millions).replace(".0M", "M").replace(",0M", "M")
     }
-}
-
-/** Which server answered and how fresh it is. LinkedOut always names its source. */
-private fun sourceLine(feed: Feed): String {
-    val age = relativeTime(feed.fetchedAtMillis)
-    val freshness = when {
-        age.isEmpty() -> ""
-        age == "now" -> ", updated just now"
-        else -> ", updated $age ago"
-    }
-    return "Read via ${feed.fetchedFromHost}$freshness"
 }
 
 /**

@@ -1,10 +1,14 @@
 package com.linkedout.app.feature.debug
 
 import androidx.compose.ui.graphics.Color
-import com.linkedout.app.ui.component.BannerAction
-import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.feature.BarAction
+import com.linkedout.app.ui.component.BarTitle
+import com.linkedout.app.ui.component.FloatingTopBar
+import com.linkedout.app.ui.component.plus
+import com.linkedout.app.ui.component.scrolledFromTop
+import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.linkedout.app.ui.component.navigationBarBottom
-import com.linkedout.app.ui.component.statusBarTop
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.linkedout.app.ui.component.ZoneSurface
 import com.linkedout.app.ui.component.rememberHaptics
@@ -51,6 +55,7 @@ import androidx.compose.foundation.layout.WindowInsets
  * The point is that a bug report can carry evidence rather than a description.
  * Nothing here leaves the device unless you export it and send it yourself.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun DebugLogScreen(onBack: () -> Unit) {
     val log: RequestLog = koinInject()
@@ -72,40 +77,32 @@ fun DebugLogScreen(onBack: () -> Unit) {
         // is where the empty band above and below the content came from. The
         // list below owns them once, in its content padding.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        // Ported from MTGA's FeedScreen: the FloatingTopBar as the Scaffold's topBar (Back, Clear), the list under it
+        // with underFloatingTopBar
+        // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
+        topBar = {
+            FloatingTopBar(
+                title = { BarTitle("Activity log") },
+                navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
+                actions = { BarAction(LinkedOutIcons.Delete, "Clear", log::clear) }
+            )
+        },
         snackbarHost = { SnackbarHost(snackbar) }
-    ) {
-        // The whole page is one list, the banner of the profile page its first row
-        // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L173-L206
+    ) { padding ->
+        val listState = rememberLazyListState()
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().underFloatingTopBar(
+                barHeight = padding.calculateTopPadding(),
+                scrolled = listState::scrolledFromTop
+            ),
             contentPadding = PaddingValues(
                 start = LocalReadableInset.current,
                 end = LocalReadableInset.current,
-                top = statusBarTop(),
                 bottom = 12.dp + navigationBarBottom()
-            ),
+            ).plus(padding),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item(key = "banner") {
-                ScreenBanner(
-                    title = "Activity log",
-                    leading = {
-                        BannerAction(
-                            icon = LinkedOutIcons.ArrowBack,
-                            label = "Back",
-                            onClick = onBack
-                        )
-                    },
-                    trailing = {
-                        BannerAction(
-                            icon = LinkedOutIcons.Delete,
-                            label = "Clear",
-                            onClick = log::clear
-                        )
-                    }
-                )
-            }
-
             item(key = "actions") {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),

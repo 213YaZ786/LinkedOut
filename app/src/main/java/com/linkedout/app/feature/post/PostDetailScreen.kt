@@ -1,10 +1,14 @@
 package com.linkedout.app.feature.post
 
 import androidx.compose.ui.graphics.Color
-import com.linkedout.app.ui.component.BannerAction
-import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.feature.BarAction
+import com.linkedout.app.ui.component.BarTitle
+import com.linkedout.app.ui.component.FloatingTopBar
+import com.linkedout.app.ui.component.plus
+import com.linkedout.app.ui.component.scrolledFromTop
+import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.foundation.lazy.rememberLazyListState
 import com.linkedout.app.ui.component.navigationBarBottom
-import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.RejectOnFailure
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.BoldButton
@@ -59,6 +63,7 @@ import com.linkedout.app.core.media.MediaDownloader
 import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.core.link.LinkRouter
 import com.linkedout.app.core.link.ShareLink
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.core.model.PostStats
 import com.linkedout.app.feature.media.MediaViewer
@@ -95,7 +100,7 @@ fun PostDetailScreen(
     id: String,
     from: String?,
     onBack: () -> Unit,
-    onOpenProfile: (String) -> Unit,
+    onOpenProfile: (handle: String, kind: AccountKind) -> Unit,
     onOpenPost: (Post) -> Unit,
     viewModel: PostDetailViewModel = koinViewModel()
 ) {
@@ -134,12 +139,11 @@ fun PostDetailScreen(
                     Modifier.fillMaxSize().padding(
                         start = LocalReadableInset.current,
                         end = LocalReadableInset.current,
-                        top = statusBarTop(),
                         bottom = navigationBarBottom()
                     )
                 ) {
                     // A way back while the post loads and when it is gone.
-                    PostBanner(onBack = onBack, onShare = null)
+                    PostBar(onBack = onBack, onShare = null)
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         if (state.missing) {
                             val error = (state.thread as? ThreadState.Failed)?.error
@@ -165,29 +169,19 @@ fun PostDetailScreen(
 }
 
 /**
- * The page's top, the profile page's banner: a round glass Back, "Post" as plain
- * text in the accent, and Share once the post is known.
- * Ported from FeedScreen's banner
- * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L178-L209
+ * The page's top: the floating bar with "Post", a Back and Share once the post is known.
+ * Ported from MTGA's PostDetailScreen bar
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/post/PostDetailScreen.kt#PostDetailScreen
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun PostBanner(onBack: () -> Unit, onShare: (() -> Unit)?) {
-    ScreenBanner(
-        title = "Post",
-        leading = {
-            BannerAction(
-                icon = LinkedOutIcons.ArrowBack,
-                label = "Back",
-                onClick = onBack
-            )
-        },
-        trailing = {
+private fun PostBar(onBack: () -> Unit, onShare: (() -> Unit)?) {
+    FloatingTopBar(
+        title = { BarTitle("Post") },
+        navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
+        actions = {
             if (onShare != null) {
-                BannerAction(
-                    icon = LinkedOutIcons.Share,
-                    label = "Share",
-                    onClick = onShare
-                )
+                BarAction(LinkedOutIcons.Share, "Share", onShare)
             }
         }
     )
@@ -198,13 +192,14 @@ private fun PostBanner(onBack: () -> Unit, onShare: (() -> Unit)?) {
  * the post itself in full, the author's own thread, and the replies.
  */
 // Internal so PostDetailScreenshotTest draws the real page with fixed data, the screen itself needing its ViewModel.
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun ConversationView(
     onBack: () -> Unit,
     onShare: () -> Unit,
     post: Post,
     thread: ThreadState,
-    onOpenProfile: (String) -> Unit,
+    onOpenProfile: (handle: String, kind: AccountKind) -> Unit,
     onOpenPost: (Post) -> Unit,
     onRetry: () -> Unit,
     shareLink: String
@@ -240,18 +235,29 @@ internal fun ConversationView(
         )
     }
 
+    // Ported from MTGA's PostDetailScreen: the Scaffold whose topBar is the FloatingTopBar (Back, Share), the list
+    // under it with underFloatingTopBar
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/post/PostDetailScreen.kt#PostDetailScreen).
+    // The status and navigation bars are the list's own, the Scaffold takes none (the bar clears the status bar itself).
+    Scaffold(
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = { PostBar(onBack = onBack, onShare = onShare) }
+    ) { padding ->
+    val listState = rememberLazyListState()
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize().underFloatingTopBar(
+            barHeight = padding.calculateTopPadding(),
+            scrolled = listState::scrolledFromTop
+        ),
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,
-            top = statusBarTop(),
             bottom = navigationBarBottom()
-        )
+        ).plus(padding)
     ) {
-        // The banner is the list's first row, so the whole page scrolls with it.
-        item(key = "banner") { PostBanner(onBack = onBack, onShare = onShare) }
-
         val ancestors = conversation?.ancestors.orEmpty()
         if (ancestors.isNotEmpty()) {
             item(key = "earlier") { SectionLabel("Earlier in the conversation") }
@@ -349,6 +355,7 @@ internal fun ConversationView(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -366,7 +373,7 @@ private fun SectionLabel(text: String) {
 private fun PostBody(
     post: Post,
     showCounts: Boolean,
-    onOpenProfile: (String) -> Unit,
+    onOpenProfile: (handle: String, kind: AccountKind) -> Unit,
     onOpenMedia: (Int) -> Unit,
     shareLink: String
 ) {
@@ -390,7 +397,9 @@ private fun PostBody(
             // Same fill as the zone it sits in, so the author row reads as a
             // tappable line and not as a second box drawn inside the first.
             Surface(
-                onClick = { onOpenProfile(post.authorHandle) },
+                // The author's kind rides with the handle, so a page opens as a company at once and the feed
+                // does not spend a 404 on /in/ first.
+                onClick = { onOpenProfile(post.authorHandle, post.authorKind) },
                 shape = InnerZoneShape,
                 // See through: this is a tap target on the zone, not a second
                 // card inside the first one.
@@ -423,7 +432,7 @@ private fun PostBody(
             if (post.text.isNotBlank()) {
                 val linkColor = MaterialTheme.colorScheme.primary
                 val annotated = remember(post.id, post.text, post.links, linkColor) {
-                    linkify(post.text, post.links, linkColor, onOpenProfile)
+                    linkify(post.text, post.links, linkColor) { onOpenProfile(it, AccountKind.PERSON) }
                 }
                 SelectionContainer {
                     Text(
@@ -464,7 +473,7 @@ private fun PostBody(
             post.note?.let { note ->
                 val noteLinkColor = MaterialTheme.colorScheme.primary
                 val noteText = remember(post.id, note, noteLinkColor) {
-                    linkify(note.text, note.links, noteLinkColor, onOpenProfile)
+                    linkify(note.text, note.links, noteLinkColor) { onOpenProfile(it, AccountKind.PERSON) }
                 }
                 SelectionContainer { NoteBlock(note, text = noteText) }
             }

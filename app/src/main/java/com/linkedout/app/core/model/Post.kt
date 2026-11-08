@@ -14,6 +14,8 @@ import kotlinx.serialization.Serializable
 data class Post(
     val id: String,
     val authorHandle: String,
+    /** A person or an organisation, read from the author's link. PERSON by default so old caches read as before. */
+    val authorKind: AccountKind = AccountKind.PERSON,
     val authorName: String,
     val avatarUrl: String? = null,
     val text: String,

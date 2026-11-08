@@ -80,7 +80,7 @@ class PostDetailScreenshotTest : ScreenshotBase() {
                     host = "www.linkedin.com"
                 )
             ),
-            onOpenProfile = {},
+            onOpenProfile = { _, _ -> },
             onOpenPost = {},
             onRetry = {},
             shareLink = main.permalink

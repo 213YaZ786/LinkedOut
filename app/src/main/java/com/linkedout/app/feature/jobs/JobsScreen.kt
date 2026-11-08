@@ -56,7 +56,14 @@ import com.linkedout.app.ui.component.SubmenuHeader
 import com.linkedout.app.ui.component.ValueMenuItem
 import com.linkedout.app.ui.component.ErrorPanel
 import com.linkedout.app.ui.component.LocalDockPadding
-import com.linkedout.app.ui.component.ScreenBanner
+import com.linkedout.app.ui.component.BarTitle
+import com.linkedout.app.ui.component.FloatingTopBar
+import com.linkedout.app.ui.component.plus
+import com.linkedout.app.ui.component.scrolledFromTop
+import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Scaffold
 import com.linkedout.app.ui.component.Zone
 import com.linkedout.app.ui.component.ZoneGap
 import com.linkedout.app.ui.icon.LinkedOutIcons
@@ -73,6 +80,7 @@ import java.time.format.FormatStyle
  * tap rather than on a scroll: every request here is shared with the profile
  * reads, which LinkedIn is quick to refuse.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun JobsScreen(
     onOpenJob: (JobCard) -> Unit,
@@ -102,24 +110,31 @@ fun JobsScreen(
         viewModel.setFilters(draft)
     }
 
+    // Ported from MTGA's FeedScreen: the FloatingTopBar as the Scaffold's topBar, the list under it with
+    // underFloatingTopBar
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
+    // Jobs is a main tab: no Back, and no action, as its banner had none.
+    Scaffold(
+        // The page's ground is painted under the whole app, see MainActivity.
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        // The list owns the dock's room in its content padding, the bar clears the status bar itself.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = { FloatingTopBar(title = { BarTitle("Jobs") }) }
+    ) { padding ->
+    val listState = rememberLazyListState()
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize().underFloatingTopBar(
+            barHeight = padding.calculateTopPadding(),
+            scrolled = listState::scrolledFromTop
+        ),
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,
-            top = statusBarTop(),
             bottom = LocalDockPadding.current + 16.dp
-        )
+        ).plus(padding)
     ) {
-        item(key = "banner") {
-            ScreenBanner(
-                title = "Jobs",
-                subtitle = state.searched?.let { (keywords, location) ->
-                    if (location.isBlank()) keywords else "$keywords, $location"
-                }
-            )
-        }
-
         item(key = "search") {
             Zone(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = ZoneGap)) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -267,6 +282,7 @@ fun JobsScreen(
                 }
             }
         }
+    }
     }
 }
 

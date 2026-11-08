@@ -33,10 +33,17 @@ import com.linkedout.app.data.marks.SavedJobs
 import org.koin.compose.koinInject
 import com.linkedout.app.data.linkedin.JobsParser
 import com.linkedout.app.navigation.LocalReadableInset
-import com.linkedout.app.ui.component.BannerAction
+import com.linkedout.app.feature.BarAction
+import com.linkedout.app.ui.component.BarTitle
+import com.linkedout.app.ui.component.FloatingTopBar
+import com.linkedout.app.ui.component.plus
+import com.linkedout.app.ui.component.scrolledFromTop
+import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Scaffold
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.component.ErrorPanel
-import com.linkedout.app.ui.component.ScreenBanner
 import com.linkedout.app.ui.component.Zone
 import com.linkedout.app.ui.component.ZoneGap
 import com.linkedout.app.ui.icon.LinkedOutIcons
@@ -47,6 +54,7 @@ import org.koin.androidx.compose.koinViewModel
  * read from its guest page. Applying happens on LinkedIn, which is where the
  * button leads, outside the app.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun JobDetailScreen(
     id: String,
@@ -62,27 +70,25 @@ fun JobDetailScreen(
     val offer = state.detail
     val kept = offer != null && saved.isSaved(offer.id)
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            start = LocalReadableInset.current,
-            end = LocalReadableInset.current,
-            top = statusBarTop(),
-            bottom = 24.dp + navigationBarBottom()
-        )
-    ) {
-        item(key = "banner") {
-            ScreenBanner(
-                title = "Offer",
-                leading = { BannerAction(icon = LinkedOutIcons.ArrowBack, label = "Back", onClick = onBack) },
-                // Save on the trailing side, as Refresh on a profile and Share on a post
-                // (FeedScreen's banner): the bookmark in the accent while the offer is kept. BannerAction
-                // gives the haptic tick itself, so none is added here.
-                // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#FeedScreen
-                // not ported: FeedScreen's other banner and list pieces (the profile, its posts, Follow, media saving)
-                trailing = if (offer == null) null else {
-                    {
-                        BannerAction(
+    // Ported from MTGA's FeedScreen: the FloatingTopBar as the Scaffold's topBar, the list under it with
+    // underFloatingTopBar
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
+    // not ported: FeedScreen's other pieces (the profile, its posts, Follow, media saving, the header-gone title)
+    Scaffold(
+        // The page's ground is painted under the whole app, see MainActivity.
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        // The list owns the navigation bar in its content padding, the bar clears the status bar itself.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            FloatingTopBar(
+                title = { BarTitle("Offer") },
+                navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
+                // Save on the trailing side, as Refresh on a profile and Share on a post: the bookmark in the
+                // accent while the offer is kept.
+                actions = {
+                    if (offer != null) {
+                        BarAction(
                             icon = LinkedOutIcons.Bookmark,
                             label = if (kept) "Saved" else "Save",
                             onClick = { savedJobs.toggle(offer) },
@@ -92,7 +98,20 @@ fun JobDetailScreen(
                 }
             )
         }
-
+    ) { padding ->
+    val listState = rememberLazyListState()
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize().underFloatingTopBar(
+            barHeight = padding.calculateTopPadding(),
+            scrolled = listState::scrolledFromTop
+        ),
+        contentPadding = PaddingValues(
+            start = LocalReadableInset.current,
+            end = LocalReadableInset.current,
+            bottom = 24.dp + navigationBarBottom()
+        ).plus(padding)
+    ) {
         val detail = state.detail
         when {
             state.loading -> item(key = "loading") {
@@ -121,6 +140,7 @@ fun JobDetailScreen(
                 if (detail.description.isNotBlank()) item(key = "description") { Description(detail.description) }
             }
         }
+    }
     }
 }
 

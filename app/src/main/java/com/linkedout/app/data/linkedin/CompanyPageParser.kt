@@ -1,6 +1,7 @@
 package com.linkedout.app.data.linkedin
 
 import com.linkedout.app.core.link.LinkedInLink
+import com.linkedout.app.core.model.AccountKind
 import com.linkedout.app.core.model.Feed
 import com.linkedout.app.core.model.MediaItem
 import com.linkedout.app.core.model.MediaType
@@ -222,6 +223,9 @@ class CompanyPageParser {
             // lockup, and calling it the page being read attributes someone
             // else's post to them.
             authorHandle = actorHandle() ?: slug,
+            // The kind of whoever the lockup names (a reposted card names its original author, a person or
+            // another page); with no lockup of its own the card is the page's, an organisation.
+            authorKind = actorKind() ?: AccountKind.COMPANY,
             authorName = textAfter("feed-actor-name", "</a>").orEmpty(),
             avatarUrl = attributeAfter("hue-web-entity__image", "data-delayed-url")
                 ?.let(Markup::decodeEntities),
@@ -248,10 +252,17 @@ class CompanyPageParser {
      * actor's link is the first one inside it. Reading backwards would find
      * the card's own overlay link, which points at the post.
      */
-    private fun String.actorHandle(): String? {
+    // Split from the one actorHandle of this file
+    // (https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/data/linkedin/CompanyPageParser.kt#actorHandle):
+    // the lockup's link is read once by actorHref, the handle and the kind both come from it. The kind is
+    // LinkedInLink's own reading of /in/ and /company/ through Markup.kindIn.
+    private fun String.actorHandle(): String? = actorHref()?.let(Markup::handleIn)
+
+    private fun String.actorKind(): AccountKind? = actorHref()?.let(Markup::kindIn)
+
+    private fun String.actorHref(): String? {
         val at = indexOf(LOCKUP).takeIf { it >= 0 } ?: return null
-        val href = attributeAfter(at, "href", window = 600) ?: return null
-        return Markup.handleIn(href)
+        return attributeAfter(at, "href", window = 600)
     }
 
     /**

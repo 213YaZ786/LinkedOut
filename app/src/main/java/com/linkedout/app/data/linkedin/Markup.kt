@@ -1,5 +1,8 @@
 package com.linkedout.app.data.linkedin
 
+import com.linkedout.app.core.link.LinkedInLink
+import com.linkedout.app.core.model.AccountKind
+
 /**
  * The small string tools both LinkedIn parsers need.
  *
@@ -125,6 +128,21 @@ internal object Markup {
     }
 
     private val HANDLE_MARKERS = listOf("/in/", "/company/", "/school/", "/showcase/")
+
+    /**
+     * Which kind of account a profile or organisation link points at, from LinkedInLink's own reading of /in/ and
+     * /company/ (school and showcase too): an organisation link gives its segment's kind, a profile, a post or
+     * anything it cannot read is a person. Next to [handleIn] so the post parsers and the company parser read an
+     * author the same way.
+     * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/core/link/LinkedInLink.kt#parse
+     */
+    fun kindIn(url: String): AccountKind {
+        val trimmed = decodeEntities(url).trim()
+        return when (val link = LinkedInLink.parse(trimmed)) {
+            is LinkedInLink.Company -> AccountKind.ofSegment(link.segment)
+            is LinkedInLink.Profile, is LinkedInLink.Post, null -> AccountKind.PERSON
+        }
+    }
 
     fun links(html: String): List<String> =
         HREF.findAll(html).map { decodeEntities(it.groupValues[1]) }

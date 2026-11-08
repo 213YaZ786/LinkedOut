@@ -1,11 +1,19 @@
 package com.linkedout.app.feature.connection
 
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.linkedout.app.ui.component.BannerAction
-import com.linkedout.app.ui.component.ScreenBanner
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Scaffold
+import androidx.compose.ui.graphics.Color
+import com.linkedout.app.feature.BarAction
+import com.linkedout.app.ui.component.BarTitle
+import com.linkedout.app.ui.component.FloatingTopBar
+import com.linkedout.app.ui.component.plus
+import com.linkedout.app.ui.component.scrolledFromTop
+import com.linkedout.app.ui.component.underFloatingTopBar
 import com.linkedout.app.ui.component.ZoneSurface
 import com.linkedout.app.ui.component.navigationBarBottom
-import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,36 +46,41 @@ import org.koin.compose.koinInject
  * its state, whether the referrer retry was needed and whether the offscreen
  * browser had to take over, is what belongs on this screen once it exists.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionScreen(onBack: () -> Unit) {
     val throttle: HostThrottle = koinInject()
     val cooldownMs = throttle.cooldownRemainingMs(LinkedInHost.HOST)
 
-    // The page's ground is painted under the whole app, see MainActivity. The whole page is one list, the banner
-    // of the profile page its first row, so it scrolls with the rest
-    // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#L173-L206
+    // Ported from MTGA's FeedScreen: the FloatingTopBar as the Scaffold's topBar, the list under it with
+    // underFloatingTopBar
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
+    Scaffold(
+        // The page's ground is painted under the whole app, see MainActivity.
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        // The list owns the navigation bar in its content padding, the bar clears the status bar itself.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            FloatingTopBar(
+                title = { BarTitle("Connection") },
+                navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) }
+            )
+        }
+    ) { padding ->
+    val listState = rememberLazyListState()
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize().underFloatingTopBar(
+            barHeight = padding.calculateTopPadding(),
+            scrolled = listState::scrolledFromTop
+        ),
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,
-            top = statusBarTop(),
             bottom = navigationBarBottom()
-        )
+        ).plus(padding)
     ) {
-        item(key = "banner") {
-            ScreenBanner(
-                title = "Connection",
-                leading = {
-                    BannerAction(
-                        icon = LinkedOutIcons.ArrowBack,
-                        label = "Back",
-                        onClick = onBack
-                    )
-                }
-            )
-        }
-
         item(key = "host") {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -103,5 +116,6 @@ fun ConnectionScreen(onBack: () -> Unit) {
             )
         }
         }
+    }
     }
 }
