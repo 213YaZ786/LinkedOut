@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.heading
@@ -110,13 +111,15 @@ fun BannerAction(
     label: String,
     onClick: () -> Unit,
     container: Color = MaterialTheme.colorScheme.secondaryContainer,
-    tint: Color = MaterialTheme.colorScheme.onSecondaryContainer
+    tint: Color = Color.Unspecified
 ) {
     // Through the view: the constant has existed far longer than the
     // minimum version, and the system setting still decides.
     val view = LocalView.current
     // In glass, a small pane of its own on the banner's glass, the icon in
-    // the accent; otherwise filled, with the edge every action carries.
+    // the accent unless a tint is asked for; otherwise filled, with the edge every action carries.
+    // A tint left Unspecified takes the default of its context, as Material 3's Text colour (takeOrElse):
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Text.kt#Text
     val glass = LocalGlass.current
     // In glass, the 48 dp touch target outside the pane (GlassTarget), so the ripple fills the glass.
     GlassTarget(Modifier) {
@@ -131,7 +134,7 @@ fun BannerAction(
             modifier = if (glass == null) Modifier else Modifier.glassZone(CircleShape, glass, lens = 1f)
         ) {
             Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = label, tint = if (glass == null) tint else MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                Icon(icon, contentDescription = label, tint = if (glass == null) tint.takeOrElse { MaterialTheme.colorScheme.onSecondaryContainer } else tint.takeOrElse { MaterialTheme.colorScheme.primary }, modifier = Modifier.size(22.dp))
             }
         }
     }

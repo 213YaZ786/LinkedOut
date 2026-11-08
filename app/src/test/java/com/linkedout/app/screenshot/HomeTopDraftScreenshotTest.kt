@@ -24,6 +24,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -191,13 +194,53 @@ class HomeTopDraftScreenshotTest : ScreenshotBase() {
         }
     }
 
+    // D: c with the Material Symbols Rounded "warning" (fill 1) in place of the sharp Material Icons triangle. Built as
+    // LinkedOutIcons.build does, a 960 viewport; the path is the symbol's own, unchanged.
+    // https://github.com/google/material-design-icons/blob/master/symbols/android/warning/materialsymbolsrounded/warning_fill1_24px.xml#warning
+    @OptIn(ExperimentalLayoutApi::class)
+    @Test
+    fun d() = capture("home_top_d") {
+        Screen {
+            HeaderRow(alertInError = true, alertIcon = WarningRounded, centre = {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+                    itemVerticalAlignment = Alignment.CenterVertically
+                ) {
+                    FeedPill()
+                    Age()
+                }
+            })
+        }
+    }
+
+    private val WarningRounded: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "WarningRounded",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 960f,
+            viewportHeight = 960f
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString(
+                    "M109,840Q98,840 89,834.5Q80,829 75,820Q70,811 69.5,800.5Q69,790 75,780L445,140Q451,130 460.5,125Q470,120 480,120Q490,120 499.5,125Q509,130 515,140L885,780Q891,790 890.5,800.5Q890,811 885,820Q880,829 871,834.5Q862,840 851,840L109,840Z" +
+                        "M480,720Q497,720 508.5,708.5Q520,697 520,680Q520,663 508.5,651.5Q497,640 480,640Q463,640 451.5,651.5Q440,663 440,680Q440,697 451.5,708.5Q463,720 480,720Z" +
+                        "M480,600Q497,600 508.5,588.5Q520,577 520,560L520,440Q520,423 508.5,411.5Q497,400 480,400Q463,400 451.5,411.5Q440,423 440,440L440,560Q440,577 451.5,588.5Q463,600 480,600Z"
+                ).toNodes(),
+                fill = SolidColor(Color.Black)
+            )
+        }.build()
+    }
+
     // BannerAction in glass draws its icon in the accent and ignores [tint] (`tint = if (glass == null) tint else
     // primary`), so for the draft the alert is a faithful copy of BannerAction's glass branch (GlassTarget, then a Surface
     // with glassZone, the same 44 dp box and 22 dp icon) whose icon takes the error colour. In the app this means a
     // `tint` that glass honours, in ScreenBanner.kt.
     // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/ui/component/ScreenBanner.kt#BannerAction
     @Composable
-    private fun AlertAction(onClick: () -> Unit) {
+    private fun AlertAction(onClick: () -> Unit, icon: ImageVector = LinkedOutIcons.Warning) {
         val glass = LocalGlass.current
         GlassTarget(Modifier) {
             Surface(
@@ -208,7 +251,7 @@ class HomeTopDraftScreenshotTest : ScreenshotBase() {
             ) {
                 Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) {
                     Icon(
-                        LinkedOutIcons.Warning,
+                        icon,
                         contentDescription = "What went wrong",
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(22.dp)
@@ -233,7 +276,11 @@ class HomeTopDraftScreenshotTest : ScreenshotBase() {
     // HomeHeaderLayoutMobile's header: a slot, the centre taking the rest (flex_1, align_center), a slot. The slots are
     // the banner's 44 dp ones, both always drawn here: the alert at the left, Search at the right.
     @Composable
-    private fun HeaderRow(alertInError: Boolean = false, centre: @Composable () -> Unit) {
+    private fun HeaderRow(
+        alertInError: Boolean = false,
+        alertIcon: ImageVector = LinkedOutIcons.Warning,
+        centre: @Composable () -> Unit
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -243,7 +290,7 @@ class HomeTopDraftScreenshotTest : ScreenshotBase() {
         ) {
             Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) {
                 if (alertInError) {
-                    AlertAction(onClick = {})
+                    AlertAction(onClick = {}, icon = alertIcon)
                 } else {
                     BannerAction(
                         icon = LinkedOutIcons.Warning,

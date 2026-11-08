@@ -53,12 +53,19 @@ object LinkedOutIcons {
         )
     }
 
-    /** The failure mark. A triangle reads as "attention" at 22 dp, a circle does not. */
+    // The failure mark. A triangle reads as "attention" at 22 dp, a circle does not. Material Symbols Rounded, fill 1
+    // (width and height 24dp, viewportWidth and viewportHeight 960, path fillColor white): rounded corners.
+    // https://github.com/google/material-design-icons/blob/master/symbols/android/warning/materialsymbolsrounded/warning_fill1_24px.xml
     val Warning: ImageVector by lazy {
-        build(
-            "Warning",
-            "M1,21h22L12,2 1,21zM13,18h-2v-2h2v2zM13,14h-2v-4h2v4z"
-        )
+        val pathData = "M109,840Q98,840 89,834.5Q80,829 75,820Q70,811 69.5,800.5Q69,790 75,780L445,140Q451,130 460.5,125" +
+            "Q470,120 480,120Q490,120 499.5,125Q509,130 515,140L885,780Q891,790 890.5,800.5Q890,811 885,820" +
+            "Q880,829 871,834.5Q862,840 851,840L109,840ZM480,720Q497,720 508.5,708.5Q520,697 520,680Q520,663 508.5,651.5" +
+            "Q497,640 480,640Q463,640 451.5,651.5Q440,663 440,680Q440,697 451.5,708.5Q463,720 480,720Z" +
+            "M480,600Q497,600 508.5,588.5Q520,577 520,560L520,440Q520,423 508.5,411.5Q497,400 480,400Q463,400 451.5,411.5" +
+            "Q440,423 440,440L440,560Q440,577 451.5,588.5Q463,600 480,600Z"
+        ImageVector.Builder("Warning", 24.dp, 24.dp, viewportWidth = 960f, viewportHeight = 960f)
+            .addPath(pathData = PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
+            .build()
     }
 
     val Bell: ImageVector by lazy {
