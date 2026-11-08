@@ -72,7 +72,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.linkedout.app.core.common.AppError
-import com.linkedout.app.core.common.present
+import com.linkedout.app.core.common.Blame
+import com.linkedout.app.ui.component.ZoneShape
+import androidx.compose.material3.Icon
 import com.linkedout.app.core.media.MediaDownloader
 import com.linkedout.app.data.settings.AutoDownload
 import com.linkedout.app.sync.NewPostNotifier
@@ -166,7 +168,8 @@ fun TimelineScreen(
 
     if (showFailures) {
         FailureDialog(
-            failed = state.errors.toList(),
+            failed = state.errors.values.toList(),
+            followed = state.followedCount,
             silentDownloads = silentDownloads,
             onRetry = {
                 showFailures = false
@@ -533,69 +536,27 @@ private fun subtitle(state: TimelineUiState): String? = when {
 }
 
 /**
- * What went wrong, in words, and the one thing that helps.
- *
- * The reason itself is here rather than a count. "in/somebody could not be
- * updated" says nothing a reader can act on, while "LinkedIn put up its sign
- * in wall" and "you are offline" call for two different things, and one of
- * them is to do nothing at all.
+ * One message, centred over Home blurred behind it, naming where the trouble comes from. No
+ * profile is listed: with many follows a list helps nobody, and nothing can be done per profile.
+ * The dialog is ZoneAlertDialog's (Material's BasicAlertDialog, `onDismissRequest`, `content`:
+ * https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AlertDialog.kt#BasicAlertDialog ),
+ * its pane in the post card's shape.
  */
 @Composable
 private fun FailureDialog(
-    failed: List<Pair<String, AppError>>,
+    failed: List<AppError>,
+    followed: Int,
     silentDownloads: Boolean,
     onRetry: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val (title, text) = failureMessage(failed, followed) ?: (SILENT_DOWNLOADS_TITLE to SILENT_DOWNLOADS_TEXT)
     ZoneAlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                when {
-                    failed.isEmpty() -> "Downloads have no progress bar"
-                    failed.size == 1 -> "1 profile could not be updated"
-                    else -> "${failed.size} profiles could not be updated"
-                }
-            )
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (failed.isNotEmpty()) {
-                    Text(
-                        "Their saved posts are still in the stream.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                failed.take(FAILURES_SHOWN).forEach { (handle, error) ->
-                    val reason = error.present()
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("in/$handle", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            reason.explanation,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                if (failed.size > FAILURES_SHOWN) {
-                    Text(
-                        "and ${failed.size - FAILURES_SHOWN} more",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (silentDownloads) {
-                    Text(
-                        "Media is being saved for offline reading, but Android is not letting " +
-                            "LinkedOut show the progress. The files still arrive. Allow " +
-                            "notifications for LinkedOut in Android to see how far they are.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
+        shape = ZoneShape,
+        icon = if (failed.isEmpty()) null else ({ FailureIcon() }),
+        title = { Text(title) },
+        text = { FailureContent(text, silentDownloads && failed.isNotEmpty()) },
         confirmButton = {
             if (failed.isEmpty()) {
                 QuietButton(onClick = onDismiss) { Text("Close") }
@@ -607,6 +568,112 @@ private fun FailureDialog(
             if (failed.isNotEmpty()) QuietButton(onClick = onDismiss) { Text("Close") }
         }
     )
+}
+
+// The icon slot of Material's AlertDialog (icon, `iconContentColor`):
+// https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AlertDialog.kt#AlertDialogContent
+@Composable
+private fun FailureIcon() {
+    Icon(
+        LinkedOutIcons.Warning,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.error,
+        modifier = Modifier.size(24.dp)
+    )
+}
+
+// The text slot of Material's AlertDialog (`text`, `textContentColor`; ZoneAlertContent centres it):
+// https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AlertDialog.kt#AlertDialogContent
+@Composable
+private fun FailureContent(text: String, silentDownloads: Boolean) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text)
+        if (silentDownloads) Text(SILENT_DOWNLOADS_TEXT)
+    }
+}
+
+internal const val SILENT_DOWNLOADS_TITLE = "Downloads have no progress bar"
+internal const val SILENT_DOWNLOADS_TEXT =
+    "Media is being saved for offline reading, but Android is not letting " +
+        "LinkedOut show the progress. The files still arrive. Allow " +
+        "notifications for LinkedOut in Android to see how far they are."
+
+// Bluesky's PostFeedErrorMessage reads an error, picks a KnownError, then maps each KnownError to
+// its message: https://github.com/bluesky-social/social-app/blob/main/src/view/com/posts/PostFeedErrorMessage.tsx#detectKnownError
+// (MIT). Here the KnownError is the origin (AppError.blame) of one failed profile.
+// Not ported: Block (no counterpart), FeedgenErrorMessage and the feedgen parsing,
+// safeParseFeedgenUri, the remove feed prompt, onViewProfile, PostFeedErrorMessage's ErrorMessage.
+enum class KnownError {
+    Device,
+    Network,
+    Host,
+    Upstream,
+    App
+}
+
+internal fun detectKnownError(error: AppError?): KnownError? {
+    if (error == null) {
+        return null
+    }
+    // check the blame, as detectKnownError checks the name and the status code
+    if (error.blame == Blame.DEVICE) {
+        return KnownError.Device
+    }
+    if (error.blame == Blame.NETWORK) {
+        return KnownError.Network
+    }
+    if (error.blame == Blame.HOST) {
+        return KnownError.Host
+    }
+    if (error.blame == Blame.UPSTREAM) {
+        return KnownError.Upstream
+    }
+    return KnownError.App
+}
+
+// The KnownError to message map of FeedgenErrorMessage (`msg`, one message per KnownError, indexed by
+// the knownError), here a title and a text; [rawError] is the sentence counting the profiles:
+// https://github.com/bluesky-social/social-app/blob/main/src/view/com/posts/PostFeedErrorMessage.tsx#detectKnownError
+internal fun FeedgenErrorMessage(knownError: KnownError, rawError: String): Pair<String, String> {
+    val msg = mapOf(
+        KnownError.Device to ("You are offline" to
+            "Saved posts stay readable. New ones load when you are back online."),
+        KnownError.Network to ("Your connection does not reach LinkedIn" to
+            "$rawError Their saved posts stay readable."),
+        KnownError.Host to ("LinkedIn is holding back guests" to
+            "$rawError Their saved posts stay readable. Try again in a few minutes."),
+        KnownError.Upstream to ("Some profiles are not public" to
+            "$rawError Their saved posts stay readable."),
+        KnownError.App to ("LinkedOut could not read some pages" to
+            "$rawError Their saved posts stay readable.")
+    )[knownError]
+    return msg!!
+}
+
+// PostFeedErrorMessage's detectKnownError over every error, the knownError shared by most winning,
+// then its msg ([feedDesc] is how many profiles are followed):
+// https://github.com/bluesky-social/social-app/blob/main/src/view/com/posts/PostFeedErrorMessage.tsx#detectKnownError
+internal fun failureMessage(error: List<AppError>, feedDesc: Int): Pair<String, String>? {
+    val knownError = KnownError.entries.maxByOrNull { kind -> error.count { detectKnownError(it) == kind } }
+    if (error.isEmpty() || knownError == null) {
+        return null
+    }
+    val msg = if (knownError == KnownError.Upstream) {
+        if (error.size == 1) "shows nothing to a guest." else "show nothing to a guest."
+    } else {
+        if (error.size == 1) "was not updated." else "were not updated."
+    }
+    val rawError = if (feedDesc >= error.size) {
+        "${error.size} of $feedDesc profiles $msg"
+    } else if (error.size == 1) {
+        "1 profile $msg"
+    } else {
+        "${error.size} profiles $msg"
+    }
+    return FeedgenErrorMessage(knownError, rawError)
 }
 
 @Composable
@@ -638,9 +705,6 @@ private fun TimelineFooter(state: TimelineUiState, onLoadMore: () -> Unit) {
 }
 
 private const val LOAD_MORE_THRESHOLD = 5
-
-/** How many failed profiles the dialog names before it starts counting. */
-private const val FAILURES_SHOWN = 8
 
 @Composable
 private fun EmptyState(
