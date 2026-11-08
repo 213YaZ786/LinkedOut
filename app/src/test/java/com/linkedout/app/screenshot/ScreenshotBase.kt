@@ -88,4 +88,44 @@ abstract class ScreenshotBase {
             }
         }
     }
+
+    // Edge pictures of a draft, phone and day only: the screen at 200 % text and on a 360 dp phone. The font scale is
+    // set before the content and put back after, as captureRoboImage does with its fontScale
+    // https://github.com/takahirom/roborazzi/blob/main/roborazzi-compose/src/main/java/com/github/takahirom/roborazzi/RoborazziCompose.kt#captureRoboImage
+    // and the device by qualifiers, as captureMultiDevice
+    // https://github.com/android/nowinandroid/blob/main/core/screenshot-testing/src/main/kotlin/com/google/samples/apps/nowinandroid/core/testing/util/ScreenshotHelper.kt#captureMultiDevice
+    protected fun captureEdge(name: String, interact: () -> Unit = {}, body: @Composable () -> Unit) {
+        val savedQualifiers = RuntimeEnvironment.getQualifiers()
+        val savedFontScale = RuntimeEnvironment.getFontScale()
+        try {
+            listOf(
+                Triple("font200", "w411dp-h914dp-420dpi", 2f),
+                Triple("narrow", "w360dp-h760dp-xhdpi", 1f)
+            ).forEach { (edge, qualifiers, fontScale) ->
+                RuntimeEnvironment.setQualifiers(qualifiers)
+                RuntimeEnvironment.setFontScale(fontScale)
+                val picture = pictures++
+                compose.activity.setContent {
+                    CompositionLocalProvider(LocalInspectionMode provides true) {
+                        LinkedOutTheme(darkTheme = false, dynamicColor = false) {
+                            val look = rememberGlassLook(MaterialTheme.colorScheme, true, quiet = true)
+                            CompositionLocalProvider(LocalGlass provides look, LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+                                key(picture) {
+                                    Box(Modifier.fillMaxSize().glassGround(look, MaterialTheme.colorScheme.background)) {
+                                        ReadableScroll { body() }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                compose.waitForIdle()
+                interact()
+                compose.onRoot().captureRoboImage("src/test/screenshots/${name}_edge_${edge}.png", roborazziOptions = options)
+            }
+        } finally {
+            RuntimeEnvironment.setQualifiers(savedQualifiers)
+            if (RuntimeEnvironment.getFontScale() != savedFontScale) RuntimeEnvironment.setFontScale(savedFontScale)
+        }
+    }
 }

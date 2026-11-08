@@ -73,7 +73,6 @@ import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.SetupTile
 import com.linkedout.app.ui.component.SetupTileDialog
 import com.linkedout.app.ui.component.SetupTileGrid
-import com.linkedout.app.ui.component.leftText
 import com.linkedout.app.ui.component.requiredDone
 import com.linkedout.app.ui.component.requiredLeft
 import com.linkedout.app.ui.icon.LinkedOutIcons
@@ -230,7 +229,7 @@ private fun updatesLabel(mode: UpdateMode): String = when (mode) {
 }
 
 /**
- * The guide: the logo, the title, how many steps are left, the tiles, then Start (Done when reopened from Settings),
+ * The guide: the animated logo, the app's function, the tiles, then Start (Done when reopened from Settings),
  * which waits for the required ones. Laid out as SetupScreen: header, steps, footer with the one button.
  * [onFinish] receives true when the reader asks to go to Accounts.
  * Ported from WelcomeScreen of
@@ -309,18 +308,15 @@ internal fun WelcomeContent(tiles: List<SetupTile>, reopened: Boolean, onStart: 
             // The icon's own animation, as the guide played it before the tiles (the user, 2026-11-07).
             LoadingMark(size = 160.dp)
             Spacer(Modifier.height(20.dp))
-            // Every title in the accent (the user, 2026-10-31), as Modules' SettingsSectionTitle.
-            Text("LinkedOut", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(8.dp))
+            // The app's function in one line, no name and no count (point 21), the order of Language's WelcomeContent
+            // https://github.com/213YaZ786/Language/blob/main/app/src/main/java/com/yaz/language/feature/welcome/WelcomeScreen.kt#WelcomeContent
             Text(
-                "Public LinkedIn posts, without an account.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "LinkedIn reader",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
-            Spacer(Modifier.height(8.dp))
-            Text(steps.leftText(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Spacer(Modifier.height(24.dp))
             SetupTileGrid(steps, onExplain)
 
