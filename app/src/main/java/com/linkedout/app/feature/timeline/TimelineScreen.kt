@@ -20,8 +20,8 @@ import com.linkedout.app.ui.component.MenuPill
 import com.linkedout.app.ui.component.SelectableDropdownMenuItem
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -178,8 +178,8 @@ fun TimelineScreen(
 
     // Read means passed, nothing else. Everything sitting before the first
     // item still on screen has left by the top, so one pass of the list is one
-    // write and not one per card. The banner is item 0 and the chips item 1, so the post at list
-    // index n is posts[n - 2].
+    // write and not one per card. The banner is item 0, so the post at list
+    // index n is posts[n - 1].
     //
     // Being above the viewport is not enough on its own. A refresh inserts new
     // posts above the reader and the list stays anchored on the post they were
@@ -196,7 +196,7 @@ fun TimelineScreen(
             listState.layoutInfo.visibleItemsInfo.forEach { item ->
                 (item.key as? String)?.let(seen::add)
             }
-            val passed = first - 2
+            val passed = first - 1
             if (passed > 0) {
                 val gone = state.posts.take(passed).map { it.id }.filter { it in seen }
                 if (gone.isNotEmpty()) readPosts.mark(gone)
@@ -204,7 +204,7 @@ fun TimelineScreen(
         }
     }
 
-    // The feed choice, under the banner (requests.md point 10): one pill with the folder icon, the feed's name and a
+    // The feed choice, in the banner's middle (requests.md points 10 and 11): one pill with the folder icon, the feed's name and a
     // chevron, which opens a menu under it: All and the folders, then Liked and Archived, the shown one checked
     // (Material 3 Expressive's grouped menu in glass, GlassMenu). Picking does what a tap on a chip did.
     // The pill is an item of the list that records listBackdrop: floating on it, it would draw the recording that holds
@@ -226,12 +226,10 @@ fun TimelineScreen(
             viewModel.showFolder(name)
         }
     }
-    val chips: @Composable () -> Unit = {
-        Row(
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
-        ) {
+    val feedPill: @Composable () -> Unit = {
+        // The screen keeps its heading for TalkBack: this wrapper is a heading named "Home", and the pill inside it
+        // stays its own node, a button that says the feed and whether its menu is open.
+        Box(Modifier.semantics { heading(); contentDescription = "Home" }) {
             Box {
                 MenuPill(
                     icon = LinkedOutIcons.Folder,
@@ -260,7 +258,20 @@ fun TimelineScreen(
 
     val banner: @Composable () -> Unit = {
         HomeBanner(
-            title = "Home",
+            // Nobody followed: no feed to choose, the plain title keeps the row from being empty.
+            centre = if (state.followedCount > 0) {
+                feedPill
+            } else {
+                {
+                    Text(
+                        "Home",
+                        style = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.primary),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { heading() }
+                    )
+                }
+            },
             subtitle = subtitle(state),
             leading = if (somethingWrong) {
                 {
@@ -291,7 +302,7 @@ fun TimelineScreen(
 
     val pull = rememberPullToRefreshState()
     // In glass, the list is recorded as it scrolls, for the controls that
-    // float over it (the chips, the refresh disc and the back to top button)
+    // float over it (the refresh disc and the back to top button)
     // to bend it.
     val look = LocalGlass.current
     val listBackdrop = rememberGlassBackdrop()
@@ -341,7 +352,6 @@ fun TimelineScreen(
                 )
             ) {
                 item(key = "banner") { banner() }
-                item(key = "chips") { chips() }
                 item(key = "nothing") {
                     EmptyState(
                         title = "Nothing could be loaded",
@@ -404,7 +414,6 @@ fun TimelineScreen(
                     modifier = Modifier.fillMaxSize().then(if (look != null) Modifier.glassSource(listBackdrop, look) else Modifier)
                 ) {
                     item(key = "banner") { banner() }
-                    item(key = "chips") { chips() }
 
                     items(state.posts, key = { it.id }) { post ->
                         PostCard(
@@ -439,17 +448,19 @@ fun TimelineScreen(
 }
 
 /**
- * Home's own top row (requests.md point 9): ScreenBanner's row, the title and the subtitle no longer in a Column but side
- * by side on one line, 8 dp apart, aligned on their baseline, the pair centred between the two action slots (both slots
- * keep their room, so the pair is centred on the screen). A pair too long for the line wraps the subtitle under the title
- * instead of cutting the title.
+ * Home's own top row (requests.md points 9 and 11), one header row as Bluesky's HomeHeaderLayoutMobile: a slot, the centre
+ * taking the rest (flex_1, align_center), a slot. The centre is the feed pill (or the plain title when nobody is
+ * followed) with the subtitle beside it, 12 dp apart, the pair centred between the two action slots (both slots keep
+ * their room, so the pair is centred on the screen). A pair too long for the line drops the subtitle under the centre
+ * instead of cutting it.
+ * https://github.com/bluesky-social/social-app/blob/main/src/view/com/home/HomeHeaderLayoutMobile.tsx#HomeHeaderLayoutMobile
  * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/ui/component/ScreenBanner.kt#ScreenBanner
  * not ported: BannerAction (used as it is), the title's two lines with TextAutoSize (one line, ellipsis), BannerGap and
- * BannerActionSize (private there, copied below)
+ * BannerActionSize (private there, copied below), StatusBarFade, the logo and the hide on scroll (Bluesky's header only)
  */
 @Composable
 private fun HomeBanner(
-    title: String,
+    centre: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     leading: @Composable (() -> Unit)? = null,
@@ -466,13 +477,7 @@ private fun HomeBanner(
         Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { leading?.invoke() }
         Layout(
             content = {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.primary),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.semantics { heading() }
-                )
+                centre()
                 subtitle?.let {
                     Text(
                         it,
@@ -486,28 +491,25 @@ private fun HomeBanner(
             },
             modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
         ) { measurables, constraints ->
-            val gap = 8.dp.roundToPx()
+            val gap = 12.dp.roundToPx()
             val loose = constraints.copy(minWidth = 0, minHeight = 0)
-            val titleText = measurables[0].measure(loose)
+            val centreItem = measurables[0].measure(loose)
             val subtitleText = measurables.getOrNull(1)?.measure(loose)
-            if (subtitleText == null || titleText.width + gap + subtitleText.width <= constraints.maxWidth) {
-                // One line: the baselines on one level, the pair centred.
-                val titleBase = titleText[FirstBaseline]
-                val subtitleBase = subtitleText?.get(FirstBaseline) ?: 0
-                val above = maxOf(titleBase, subtitleBase)
-                val below = maxOf(titleText.height - titleBase, (subtitleText?.height ?: 0) - subtitleBase)
-                val width = titleText.width + (subtitleText?.let { gap + it.width } ?: 0)
-                layout(constraints.maxWidth, above + below) {
+            if (subtitleText == null || centreItem.width + gap + subtitleText.width <= constraints.maxWidth) {
+                // One line: the pill and the age centred on each other (a pill has no text baseline to share), the pair centred.
+                val height = maxOf(centreItem.height, subtitleText?.height ?: 0)
+                val width = centreItem.width + (subtitleText?.let { gap + it.width } ?: 0)
+                layout(constraints.maxWidth, height) {
                     val start = (constraints.maxWidth - width) / 2
-                    titleText.place(start, above - titleBase)
-                    subtitleText?.place(start + titleText.width + gap, above - subtitleBase)
+                    centreItem.place(start, (height - centreItem.height) / 2)
+                    subtitleText?.place(start + centreItem.width + gap, (height - subtitleText.height) / 2)
                 }
             } else {
-                // Too long: the subtitle under the title, each centred.
-                val under = 1.dp.roundToPx()
-                layout(constraints.maxWidth, titleText.height + under + subtitleText.height) {
-                    titleText.place((constraints.maxWidth - titleText.width) / 2, 0)
-                    subtitleText.place((constraints.maxWidth - subtitleText.width) / 2, titleText.height + under)
+                // Too narrow: the subtitle under the centre, each centred.
+                val under = 4.dp.roundToPx()
+                layout(constraints.maxWidth, centreItem.height + under + subtitleText.height) {
+                    centreItem.place((constraints.maxWidth - centreItem.width) / 2, 0)
+                    subtitleText.place((constraints.maxWidth - subtitleText.width) / 2, centreItem.height + under)
                 }
             }
         }
