@@ -53,11 +53,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.ui.component.Avatar
-import com.linkedout.app.ui.component.BannerAction
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import com.linkedout.app.ui.component.DropdownMenuGroup
+import com.linkedout.app.ui.component.DropdownMenuItem
+import com.linkedout.app.ui.component.GlassMenu
+import com.linkedout.app.ui.component.MenuPill
+import com.linkedout.app.ui.component.SelectableDropdownMenuItem
 import com.linkedout.app.ui.component.FolderDialog
-import com.linkedout.app.ui.component.ScreenBanner
 import com.linkedout.app.ui.component.Zone
-import com.linkedout.app.ui.component.FeedChips
 import com.linkedout.app.ui.component.HoldAction
 import com.linkedout.app.ui.component.HoldMenu
 import com.linkedout.app.ui.component.QuietButton
@@ -136,6 +142,7 @@ fun AccountsScreen(
     // The folder chip chosen under the field, null for All. A folder deleted since is All again.
     var chosenFolder by rememberSaveable { mutableStateOf<String?>(null) }
     val folder = chosenFolder?.takeIf { it in folders }
+    var foldersOpen by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     val focus = LocalFocusManager.current
     val context = LocalContext.current
@@ -243,16 +250,69 @@ fun AccountsScreen(
             item(key = "header") {
                 Column(Modifier.fullBleed(16.dp + LocalReadableInset.current).padding(bottom = 8.dp)) {
                 Box(Modifier.padding(horizontal = LocalReadableInset.current)) {
+                // The folder choice in the banner's middle as Home's feed pill: one pill, a menu under it with the folders,
+                // then Manage folders last (Gmail's Manage labels), the shown folder checked.
+                // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/timeline/TimelineScreen.kt#TimelineScreen
+                // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Menu.kt#DropdownMenuGroup
+                // not ported: TimelineScreen (the screen itself, only its feed pill and menu are rebuilt here, without Liked and Archived)
+                // not ported: DropdownMenuGroup (the app's ui/component/GlassMenu.kt is its port, used as it is)
                 ScreenBanner(
-                    title = "Accounts",
-                    subtitle = if (rows.isEmpty()) null else "${rows.size} followed",
-                    trailing = {
-                        BannerAction(
-                            icon = LinkedOutIcons.Folder,
-                            label = "Folders",
-                            onClick = onOpenFolders
-                        )
-                    }
+                    // Nobody followed: no pill, no count, the row stays empty above the field (requests.md point 12).
+                    centre = if (rows.isNotEmpty()) {
+                        {
+                            // The pill is an item of the list that records the backdrop: MenuPill draws it with none and
+                            // the menu lives in a window of its own (TimelineScreen's feedPill, same pitfall).
+                            // The wrapper is the screen's heading for TalkBack, the pill inside stays its own button.
+                            Box(Modifier.semantics { heading(); contentDescription = "Accounts" }) {
+                                Box {
+                                    MenuPill(
+                                        icon = LinkedOutIcons.Folder,
+                                        label = folder ?: "All",
+                                        expanded = foldersOpen,
+                                        trailingIcon = LinkedOutIcons.ExpandMore,
+                                        onClick = { foldersOpen = true }
+                                    )
+                                    GlassMenu(expanded = foldersOpen, onDismissRequest = { foldersOpen = false }) {
+                                        DropdownMenuGroup(index = 0, count = 2) {
+                                            SelectableDropdownMenuItem(
+                                                selected = folder == null,
+                                                onClick = { chosenFolder = null; foldersOpen = false },
+                                                text = "All"
+                                            )
+                                            folders.forEach { name ->
+                                                SelectableDropdownMenuItem(
+                                                    selected = folder == name,
+                                                    onClick = { chosenFolder = name; foldersOpen = false },
+                                                    text = name
+                                                )
+                                            }
+                                        }
+                                        DropdownMenuGroup(index = 1, count = 2) {
+                                            DropdownMenuItem(
+                                                text = "Manage folders",
+                                                onClick = { foldersOpen = false; onOpenFolders() },
+                                                leadingIcon = {
+                                                    Icon(LinkedOutIcons.Tune, contentDescription = null, modifier = Modifier.size(24.dp))
+                                                },
+                                                trailingIcon = {
+                                                    Icon(
+                                                        LinkedOutIcons.ChevronRight,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(20.dp),
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Nothing to see, but TalkBack still finds the screen's name.
+                        { Box(Modifier.size(1.dp).semantics { heading(); contentDescription = "Accounts" }) }
+                    },
+                    subtitle = if (rows.isEmpty()) null else "${rows.size} followed"
                 )
                 }
 
@@ -306,18 +366,6 @@ fun AccountsScreen(
                     }),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + LocalReadableInset.current)
                 )
-
-                // The folders as chips under the field, Home's FeedChips without its Liked and Archived views:
-                // they filter the list, and wrap onto more lines, never sideways.
-                if (rows.isNotEmpty()) {
-                    Box(Modifier.padding(horizontal = LocalReadableInset.current)) {
-                        FeedChips(
-                            folders = folders,
-                            selected = folder,
-                            onSelect = { chosenFolder = it }
-                        )
-                    }
-                }
                 }
             }
             notice?.let { message ->
@@ -543,3 +591,78 @@ private fun Modifier.fullBleed(side: Dp) = layout { measurable, constraints ->
     )
     layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
 }
+
+/**
+ * Accounts' top row (requests.md point 12): Home's top row (TimelineScreen's HomeBanner, itself ScreenBanner with the
+ * centre open to a composable), one header row as Bluesky's HomeHeaderLayoutMobile (a slot, the centre taking the rest,
+ * a slot). The centre is the folder pill with the subtitle beside it, 12 dp apart, the pair centred between the two
+ * action slots (both keep their room, so the pair is centred on the screen). A pair too long for the line drops the
+ * subtitle under the centre instead of cutting it.
+ * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/ui/component/ScreenBanner.kt#ScreenBanner
+ * not ported: BannerAction (the slots stay empty here), the title's two lines with TextAutoSize (the centre is a pill),
+ * the logo and the hide on scroll (Bluesky's header only)
+ */
+@Composable
+private fun ScreenBanner(
+    centre: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    leading: @Composable (() -> Unit)? = null,
+    trailing: @Composable (() -> Unit)? = null
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = BannerActionSize + 16.dp)
+            .padding(horizontal = 16.dp, vertical = BannerGap),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Both action slots keep their room, so the pair stays centred.
+        Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { leading?.invoke() }
+        Layout(
+            content = {
+                centre()
+                subtitle?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            },
+            modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+        ) { measurables, constraints ->
+            val gap = 12.dp.roundToPx()
+            val loose = constraints.copy(minWidth = 0, minHeight = 0)
+            val centreItem = measurables[0].measure(loose)
+            val subtitleText = measurables.getOrNull(1)?.measure(loose)
+            if (subtitleText == null || centreItem.width + gap + subtitleText.width <= constraints.maxWidth) {
+                // One line: the pill and the count centred on each other (a pill has no text baseline to share), the pair centred.
+                val height = maxOf(centreItem.height, subtitleText?.height ?: 0)
+                val width = centreItem.width + (subtitleText?.let { gap + it.width } ?: 0)
+                layout(constraints.maxWidth, height) {
+                    val start = (constraints.maxWidth - width) / 2
+                    centreItem.place(start, (height - centreItem.height) / 2)
+                    subtitleText?.place(start + centreItem.width + gap, (height - subtitleText.height) / 2)
+                }
+            } else {
+                // Too narrow: the subtitle under the centre, each centred.
+                val under = 4.dp.roundToPx()
+                layout(constraints.maxWidth, centreItem.height + under + subtitleText.height) {
+                    centreItem.place((constraints.maxWidth - centreItem.width) / 2, 0)
+                    subtitleText.place((constraints.maxWidth - subtitleText.width) / 2, centreItem.height + under)
+                }
+            }
+        }
+        Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { trailing?.invoke() }
+    }
+}
+
+/** Space the banner leaves above and below itself, so it never touches what follows. */
+private val BannerGap = 8.dp
+
+/** Both slots of the banner, so an empty one still holds the pair centred. */
+private val BannerActionSize = 44.dp

@@ -371,14 +371,16 @@ internal fun CheckableDropdownMenuItem(checked: Boolean, onCheckedChange: (Boole
 // DropdownMenuItem: text and an optional leading icon, the colours from the theme (label onSurface; the error colour for
 // a dangerous row). Role.Button.
 // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Menu.kt#DropdownMenuItem
-// not ported: trailingIcon, enabled, colours, contentPadding, interactionSource
+// trailingIcon (requests.md point 12, Accounts' "Manage folders" row with its chevron) is the source's, after the label.
+// not ported: enabled, colours, contentPadding, interactionSource
 @Composable
 internal fun DropdownMenuItem(
     text: String,
     onClick: () -> Unit,
     color: Color = MaterialTheme.colorScheme.onSurface,
     leadingIcon: (@Composable () -> Unit)? = null,
-    style: TextStyle = MaterialTheme.typography.bodyLarge
+    style: TextStyle = MaterialTheme.typography.bodyLarge,
+    trailingIcon: (@Composable () -> Unit)? = null
 ) {
     val haptics = rememberHaptics()
     DropdownMenuItemContent(
@@ -393,6 +395,7 @@ internal fun DropdownMenuItem(
     ) {
         leadingIcon?.invoke()
         Text(text, style = style, color = color, modifier = Modifier.weight(1f))
+        trailingIcon?.invoke()
     }
 }
 
