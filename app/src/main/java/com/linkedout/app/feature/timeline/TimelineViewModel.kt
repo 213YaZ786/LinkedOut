@@ -93,10 +93,9 @@ class TimelineViewModel(
                 known = followedKeys()
                 filed = filedIn()
                 val cached = repository.cached(folder)
-                // The safety net. Everything already on disk at launch counts
-                // as read, so an outline can only mean "arrived while you were
-                // here" and never "still here from yesterday".
-                readPosts.mark(cached.posts.map { it.id })
+                // What was on disk before the previous visit is marked read at
+                // launch (LinkedOutApplication, ReadPosts.markReadBeforeLastVisit),
+                // so an outline means "published since you were last here".
                 _state.value = _state.value.copy(
                     folder = folder,
                     folders = accounts.folders.value,
@@ -234,6 +233,9 @@ class TimelineViewModel(
             repository.refresh(only, if (everything) null else asked)
         }
         if (everything && only == null) everythingFetched = true
+        // A profile read again can bring posts published before the previous
+        // visit: they fill a gap, they are not new.
+        readPosts.markReadIfOld(network.posts.map { it.id to it.publishedAtMillis })
         // What goes on screen is the folder shown now. It differs from what
         // was fetched after a pass over everything, and after a switch made
         // while the requests were out, which is allowed so that a switch
@@ -288,7 +290,6 @@ class TimelineViewModel(
         viewModelScope.launch {
             val cached = repository.cached(name)
             if (folder != name) return@launch
-            readPosts.mark(cached.posts.map { it.id })
             _state.value = _state.value.copy(
                 folder = name,
                 allPosts = cached.posts,
@@ -343,6 +344,8 @@ class TimelineViewModel(
             try {
                 val before = current.allPosts.size
                 val merged = repository.loadMore(folder)
+                // Older pages are all published before the previous visit.
+                readPosts.markReadIfOld(merged.posts.map { it.id to it.publishedAtMillis })
                 val failed = merged.errors.isNotEmpty() || merged.posts.size <= before
                 if (failed) pagingFailedAtMillis = System.currentTimeMillis()
                 _state.value = _state.value.copy(

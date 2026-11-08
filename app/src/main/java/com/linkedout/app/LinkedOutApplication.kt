@@ -8,6 +8,7 @@ import coil3.disk.DiskCache
 import okio.Path.Companion.toOkioPath
 import java.io.File
 import com.linkedout.app.data.cache.FeedCache
+import com.linkedout.app.data.read.ReadPosts
 import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.core.media.OfflineMedia
 import com.linkedout.app.core.media.VideoCache
@@ -67,6 +68,12 @@ class LinkedOutApplication : Application() {
             // The video cache reads its folder on first use: done here, not under the first player.
             runCatching { withContext(Dispatchers.IO) { koin.get<VideoCache>().cache } }
             val cache = koin.get<FeedCache>()
+            // What was published before the previous visit is not new. Without
+            // this a reader coming back after a week would face an outline on
+            // every post they had already seen. First, before the retention
+            // sweep, so Home is not painted outlined while it runs.
+            // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/MtgaApplication.kt#MtgaApplication
+            koin.get<ReadPosts>().markReadBeforeLastVisit(cache.allPosts().associate { it.id to it.publishedAtMillis })
             cache.applyRetention()
             koin.get<OfflineMedia>().keepOnly(cache.storedPostIds())
         }
