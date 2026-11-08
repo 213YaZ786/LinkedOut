@@ -33,7 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -53,12 +55,11 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.linkedout.app.ui.glass.LocalGlassBackdrop
-import com.linkedout.app.ui.icon.LinkedOutIcons
 
 // A dropdown in our glass, anchored under the pill that opens it: Material 3 Expressive's grouped menu (DropdownMenuPopup,
-// DropdownMenuGroup and its items), drawn as the validated pictures of requests.md points 7 and 10 show it
-// (JobsDraftScreenshotTest, HomeDraftScreenshotTest). It lives in its own window (a Popup), never in the list that holds
-// the pill: a glass pane never floats on the backdrop of a list it is an item of (CLAUDE.md, Pitfalls), so the pill is
+// DropdownMenuGroup and its items), drawn as the pictures the user validated in LinkedOut show it (its requests.md points 7
+// and 10, JobsDraftScreenshotTest, HomeDraftScreenshotTest). It lives in its own window (a Popup), never in the list that
+// holds the pill: a glass pane never floats on the backdrop of a list it is an item of (it closed LinkedOut at launch), so the pill is
 // given LocalGlassBackdrop null by its caller and the menu provides null again for what it draws.
 
 // MenuDefaults.GroupSpacing = SegmentedMenuTokens.SegmentedGap, the gap between two groups.
@@ -330,7 +331,7 @@ internal fun SelectableDropdownMenuItem(selected: Boolean, onClick: () -> Unit, 
         )
     ) {
         if (selected) {
-            Icon(LinkedOutIcons.Check, contentDescription = null, modifier = Modifier.size(24.dp), tint = content)
+            Icon(MenuIcons.Check, contentDescription = null, modifier = Modifier.size(24.dp), tint = content)
         } else {
             Spacer(Modifier.size(24.dp))
         }
@@ -360,7 +361,7 @@ internal fun CheckableDropdownMenuItem(checked: Boolean, onCheckedChange: (Boole
         )
     ) {
         if (checked) {
-            Icon(LinkedOutIcons.Check, contentDescription = null, modifier = Modifier.size(24.dp), tint = content)
+            Icon(MenuIcons.Check, contentDescription = null, modifier = Modifier.size(24.dp), tint = content)
         } else {
             Spacer(Modifier.size(24.dp))
         }
@@ -419,7 +420,7 @@ internal fun ValueMenuItem(label: String, value: String, onClick: () -> Unit) {
         Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
         Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Icon(
-            LinkedOutIcons.ChevronRight,
+            MenuIcons.ChevronRight,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -434,7 +435,7 @@ internal fun SubmenuHeader(title: String, onBack: () -> Unit) {
         text = title,
         leadingIcon = {
             Icon(
-                LinkedOutIcons.ArrowBack,
+                MenuIcons.ArrowBack,
                 contentDescription = "Back",
                 modifier = Modifier.size(24.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -480,4 +481,45 @@ internal fun MenuPill(
             }
         }
     }
+}
+
+// The menu's own icons, so this file stands alone in every app: the three the menu draws, with the same path data and
+// builder as the app's icon set (Check, ArrowBack: Material icons on the 24 dp grid; ChevronRight: Material Symbols outlined,
+// viewport 960, autoMirrored).
+// https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/ui/icon/LinkedOutIcons.kt#build
+// https://github.com/google/material-design-icons/blob/master/symbols/android/chevron_right/materialsymbolsoutlined/chevron_right_24px.xml
+// not ported: the icon set's other icons (the menu does not draw them)
+private object MenuIcons {
+    val Check: ImageVector by lazy {
+        build(
+            "Check",
+            "M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z"
+        )
+    }
+
+    val ArrowBack: ImageVector by lazy {
+        build("ArrowBack", "M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z")
+    }
+
+    val ChevronRight: ImageVector by lazy {
+        val pathData = "M504,480L320,296L376,240L616,480L376,720L320,664L504,480Z"
+        ImageVector.Builder("ChevronRight", 24.dp, 24.dp, viewportWidth = 960f, viewportHeight = 960f, autoMirror = true)
+            .addPath(pathData = PathParser().parsePathString(pathData).toNodes(), fill = SolidColor(Color.White))
+            .build()
+    }
+
+    private fun build(name: String, pathData: String): ImageVector =
+        ImageVector.Builder(
+            name = name,
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f,
+            autoMirror = name == "ArrowBack"
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString(pathData).toNodes(),
+                fill = SolidColor(Color.Black)
+            )
+        }.build()
 }

@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
+import com.linkedout.app.ui.component.FeedBanner
+import com.linkedout.app.ui.component.FailureDialog
 import com.linkedout.app.ui.component.FloatingPane
 import com.linkedout.app.ui.component.ScrollUpButton
 import com.linkedout.app.ui.component.LocalDockPadding
@@ -171,6 +173,7 @@ fun TimelineScreen(
             failed = state.errors.values.toList(),
             followed = state.followedCount,
             silentDownloads = silentDownloads,
+            site = "LinkedIn",
             onRetry = {
                 showFailures = false
                 viewModel.refresh()
@@ -260,7 +263,7 @@ fun TimelineScreen(
     }
 
     val banner: @Composable () -> Unit = {
-        HomeBanner(
+        FeedBanner(
             // Nobody followed: no feed to choose, the plain title keeps the row from being empty.
             centre = if (state.followedCount > 0) {
                 feedPill
@@ -450,82 +453,6 @@ fun TimelineScreen(
     }
 }
 
-/**
- * Home's own top row (requests.md points 9 and 11), one header row as Bluesky's HomeHeaderLayoutMobile: a slot, the centre
- * taking the rest (flex_1, align_center), a slot. The centre is the feed pill (or the plain title when nobody is
- * followed) with the subtitle beside it, 12 dp apart, the pair centred between the two action slots (both slots keep
- * their room, so the pair is centred on the screen). A pair too long for the line drops the subtitle under the centre
- * instead of cutting it.
- * https://github.com/bluesky-social/social-app/blob/main/src/view/com/home/HomeHeaderLayoutMobile.tsx#HomeHeaderLayoutMobile
- * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/ui/component/ScreenBanner.kt#ScreenBanner
- * not ported: BannerAction (used as it is), the title's two lines with TextAutoSize (one line, ellipsis), BannerGap and
- * BannerActionSize (private there, copied below), StatusBarFade, the logo and the hide on scroll (Bluesky's header only)
- */
-@Composable
-private fun HomeBanner(
-    centre: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    leading: @Composable (() -> Unit)? = null,
-    trailing: @Composable (() -> Unit)? = null
-) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .heightIn(min = BannerActionSize + 16.dp)
-            .padding(horizontal = 16.dp, vertical = BannerGap),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Both action slots keep their room, so the pair stays centred.
-        Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { leading?.invoke() }
-        Layout(
-            content = {
-                centre()
-                subtitle?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            },
-            modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
-        ) { measurables, constraints ->
-            val gap = 12.dp.roundToPx()
-            val loose = constraints.copy(minWidth = 0, minHeight = 0)
-            val centreItem = measurables[0].measure(loose)
-            val subtitleText = measurables.getOrNull(1)?.measure(loose)
-            if (subtitleText == null || centreItem.width + gap + subtitleText.width <= constraints.maxWidth) {
-                // One line: the pill and the age centred on each other (a pill has no text baseline to share), the pair centred.
-                val height = maxOf(centreItem.height, subtitleText?.height ?: 0)
-                val width = centreItem.width + (subtitleText?.let { gap + it.width } ?: 0)
-                layout(constraints.maxWidth, height) {
-                    val start = (constraints.maxWidth - width) / 2
-                    centreItem.place(start, (height - centreItem.height) / 2)
-                    subtitleText?.place(start + centreItem.width + gap, (height - subtitleText.height) / 2)
-                }
-            } else {
-                // Too narrow: the subtitle under the centre, each centred.
-                val under = 4.dp.roundToPx()
-                layout(constraints.maxWidth, centreItem.height + under + subtitleText.height) {
-                    centreItem.place((constraints.maxWidth - centreItem.width) / 2, 0)
-                    subtitleText.place((constraints.maxWidth - subtitleText.width) / 2, centreItem.height + under)
-                }
-            }
-        }
-        Box(Modifier.size(BannerActionSize), contentAlignment = Alignment.Center) { trailing?.invoke() }
-    }
-}
-
-/** Space the banner leaves above and below itself, as ScreenBanner's. */
-private val BannerGap = 8.dp
-
-/** Both slots of the banner, as ScreenBanner's. */
-private val BannerActionSize = 44.dp
-
 private fun subtitle(state: TimelineUiState): String? = when {
     state.followedCount == 0 -> null
     state.loading -> "Updating"
@@ -533,147 +460,6 @@ private fun subtitle(state: TimelineUiState): String? = when {
         if (age.isEmpty() || age == "now") "Updated just now" else "Updated $age ago"
     }
     else -> null
-}
-
-/**
- * One message, centred over Home blurred behind it, naming where the trouble comes from. No
- * profile is listed: with many follows a list helps nobody, and nothing can be done per profile.
- * The dialog is ZoneAlertDialog's (Material's BasicAlertDialog, `onDismissRequest`, `content`:
- * https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AlertDialog.kt#BasicAlertDialog ),
- * its pane in the post card's shape.
- */
-@Composable
-private fun FailureDialog(
-    failed: List<AppError>,
-    followed: Int,
-    silentDownloads: Boolean,
-    onRetry: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val (title, text) = failureMessage(failed, followed) ?: (SILENT_DOWNLOADS_TITLE to SILENT_DOWNLOADS_TEXT)
-    ZoneAlertDialog(
-        onDismissRequest = onDismiss,
-        shape = ZoneShape,
-        icon = if (failed.isEmpty()) null else ({ FailureIcon() }),
-        title = { Text(title) },
-        text = { FailureContent(text, silentDownloads && failed.isNotEmpty()) },
-        confirmButton = {
-            if (failed.isEmpty()) {
-                QuietButton(onClick = onDismiss) { Text("Close") }
-            } else {
-                BoldButton(onClick = onRetry, filled = true) { Text("Try again") }
-            }
-        },
-        dismissButton = {
-            if (failed.isNotEmpty()) QuietButton(onClick = onDismiss) { Text("Close") }
-        }
-    )
-}
-
-// The icon slot of Material's AlertDialog (icon, `iconContentColor`):
-// https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AlertDialog.kt#AlertDialogContent
-@Composable
-private fun FailureIcon() {
-    Icon(
-        LinkedOutIcons.Warning,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.error,
-        modifier = Modifier.size(24.dp)
-    )
-}
-
-// The text slot of Material's AlertDialog (`text`, `textContentColor`; ZoneAlertContent centres it):
-// https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AlertDialog.kt#AlertDialogContent
-@Composable
-private fun FailureContent(text: String, silentDownloads: Boolean) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(text)
-        if (silentDownloads) Text(SILENT_DOWNLOADS_TEXT)
-    }
-}
-
-internal const val SILENT_DOWNLOADS_TITLE = "Downloads have no progress bar"
-internal const val SILENT_DOWNLOADS_TEXT =
-    "Media is being saved for offline reading, but Android is not letting " +
-        "LinkedOut show the progress. The files still arrive. Allow " +
-        "notifications for LinkedOut in Android to see how far they are."
-
-// Bluesky's PostFeedErrorMessage reads an error, picks a KnownError, then maps each KnownError to
-// its message: https://github.com/bluesky-social/social-app/blob/main/src/view/com/posts/PostFeedErrorMessage.tsx#detectKnownError
-// (MIT). Here the KnownError is the origin (AppError.blame) of one failed profile.
-// Not ported: Block (no counterpart), FeedgenErrorMessage and the feedgen parsing,
-// safeParseFeedgenUri, the remove feed prompt, onViewProfile, PostFeedErrorMessage's ErrorMessage.
-enum class KnownError {
-    Device,
-    Network,
-    Host,
-    Upstream,
-    App
-}
-
-internal fun detectKnownError(error: AppError?): KnownError? {
-    if (error == null) {
-        return null
-    }
-    // check the blame, as detectKnownError checks the name and the status code
-    if (error.blame == Blame.DEVICE) {
-        return KnownError.Device
-    }
-    if (error.blame == Blame.NETWORK) {
-        return KnownError.Network
-    }
-    if (error.blame == Blame.HOST) {
-        return KnownError.Host
-    }
-    if (error.blame == Blame.UPSTREAM) {
-        return KnownError.Upstream
-    }
-    return KnownError.App
-}
-
-// The KnownError to message map of FeedgenErrorMessage (`msg`, one message per KnownError, indexed by
-// the knownError), here a title and a text; [rawError] is the sentence counting the profiles:
-// https://github.com/bluesky-social/social-app/blob/main/src/view/com/posts/PostFeedErrorMessage.tsx#detectKnownError
-internal fun FeedgenErrorMessage(knownError: KnownError, rawError: String): Pair<String, String> {
-    val msg = mapOf(
-        KnownError.Device to ("You are offline" to
-            "Saved posts stay readable. New ones load when you are back online."),
-        KnownError.Network to ("Your connection does not reach LinkedIn" to
-            "$rawError Their saved posts stay readable."),
-        KnownError.Host to ("LinkedIn is holding back guests" to
-            "$rawError Their saved posts stay readable. Try again in a few minutes."),
-        KnownError.Upstream to ("Some profiles are not public" to
-            "$rawError Their saved posts stay readable."),
-        KnownError.App to ("LinkedOut could not read some pages" to
-            "$rawError Their saved posts stay readable.")
-    )[knownError]
-    return msg!!
-}
-
-// PostFeedErrorMessage's detectKnownError over every error, the knownError shared by most winning,
-// then its msg ([feedDesc] is how many profiles are followed):
-// https://github.com/bluesky-social/social-app/blob/main/src/view/com/posts/PostFeedErrorMessage.tsx#detectKnownError
-internal fun failureMessage(error: List<AppError>, feedDesc: Int): Pair<String, String>? {
-    val knownError = KnownError.entries.maxByOrNull { kind -> error.count { detectKnownError(it) == kind } }
-    if (error.isEmpty() || knownError == null) {
-        return null
-    }
-    val msg = if (knownError == KnownError.Upstream) {
-        if (error.size == 1) "shows nothing to a guest." else "show nothing to a guest."
-    } else {
-        if (error.size == 1) "was not updated." else "were not updated."
-    }
-    val rawError = if (feedDesc >= error.size) {
-        "${error.size} of $feedDesc profiles $msg"
-    } else if (error.size == 1) {
-        "1 profile $msg"
-    } else {
-        "${error.size} profiles $msg"
-    }
-    return FeedgenErrorMessage(knownError, rawError)
 }
 
 @Composable

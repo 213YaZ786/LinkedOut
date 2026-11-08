@@ -1,6 +1,7 @@
 package com.linkedout.app.feature.timeline
 
 import com.linkedout.app.core.common.AppError
+import com.linkedout.app.ui.component.failureMessage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -104,9 +105,9 @@ class FailureMessageTest {
 
     @Test
     fun nothingFailedIsTheDownloadsNotice() {
-        assertNull(failureMessage(emptyList(), 3))
+        assertNull(failureMessage(emptyList(), 3, "LinkedIn"))
     }
 
     // Local unit test helper, https://developer.android.com/training/testing/local-tests
-    private fun message(failed: List<AppError>, followed: Int) = failureMessage(failed, followed)!!
+    private fun message(failed: List<AppError>, followed: Int) = failureMessage(failed, followed, site = "LinkedIn")!!
 }
