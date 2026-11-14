@@ -27,7 +27,7 @@ junit = "4.13.2"
 # Screens tested on the JVM, as Now in Android does (core/screenshot-testing): Robolectric
 # draws them, Roborazzi compares the pictures; no emulator, nothing for anyone to look at.
 robolectric = "4.17"
-roborazzi = "1.77.0"
+roborazzi = "1.78.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
