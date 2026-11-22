@@ -29,6 +29,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.maxLength
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 
 /**
  * A dialog of the app: Material's AlertDialog, made of glass when glass is on,
@@ -229,24 +246,50 @@ private fun TrackCrossWindowBlur(): Boolean {
  * blur 16 dp by day, 8 by night; dim 0.23 by day, 0.56 by night.
  */
 @Composable
-fun BlurBehind(radiusDp: Int? = null, blur: Boolean = rememberCrossWindowBlur()) {
+fun BlurBehind(
+    radiusDp: Int? = null,
+    blur: Boolean = rememberCrossWindowBlur(),
+    strength: () -> Float = { 1f },
+    noWindowAnimation: Boolean = false
+) {
     val dark = LocalGlass.current?.dark ?: false
     val radius = radiusDp ?: if (dark) 8 else 16
+    // https://github.com/LineageOS/android_frameworks_base/blob/lineage-24.0/tests/graphics/SilkFX/src/com/android/test/silkfx/materials/BackgroundBlurActivity.kt#setBlurBehind
+    // mBlurBehindRadius and mDimAmountWithBlur, BackgroundBlurActivity's fields, at a progress from 0 to 1.
     val view = androidx.compose.ui.platform.LocalView.current
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val dimAmountWithBlur = if (blur) (if (dark) 0.56f else 0.23f) else (if (dark) 0.6f else 0.4f)
+    val blurBehindRadius = if (blur) with(density) { radius.dp.roundToPx() } else 0
+    fun mBlurBehindRadius(progress: Float) = (progress.coerceIn(0f, 1f) * blurBehindRadius).toInt()
+    fun mDimAmountWithBlur(progress: Float) = progress.coerceIn(0f, 1f) * dimAmountWithBlur
     androidx.compose.runtime.DisposableEffect(view, blur) {
         val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
         if (window != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             if (blur) window.addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
             else window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-            window.attributes = window.attributes.apply {
-                blurBehindRadius = if (blur) with(density) { radius.dp.roundToPx() } else 0
-                dimAmount = if (blur) (if (dark) 0.56f else 0.23f) else (if (dark) 0.6f else 0.4f)
-            }
+            // https://github.com/LineageOS/android_frameworks_base/blob/lineage-24.0/tests/graphics/SilkFX/src/com/android/test/silkfx/materials/BackgroundBlurActivity.kt#setBlurBehind
+            if (noWindowAnimation) window.setWindowAnimations(0)
+            setBlurBehind(window, mBlurBehindRadius(strength()), mDimAmountWithBlur(strength()))
         }
         onDispose { }
     }
+    androidx.compose.runtime.LaunchedEffect(view, blur) {
+        val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window ?: return@LaunchedEffect
+        androidx.compose.runtime.snapshotFlow { strength() }.collect {
+            setBlurBehind(window, mBlurBehindRadius(it), mDimAmountWithBlur(it))
+        }
+    }
+}
+
+// https://github.com/LineageOS/android_frameworks_base/blob/lineage-24.0/tests/graphics/SilkFX/src/com/android/test/silkfx/materials/BackgroundBlurActivity.kt#setBlurBehind
+// not ported: the radius TextView (no text shown). The dim goes through the same attributes
+// (GlobalActionsDialogLite.startAnimation: window.setDimAmount(mInitialWindowDimAmount * alpha)).
+fun setBlurBehind(window: android.view.Window, radius: Int, dimAmount: Float) {
+    var mBlurBehindRadius = radius
+    window.getAttributes().setBlurBehindRadius(mBlurBehindRadius)
+    window.getAttributes().dimAmount = dimAmount
+    window.setAttributes(window.getAttributes())
 }
 
 /**
@@ -286,5 +329,55 @@ fun DialogPane(shape: Shape = androidx.compose.material3.ShapeDefaults.ExtraLarg
     ) {
         androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.onSurface) { content() }
     }
+}
+
+// not ported: onCreateDialog (the dialog itself is ZoneAlertDialog, the callers keep their buttons and titles)
+// not ported: OnEditorActionListener, onEditorAction (the same Done key is Compose's onKeyboardAction, in DialogNameField)
+// not ported: OutlinedTextFieldWithInitialValueAndSelection, SimpleOutlinedTextFieldSample (samples: their state and
+// field are rememberDialogNameState and DialogNameField, the Column and Text around them are the caller's dialog)
+
+/**
+ * The state of a [DialogNameField]: [initial] text, selected whole when [selectAll].
+ * https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/samples/src/main/java/androidx/compose/material3/samples/TextFieldSamples.kt#OutlinedTextFieldWithInitialValueAndSelection
+ */
+@Composable
+fun rememberDialogNameState(initial: String = "", selectAll: Boolean = false): TextFieldState =
+    rememberTextFieldState(initial, if (selectAll) TextRange(0, initial.length) else TextRange(initial.length))
+
+/**
+ * A name field for a dialog: an outlined field the dialog's width, text and cursor at the start
+ * (the dialog's centred text slot does not reach it), its [label] rising onto the outline, focused
+ * with the keyboard open when the dialog opens, Done calls [onDone], 255 characters at most, first
+ * letter capital. Ported from Android Files' New folder dialog (LineageOS DocumentsUI,
+ * https://github.com/LineageOS/android_packages_apps_DocumentsUI/blob/lineage-24.0/src/com/android/documentsui/CreateDirectoryFragment.java#onCreateDialog
+ * and https://github.com/LineageOS/android_packages_apps_DocumentsUI/blob/lineage-24.0/res/layout/dialog_file_name.xml#input_wrapper)
+ * and Material's
+ * https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/samples/src/main/java/androidx/compose/material3/samples/TextFieldSamples.kt#SimpleOutlinedTextFieldSample
+ */
+@Composable
+fun DialogNameField(
+    state: TextFieldState,
+    label: String,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val requester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    // CreateDirectoryFragment's mEditText.requestFocus(): in a dialog window the first frame must pass first.
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        requester.requestFocus()
+        keyboard?.show()
+    }
+    OutlinedTextField(
+        state = state,
+        lineLimits = TextFieldLineLimits.SingleLine,
+        label = { Text(label) },
+        textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Start),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+        onKeyboardAction = { onDone() },
+        inputTransformation = InputTransformation.maxLength(255),
+        modifier = modifier.fillMaxWidth().focusRequester(requester)
+    )
 }
 

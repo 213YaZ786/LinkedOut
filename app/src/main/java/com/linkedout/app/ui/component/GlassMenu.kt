@@ -316,9 +316,15 @@ internal fun DropdownMenuItemContent(
 // not ported: supportingText, trailingContent, the colours and shapes parameters (MenuItemShapes, SelectableMenuItemColors:
 // one standard set from the theme), enabled, interactionSource
 @Composable
-internal fun SelectableDropdownMenuItem(selected: Boolean, onClick: () -> Unit, text: String) {
+internal fun SelectableDropdownMenuItem(selected: Boolean, onClick: () -> Unit, text: String, count: Int? = null) {
     val haptics = rememberHaptics()
     val content = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    // The badge slot of NavigationDrawerItem (Gmail's drawer labels): the count at the row's end, labelLarge, its colour
+    // following the selection.
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/NavigationDrawer.kt#NavigationDrawerItem
+    // not ported: NavigationDrawerItem's Surface, Role.Tab, shape, NavigationDrawerItemColors, the 24 dp end padding (the
+    // menu's row keeps its 16 dp), the icon slot (the check slot takes its place), interactionSource
+    val badge = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
     DropdownMenuItemContent(
         selected = selected,
         interaction = Modifier.selectable(
@@ -336,6 +342,7 @@ internal fun SelectableDropdownMenuItem(selected: Boolean, onClick: () -> Unit, 
             Spacer(Modifier.size(24.dp))
         }
         Text(text, style = MaterialTheme.typography.bodyLarge, color = content, modifier = Modifier.weight(1f))
+        count?.let { Text(it.toString(), style = MaterialTheme.typography.labelLarge, color = badge) }
     }
 }
 

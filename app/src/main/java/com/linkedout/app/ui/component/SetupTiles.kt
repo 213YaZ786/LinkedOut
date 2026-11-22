@@ -1,12 +1,20 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -66,7 +74,10 @@ class SetupTile(
     val required: Boolean,
     val error: Boolean = false,
     val progress: Float? = null,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    // A menu opened by the tile: composed in a Box around it, so its popup anchors to the tile (GlassMenu, as the feed
+    // pill's menu to its pill). Null for a tile without one.
+    val menu: (@Composable () -> Unit)? = null
 )
 
 /**
@@ -125,7 +136,16 @@ fun SetupTileGrid(tiles: List<SetupTile>, onExplain: (SetupTile) -> Unit) {
                 ) {
                     row.forEach { tile ->
                         val tileModifier = Modifier.width(cell).fillMaxHeight()
-                        SetupTileView(tile, nameSize, tileModifier) { onExplain(tile) }
+                        val menu = tile.menu
+                        if (menu == null) {
+                            SetupTileView(tile, nameSize, tileModifier) { onExplain(tile) }
+                        } else {
+                            // The box around the tile is the popup's anchor.
+                            Box(tileModifier) {
+                                SetupTileView(tile, nameSize, Modifier.fillMaxSize()) { onExplain(tile) }
+                                menu()
+                            }
+                        }
                     }
                 }
             }
@@ -145,6 +165,9 @@ private fun SetupTileView(tile: SetupTile, nameSize: TextUnit, modifier: Modifie
     val haptics = rememberHaptics()
     val status = if (tile.done) "Done" else if (tile.required) "Required" else "Optional"
     val progress = tile.progress
+    // The last reading, shown while the progress leaves.
+    val lastProgress = remember { floatArrayOf(0f) }
+    if (progress != null) lastProgress[0] = progress
     TileFace(
         nameSize = nameSize,
         icon = tile.icon,
@@ -167,12 +190,24 @@ private fun SetupTileView(tile: SetupTile, nameSize: TextUnit, modifier: Modifie
             stateDescription = "${tile.state.replace('\n', ' ')}, $status"
         },
         stateColor = if (tile.error) MaterialTheme.colorScheme.error else null,
-        below = when {
-            progress != null -> ({ SetupProgress(progress) })
-            tile.done -> ({
-                Icon(SetupCheck, contentDescription = null, tint = LocalContentColor.current, modifier = Modifier.padding(top = 4.dp).size(18.dp))
-            })
-            else -> null
+        // The progress, the check and nothing are one animated slot: the tile no longer jumps in height when a
+        // download ends, the two fade through and the size follows without clipping (SizeTransform(clip = false)).
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+        below = {
+            AnimatedContent(
+                targetState = if (progress != null) 1 else if (tile.done) 2 else 0,
+                transitionSpec = {
+                    (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90)))
+                        .using(SizeTransform(clip = false))
+                },
+                label = "setupBelow"
+            ) { kind ->
+                when (kind) {
+                    1 -> SetupProgress(progress ?: lastProgress[0])
+                    2 -> Icon(SetupCheck, contentDescription = null, tint = LocalContentColor.current, modifier = Modifier.padding(top = 4.dp).size(18.dp))
+                    else -> Unit
+                }
+            }
         }
     )
 }

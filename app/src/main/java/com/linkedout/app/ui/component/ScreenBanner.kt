@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,7 +84,7 @@ fun ScreenBanner(
             BasicText(
                 title,
                 // Every title in the accent (the user, 2026-10-31), as SettingsTiles' SettingsSectionTitle.
-                style = titleStyle.copy(color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center),
+                style = titleStyle.copy(color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = titleStyle.fontSize, stepSize = 0.5.sp),

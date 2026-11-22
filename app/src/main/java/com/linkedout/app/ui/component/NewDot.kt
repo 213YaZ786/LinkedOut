@@ -1,7 +1,12 @@
 package com.linkedout.app.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
@@ -21,12 +26,25 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun NewDot(visible: Boolean, modifier: Modifier = Modifier) {
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+    // The slot (the caller's [modifier], its start padding, and the dot) opens or closes first, so the row
+    // makes room gradually; the dot scales and fades from its own centre inside it (animateEnterExit),
+    // never moving over the name.
     AnimatedVisibility(
         visible = visible,
-        modifier = modifier,
-        enter = scaleIn(),
-        exit = scaleOut() + fadeOut()
+        enter = expandHorizontally(tween(200)),
+        exit = shrinkHorizontally(tween(200, delayMillis = 100))
     ) {
-        Box(Modifier.size(10.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+        Box(modifier.size(10.dp)) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .animateEnterExit(
+                        enter = scaleIn(tween(200, delayMillis = 60)) + fadeIn(tween(200, delayMillis = 60)),
+                        exit = scaleOut(tween(120)) + fadeOut(tween(120))
+                    )
+                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+            )
+        }
     }
 }

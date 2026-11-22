@@ -1,7 +1,9 @@
 package com.linkedout.app.ui.component
 
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.runtime.mutableFloatStateOf
+import kotlinx.coroutines.Job
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -41,7 +43,11 @@ fun Zoomable(
 ) {
     val haptics = rememberHaptics()
     val scope = rememberCoroutineScope()
-    val scale = remember { Animatable(1f) }
+    // The scale is a plain state, set at once with the offset (an Animatable's snapTo launched per pinch event
+    // landed a frame after the offset); the double tap's spring runs in [anim], which a pinch stops first
+    // (AnimatableAnimateToGenericsType: https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation-core/samples/src/main/java/androidx/compose/animation/core/samples/AnimatableSamples.kt#AnimatableAnimateToGenericsType).
+    var scale by remember { mutableFloatStateOf(1f) }
+    var anim by remember { mutableStateOf<Job?>(null) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
 
@@ -52,8 +58,9 @@ fun Zoomable(
     }
 
     fun set(newScale: Float, newOffset: Offset) {
-        val was = scale.value > 1f
-        scope.launch { scale.snapTo(newScale) }
+        anim?.cancel()
+        val was = scale > 1f
+        scale = newScale
         offset = if (newScale <= 1f) Offset.Zero else clamp(newOffset, newScale)
         if (was != newScale > 1f) onZoomChanged(newScale > 1f)
     }
@@ -69,16 +76,18 @@ fun Zoomable(
                     onTap = onTap?.let { tapped -> { _: Offset -> tapped() } },
                     onDoubleTap = { tap ->
                         haptics.tick()
-                        val zoomed = scale.value > 1f
+                        anim?.cancel()
+                        val zoomed = scale > 1f
                         val target = if (zoomed) 1f else DOUBLE_TAP_SCALE
                         val centre = Offset(size.width / 2f, size.height / 2f)
                         val goal = if (zoomed) Offset.Zero else clamp((centre - tap) * (DOUBLE_TAP_SCALE - 1f), DOUBLE_TAP_SCALE)
                         val from = offset
-                        val start = scale.value
-                        scope.launch {
+                        val start = scale
+                        anim = scope.launch {
                             // The zoom springs in towards the tapped point, and back.
-                            scale.animateTo(target, spring(dampingRatio = 0.8f, stiffness = 400f)) {
-                                val t = ((value - start) / (target - start)).coerceIn(0f, 1f)
+                            animate(start, target, animationSpec = spring(dampingRatio = 0.8f, stiffness = 400f)) { value, _ ->
+                                scale = value
+                                val t = if (target == start) 1f else ((value - start) / (target - start)).coerceIn(0f, 1f)
                                 offset = from + (goal - from) * t
                             }
                             offset = goal
@@ -93,10 +102,10 @@ fun Zoomable(
                     do {
                         val event = awaitPointerEvent()
                         val fingers = event.changes.count { it.pressed }
-                        if (fingers > 1 || scale.value > 1f) {
+                        if (fingers > 1 || scale > 1f) {
                             val zoom = event.calculateZoom()
                             val pan = event.calculatePan()
-                            set((scale.value * zoom).coerceIn(1f, MAX_SCALE), offset + pan)
+                            set((scale * zoom).coerceIn(1f, MAX_SCALE), offset + pan)
                             event.changes.forEach { if (it.positionChanged()) it.consume() }
                         }
                     } while (event.changes.any { it.pressed })
@@ -107,8 +116,8 @@ fun Zoomable(
             Modifier
                 .fillMaxSize()
                 .graphicsLayer {
-                    scaleX = scale.value
-                    scaleY = scale.value
+                    scaleX = scale
+                    scaleY = scale
                     translationX = offset.x
                     translationY = offset.y
                 }

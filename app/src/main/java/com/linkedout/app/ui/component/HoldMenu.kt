@@ -2,7 +2,12 @@ package com.linkedout.app.ui.component
 
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
@@ -105,17 +110,51 @@ fun HoldMenu(
     // The item's own window: the bounds are in its coordinates, the dialog's window may sit elsewhere.
     val host = LocalView.current
     val heldBounds = bounds
+    // The item's lift (0 at rest, 1 lifted) and the veil and panes' fade. Closing runs the lift back to 0 while the
+    // veil and panes fade, then calls onDismiss, so nothing drops in one frame
+    // (Animatable.animateTo, https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation-core/samples/src/main/java/androidx/compose/animation/core/samples/AnimatableSamples.kt#AnimatableAnimateToGenericsType).
+    val rise = remember { Animatable(0f) }
+    val fade = remember { Animatable(1f) }
+    val scope = rememberCoroutineScope()
+    var closing by remember { mutableStateOf(false) }
+    var dialogWindow by remember { mutableStateOf<android.view.Window?>(null) }
+    // [after] runs once the menu is gone: an action starts on an item that is back in place.
+    fun close(after: () -> Unit = {}) {
+        if (closing) return
+        closing = true
+        scope.launch {
+            // One progress, 250 ms accelerating (SystemUI's STANDARD_ACCELERATE, PathInterpolator(0.3, 0, 1, 1)),
+            // fades the veil, the panes, the blur and the dim while the copy springs back; whichever ends last.
+            // GlobalActionsDialogLite.startAnimation (isEnter false) then hides the window and dismisses at once.
+            // https://github.com/LineageOS/android_frameworks_base/blob/lineage-24.0/packages/SystemUI/src/com/android/systemui/globalactions/GlobalActionsDialogLite.java#startAnimation
+            val fading = launch { fade.animateTo(0f, tween(250, easing = CubicBezierEasing(0.3f, 0f, 1f, 1f))) }
+            rise.animateTo(0f, spring(dampingRatio = 1f, stiffness = 500f))
+            fading.join()
+            // Hide the window, then dismiss: the original card shows in this same frame.
+            dialogWindow?.decorView?.visibility = android.view.View.INVISIBLE
+            onDismiss()
+            after()
+        }
+    }
     // A window of its own over the screen, blurred behind it, as PillMenu does (this kit's PillMenu.kt; AOSP's
     // window-blur recipe, https://source.android.com/docs/core/display/window-blurs): Dialog with
     // usePlatformDefaultWidth = false and decorFitsSystemWindows = false, BlurBehind and rememberCrossWindowBlur
     // from ZoneDialog.kt.
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { close() },
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         // Blur off (battery saver, GrapheneOS): BlurBehind gives a stronger dim, the same as PillMenu's.
         val blur = rememberCrossWindowBlur()
-        BlurBehind(radiusDp = 24, blur = blur)
+        val dialogView = LocalView.current
+        LaunchedEffect(dialogView) { dialogWindow = (dialogView.parent as? DialogWindowProvider)?.window }
+        // Blur and dim rise with the lift and fall with the close, the window's own animations off.
+        BlurBehind(
+            radiusDp = 24,
+            blur = blur,
+            strength = { minOf(rise.value.coerceIn(0f, 1f), fade.value) },
+            noWindowAnimation = true
+        )
         // Where the dialog's window starts on the screen, against the item's: PillMenu maps the item's
         // bounds the same way (item = state.bounds.translate(-at), positionOnScreen).
         var origin by remember { mutableStateOf<Offset?>(null) }
@@ -127,7 +166,7 @@ fun HoldMenu(
             Modifier
                 .fillMaxSize()
                 .onGloballyPositioned { origin = it.positionOnScreen() }
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { close() })
         ) {
             var window by remember { mutableStateOf(IntSize.Zero) }
             Box(Modifier.fillMaxSize().onSizeChanged { window = it })
@@ -137,8 +176,10 @@ fun HoldMenu(
             fun xFor(width: Int): Int =
                 HoldPlacement.x(bounds.left.roundToInt(), bounds.right.roundToInt(), width, window.width, columnInset, edge)
             // The item itself, above the veil, lifted a little.
-            val rise = remember { Animatable(0f) }
             LaunchedEffect(Unit) { rise.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 500f)) }
+            // Nothing is drawn until the window's origin and every size are measured: no frame at a guessed place.
+            val ready = origin != null && window.width > 0 && listSize != IntSize.Zero &&
+                (reactions == null || rowSize != IntSize.Zero)
             // The room is the window less the system bars (WindowInsets.safeDrawing, Android's inset types,
             // https://developer.android.com/develop/ui/compose/system/insets) and the edge margin: the reactions
             // bar, the lifted item and the pane all stay inside it. As long as the pane, whole, fits under the
@@ -205,6 +246,7 @@ fun HoldMenu(
                     // fixed size: the held item's own measured bounds, so the copy lands exactly on the original
                     .size(with(density) { bounds.width.toDp() }, with(density) { shownH.toDp() })
                     .graphicsLayer {
+                        alpha = if (ready) 1f else 0f
                         val s = 1f + 0.05f * rise.value
                         scaleX = s
                         scaleY = s
@@ -247,6 +289,7 @@ fun HoldMenu(
                     modifier = Modifier
                         .offset { IntOffset(xFor(rowSize.width), rowY) }
                         .onSizeChanged { rowSize = it }
+                        .graphicsLayer { alpha = if (ready) fade.value else 0f }
                         .popIn(0)
                 ) {
                     Row(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -274,7 +317,7 @@ fun HoldMenu(
                                     ) {
                                         haptics.tick()
                                         onReact(emoji)
-                                        onDismiss()
+                                        close()
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -291,8 +334,7 @@ fun HoldMenu(
                                     onClickLabel = "More reactions"
                                 ) {
                                     haptics.tick()
-                                    onDismiss()
-                                    onMoreReactions()
+                                    close(onMoreReactions)
                                 },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -305,10 +347,11 @@ fun HoldMenu(
 
             HoldPalette(
                 actions,
-                onDismiss,
+                { after -> close(after) },
                 Modifier
                     .offset { IntOffset(xFor(listSize.width), listY) }
-                    .onSizeChanged { listSize = it },
+                    .onSizeChanged { listSize = it }
+                    .graphicsLayer { alpha = if (ready) fade.value else 0f },
                 maxHeight = paneMax,
                 onNatural = { naturalPane = it }
             )
@@ -329,7 +372,7 @@ data class HoldAction(val icon: ImageVector, val label: String, val danger: Bool
 @Composable
 private fun HoldPalette(
     actions: List<HoldAction>,
-    onDismiss: () -> Unit,
+    onClose: (after: () -> Unit) -> Unit,
     modifier: Modifier,
     maxHeight: Dp = Dp.Unspecified,
     onNatural: (Int) -> Unit = {}
@@ -373,8 +416,7 @@ private fun HoldPalette(
                         }
                         .clickable(interactionSource = press, indication = null, onClickLabel = action.label) {
                             haptics.tick()
-                            onDismiss()
-                            action.run()
+                            onClose(action.run)
                         }
                         .padding(vertical = 4.dp)
                 ) {

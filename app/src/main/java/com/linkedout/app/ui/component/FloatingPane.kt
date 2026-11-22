@@ -31,6 +31,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
@@ -153,7 +154,7 @@ fun FloatingTop(
                 title != null -> BasicText(
                     title,
                     // Every title in the accent (the user, 2026-10-31), as SettingsTiles' SettingsSectionTitle.
-                    style = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center),
+                    style = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     autoSize = TextAutoSize.StepBased(

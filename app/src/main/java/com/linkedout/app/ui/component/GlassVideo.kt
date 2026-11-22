@@ -13,8 +13,14 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -194,6 +200,8 @@ fun GlassVideo(
 
     // Which way the last double tap went, for its bubble: -1, 1, or 0.
     var jumped by remember(player) { mutableIntStateOf(0) }
+    // The last side tapped, kept while the bubble leaves: it never flips side or text on its way out.
+    var jumpSide by remember(player) { mutableIntStateOf(-1) }
     var jumps by remember(player) { mutableIntStateOf(0) }
     LaunchedEffect(jumps) {
         if (jumped != 0) {
@@ -306,6 +314,8 @@ fun GlassVideo(
         levelEnds++
     }
 
+    val levelLift = animateDpAsState(if (shown) (-96).dp else 0.dp, label = "levelLift")
+
     Box(modifier.fillMaxSize().background(Color.Black)) {
         Box(
             Modifier
@@ -323,17 +333,23 @@ fun GlassVideo(
             }
         }
 
-        if (failed) {
-            // It does nothing, so no pane: plain text with a soft shadow.
+        // It does nothing, so no pane: plain text with a soft shadow. It comes and goes by AnimatedVisibility
+        // (https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver).
+        AnimatedVisibility(
+            visible = failed,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
             Text(
                 "Can't play this video",
                 style = MaterialTheme.typography.titleMedium.overVideo(),
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.align(Alignment.Center).padding(horizontal = 48.dp, vertical = 40.dp)
+                modifier = Modifier.padding(horizontal = 48.dp, vertical = 40.dp)
             )
-            return@Box
         }
+        if (failed) return@Box
 
         if (!controls) return@Box
 
@@ -352,6 +368,7 @@ fun GlassVideo(
                             haptics.tick()
                             jump(if (back) -JUMP_MS else JUMP_MS)
                             jumped = if (back) -1 else 1
+                            jumpSide = jumped
                             jumps++
                         }
                     )
@@ -402,12 +419,12 @@ fun GlassVideo(
                 enter = fadeIn() + scaleIn(initialScale = 0.7f),
                 exit = fadeOut() + scaleOut(targetScale = 0.9f),
                 modifier = Modifier
-                    .align(if (jumped < 0) Alignment.CenterStart else Alignment.CenterEnd)
+                    .align(if (jumpSide < 0) Alignment.CenterStart else Alignment.CenterEnd)
                     .padding(horizontal = 40.dp)
             ) {
                 // Plain text with a soft shadow, no pane: it does nothing.
                 Text(
-                    if (jumped < 0) "−10 s" else "+10 s",
+                    if (jumpSide < 0) "−10 s" else "+10 s",
                     style = MaterialTheme.typography.labelLarge.overVideo(),
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)
@@ -422,7 +439,8 @@ fun GlassVideo(
                 exit = fadeOut() + scaleOut(targetScale = 0.9f),
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .offset(y = if (shown) (-96).dp else 0.dp)
+                    // The lift when the play buttons show is animated, read in the offset lambda (no recomposition per frame).
+                    .offset { IntOffset(0, levelLift.value.roundToPx()) }
             ) {
                 // It does nothing, so no pane: the icon, the bar and the level straight on the film, the text with a soft shadow.
                 Row(
@@ -549,8 +567,16 @@ fun GlassVideo(
                         ) {
                             val shownAt = dragging?.let { (it * duration).toLong() } ?: position
                             Text(clock(shownAt), style = MaterialTheme.typography.labelMedium)
+                            // The thumb glides linearly over the poll interval instead of stepping every 250 ms; the dragged
+                            // value is shown as it is (snap), and held after the release, as the seek's position is set at once.
+                            val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+                            val thumb by animateFloatAsState(
+                                targetValue = dragging ?: fraction,
+                                animationSpec = if (dragging != null) snap() else tween(POSITION_EVERY_MS.toInt(), easing = LinearEasing),
+                                label = "seekThumb"
+                            )
                             Slider(
-                                value = dragging ?: if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f,
+                                value = thumb,
                                 onValueChange = {
                                     dragging = it
                                     touches++
@@ -663,7 +689,10 @@ private fun ColorScheme.onDarkGround(): ColorScheme =
 @Composable
 private fun RoundGlass(icon: ImageVector, label: String, size: Dp, accent: Boolean = false, onClick: () -> Unit) {
     GlassPane(shape = CircleShape, accent = accent, onClick = onClick, modifier = Modifier.size(size)) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(size * 0.46f))
+        // Play, pause and replay fade into one another instead of swapping in a frame.
+        Crossfade(targetState = icon, animationSpec = tween(150), label = "roundGlassIcon") { shownIcon ->
+            Icon(shownIcon, contentDescription = label, modifier = Modifier.size(size * 0.46f))
+        }
     }
 }
 

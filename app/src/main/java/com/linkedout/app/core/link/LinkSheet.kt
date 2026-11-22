@@ -44,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.toArgb
+import com.materialkolor.blend.Blend
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
@@ -290,10 +292,16 @@ private val ButtonPadding = 24.dp
 private val ButtonSpace = 8.dp
 
 /** The tone of a warning: red for danger, a warm red for caution (as SMS's links), quiet for a note. */
+// Blend.harmonize: the design colour's hue moved toward the source colour's, through the materialkolor
+// port of https://github.com/material-foundation/material-color-utilities/blob/main/java/blend/Blend.java#harmonize
+// As MaterialColors.harmonizeWithPrimary, the call below gives colorScheme.primary as the source colour.
+private fun harmonize(designColor: Color, sourceColor: Color): Color =
+    Color(Blend.harmonize(designColor.toArgb(), sourceColor.toArgb()))
+
 @Composable
 private fun levelColor(level: LinkWarnings.Level): Color = when (level) {
     LinkWarnings.Level.DANGER -> MaterialTheme.colorScheme.error
-    LinkWarnings.Level.CAUTION -> lerp(MaterialTheme.colorScheme.error, Color(0xFFE8890C), 0.4f)
+    LinkWarnings.Level.CAUTION -> harmonize(lerp(MaterialTheme.colorScheme.error, Color(0xFFE8890C), 0.4f), MaterialTheme.colorScheme.primary)
     LinkWarnings.Level.NOTE -> MaterialTheme.colorScheme.outline
 }
 

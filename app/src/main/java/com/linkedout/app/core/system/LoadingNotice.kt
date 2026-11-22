@@ -1,54 +1,24 @@
 package com.linkedout.app.core.system
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Context
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import com.linkedout.app.R
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * A silent notification while a long load runs in the background, so the
- * reader sees something is happening: "Looking up older posts" while the
- * archives answer, for instance. Several loads at once share it; it goes
- * when the last one ends. Nothing when notifications are not allowed.
+ * Runs a long load the app started by itself ("Looking up older posts" while
+ * the archives answer, for instance) and posts nothing: the shade is for what
+ * happens out of sight, and these loads run while the app is open.
+ *
+ * Ported from https://github.com/spacecowboy/Feeder/blob/master/app/src/main/java/com/nononsenseapps/feeder/background/RssSyncJob.kt#RssSyncJob,
+ * whose doWork syncs the feeds and posts no notification for its sync (its only
+ * notification, `notify`, is for new articles).
+ * not ported: LOG_TAG (the callers log their own), runOnceRssSync and
+ * schedulePeriodicRssSync and getMyPendingJob (job scheduling: nothing runs in
+ * the background here).
+ *
+ * The class and [during] stay as they were so the readers that share this kit
+ * compile unchanged.
  */
+@Suppress("UNUSED_PARAMETER", "unused")
 class LoadingNotice(private val context: Context) {
 
-    private val running = AtomicInteger(0)
-
-    suspend fun <T> during(text: String, work: suspend () -> T): T {
-        if (running.getAndIncrement() == 0) show(text)
-        try {
-            return work()
-        } finally {
-            if (running.decrementAndGet() == 0) hide()
-        }
-    }
-
-    private fun show(text: String) {
-        val notifications = NotificationManagerCompat.from(context)
-        if (!notifications.areNotificationsEnabled()) return
-        context.getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(NotificationChannel(CHANNEL, "Loading", NotificationManager.IMPORTANCE_LOW))
-        val note = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_linkedout)
-            .setContentTitle("LinkedOut")
-            .setContentText(text)
-            .setProgress(0, 0, true)
-            .setOngoing(true)
-            .setSilent(true)
-            .build()
-        runCatching { notifications.notify(ID, note) }
-    }
-
-    private fun hide() {
-        NotificationManagerCompat.from(context).cancel(ID)
-    }
-
-    private companion object {
-        const val CHANNEL = "loading"
-        const val ID = 7301
-    }
+    suspend fun <T> during(text: String, work: suspend () -> T): T = work()
 }

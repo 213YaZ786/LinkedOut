@@ -2,9 +2,16 @@ package com.linkedout.app.ui.component
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -57,6 +64,8 @@ class PostActions internal constructor(
     internal var bounds by mutableStateOf(Rect.Zero)
     /** Set when the post becomes liked, cleared when the star has finished. */
     internal var burst by mutableStateOf(false)
+    /** The star inside the burst: it leaves (scale and fade) before the burst ends. */
+    internal var starVisible by mutableStateOf(false)
 
     // The way SMS's ThreadScreen.kt hides a held message while its menu is open (onGloballyPositioned,
     // graphicsLayer alpha): https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/feature/thread/ThreadScreen.kt
@@ -73,6 +82,7 @@ class PostActions internal constructor(
     internal fun like() {
         if (!marks.marks.value.isLiked(post.id)) {
             burst = true
+            starVisible = true
             sparkState.animate()
         }
         marks.toggleLike(post)
@@ -130,15 +140,18 @@ fun BoxScope.PostActionsOverlay(actions: PostActions, held: @Composable () -> Un
     // https://github.com/connyduck/sparkbutton/blob/main/sparkbutton-compose/src/main/kotlin/at/connyduck/sparkbutton/compose/SparkButton.kt#SparkButton
     LaunchedEffect(actions.burst) {
         if (actions.burst) {
-            delay(SPARK_DURATION_MILLIS)
+            // The star goes (scaleOut and fadeOut over STAR_EXIT_MILLIS) before the burst is removed.
+            delay(SPARK_DURATION_MILLIS - STAR_EXIT_MILLIS)
+            actions.starVisible = false
+            delay(STAR_EXIT_MILLIS)
             actions.burst = false
         }
     }
 
     // Instagram's double tap heart plays over the post itself, centred, so the star does too.
     // The state's animate() starts the animation from code, as the library's SparkButtonState allows
-    // (same file, #SparkButtonState). The library's own colours are kept: STAR_GOLD (#FFB300) is neither
-    // its amber (#FFC107) nor its deep orange (#FF5722), it only tints the star. It stays enabled: the
+    // (same file, #SparkButtonState). The star is tinted with the theme's tertiary, the sparks go from tertiary to primary
+    // (Material 3 roles, no fixed colour). It stays enabled: the
     // library draws a disabled button at 0.38 alpha, star and sparks included, and it is only on screen
     // for the burst's second, its click doing nothing.
     if (actions.burst) {
@@ -147,19 +160,28 @@ fun BoxScope.PostActionsOverlay(actions: PostActions, held: @Composable () -> Un
             modifier = Modifier.align(Alignment.Center),
             animateOnClick = false,
             enabled = true,
-            state = actions.sparkState
+            state = actions.sparkState,
+            primaryColor = MaterialTheme.colorScheme.tertiary,
+            secondaryColor = MaterialTheme.colorScheme.primary
         ) {
-            Image(
-                imageVector = ActionIcons.star,
-                contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                colorFilter = ColorFilter.tint(STAR_GOLD)
-            )
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+            AnimatedVisibility(
+                visible = actions.starVisible,
+                enter = scaleIn(initialScale = 0f) + fadeIn(),
+                exit = fadeOut(animationSpec = tween(STAR_EXIT_MILLIS.toInt())) + scaleOut()
+            ) {
+                Image(
+                    imageVector = ActionIcons.star,
+                    contentDescription = null,
+                    modifier = Modifier.size(56.dp),
+                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.tertiary)
+                )
+            }
         }
     }
 }
 
-private val STAR_GOLD = Color(0xFFFFB300)
+private const val STAR_EXIT_MILLIS = 250L
 
 /** The menu's icons, drawn here so every app has the same ones. */
 private object ActionIcons {

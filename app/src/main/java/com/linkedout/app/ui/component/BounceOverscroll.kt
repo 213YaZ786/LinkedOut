@@ -7,6 +7,9 @@ import androidx.compose.foundation.OverscrollEffect
 import androidx.compose.foundation.OverscrollFactory
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -43,18 +46,25 @@ private const val RESISTANCE = 0.3f
  * https://github.com/androidx/androidx/blob/androidx-main/compose/ui/ui/src/commonMain/kotlin/androidx/compose/ui/MotionDurationScale.kt
  */
 private class BounceOverscrollEffect : OverscrollEffect {
+    // The drag's deltas land in a plain state the layer reads, in the frame they come in (a snapTo launched per
+    // delta landed one frame late). The spring (an Animatable) runs only on release; a new touch sets [touching],
+    // which keeps the spring from writing, and stops it, so the touch continues from the value it finds.
+    private var overscrollValue by mutableFloatStateOf(0f)
     private val overscrollOffset = Animatable(0f)
+    private var touching = false
 
     private val bounceNode = object : Modifier.Node(), LayoutModifierNode {
         override fun onAttach() {
             // A node detached mid-bounce must not come back displaced.
+            overscrollValue = 0f
+            touching = false
             coroutineScope.launch { overscrollOffset.snapTo(0f) }
         }
 
         override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
             val placeable = measurable.measure(constraints)
             return layout(placeable.width, placeable.height) {
-                placeable.placeRelativeWithLayer(0, 0) { translationY = overscrollOffset.value }
+                placeable.placeRelativeWithLayer(0, 0) { translationY = overscrollValue }
             }
         }
     }
@@ -72,20 +82,25 @@ private class BounceOverscrollEffect : OverscrollEffect {
         performScroll: (Offset) -> Offset
     ): Offset {
         val scope = motionScope() ?: return performScroll(delta)
+        if (source == NestedScrollSource.UserInput && !touching) {
+            // A new touch stops the settle spring, which has written nothing since [touching] was set.
+            touching = true
+            scope.launch { overscrollOffset.stop() }
+        }
         // in pre scroll we relax the overscroll if needed
         // relaxation: when we are in progress of the overscroll and user scrolls in the
         // different direction = substract the overscroll first
-        val sameDirection = sign(delta.y) == sign(overscrollOffset.value)
+        val sameDirection = sign(delta.y) == sign(overscrollValue)
         val consumedByPreScroll =
-            if (abs(overscrollOffset.value) > 0.5 && !sameDirection) {
-                val prevOverscrollValue = overscrollOffset.value
-                val newOverscrollValue = overscrollOffset.value + delta.y
+            if (abs(overscrollValue) > 0.5 && !sameDirection) {
+                val prevOverscrollValue = overscrollValue
+                val newOverscrollValue = overscrollValue + delta.y
                 if (sign(prevOverscrollValue) != sign(newOverscrollValue)) {
                     // sign changed, coerce to start scrolling and exit
-                    scope.launch { overscrollOffset.snapTo(0f) }
+                    overscrollValue = 0f
                     Offset(x = 0f, y = delta.y + prevOverscrollValue)
                 } else {
-                    scope.launch { overscrollOffset.snapTo(overscrollOffset.value + delta.y) }
+                    overscrollValue += delta.y
                     delta.copy(x = 0f)
                 }
             } else {
@@ -96,24 +111,26 @@ private class BounceOverscrollEffect : OverscrollEffect {
         val overscrollDelta = leftForScroll - consumedByScroll
         // if it is a drag, not a fling, add the delta left to our over scroll value
         if (abs(overscrollDelta.y) > 0.5 && source == NestedScrollSource.UserInput) {
-            scope.launch {
-                // multiply by 0.1 for the sake of parallax effect (the sample's comment)
-                overscrollOffset.snapTo(overscrollOffset.value + overscrollDelta.y * RESISTANCE)
-            }
+            // multiply by 0.1 for the sake of parallax effect (the sample's comment)
+            overscrollValue += overscrollDelta.y * RESISTANCE
         }
         return consumedByPreScroll + consumedByScroll
     }
 
     override suspend fun applyToFling(velocity: Velocity, performFling: suspend (Velocity) -> Velocity) {
         val consumed = performFling(velocity)
+        touching = false
         if (motionScope() == null) return
-        // when the fling happens - we just gradually animate our overscroll to 0
+        // when the fling happens - we just gradually animate our overscroll to 0, from the value the touch left
         val remaining = velocity - consumed
-        overscrollOffset.animateTo(targetValue = 0f, initialVelocity = remaining.y, animationSpec = spring())
+        overscrollOffset.snapTo(overscrollValue)
+        overscrollOffset.animateTo(targetValue = 0f, initialVelocity = remaining.y, animationSpec = spring()) {
+            if (!touching) overscrollValue = value
+        }
     }
 
     override val isInProgress: Boolean
-        get() = overscrollOffset.value != 0f
+        get() = overscrollValue != 0f
 
     override val node: DelegatableNode = bounceNode
 }

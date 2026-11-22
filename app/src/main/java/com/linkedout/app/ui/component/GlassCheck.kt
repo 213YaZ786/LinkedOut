@@ -11,6 +11,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -281,6 +282,9 @@ private fun GlassMark(
             )
         }
         if (lensing) {
+            // The bead fades in with the press (its alpha follows pressProgress), never swapped in on one frame.
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+            Box(Modifier.graphicsLayer { alpha = pressSprings.pressProgress.coerceIn(0f, 1f) }) {
             GlassBead(
                 dampedDragAnimation = pressSprings,
                 backdrop = backdrop,
@@ -296,6 +300,7 @@ private fun GlassMark(
                 over = { over(chosen.value) },
                 lensTint = Color.Transparent
             )
+            }
         }
     }
 }

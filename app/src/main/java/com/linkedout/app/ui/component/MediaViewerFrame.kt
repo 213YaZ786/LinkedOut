@@ -1,7 +1,11 @@
 package com.linkedout.app.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.drawBehind
+import kotlinx.coroutines.Job
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -110,9 +114,13 @@ fun MediaViewerFrame(
             pageCount = { count }
         )
         var zoomed by remember { mutableStateOf(false) }
-        val dragY = remember { Animatable(0f) }
+        // The drag is a plain state: each delta lands in the frame it comes in (a snapTo launched per delta landed
+        // a frame late). A swipe away or back is a spring run from it, which a new touch stops.
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation-core/samples/src/main/java/androidx/compose/animation/core/samples/AnimatableSamples.kt#AnimatableAnimateToGenericsType
+        var dragY by remember { mutableFloatStateOf(0f) }
+        var settle by remember { mutableStateOf<Job?>(null) }
+        var screenHeight by remember { mutableIntStateOf(0) }
         val scope = rememberCoroutineScope()
-        val fade = (1f - abs(dragY.value) / 1200f).coerceIn(0.3f, 1f)
         // Whether the chrome shows: flipped by a tap on a page, read by the row below, by the player
         // controls (LocalViewerChrome) and by the system bars (ViewerChromeEffect).
         val chrome = remember { mutableStateOf(true) }
@@ -127,7 +135,11 @@ fun MediaViewerFrame(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = fade))
+                    .onSizeChanged { screenHeight = it.height }
+                    // The black fades with the drag, read in the draw phase: no recomposition per frame.
+                    .drawBehind {
+                        drawRect(Color.Black.copy(alpha = (1f - abs(dragY) / 1200f).coerceIn(0.3f, 1f)))
+                    }
             ) {
                 HorizontalPager(
                     state = pager,
@@ -135,18 +147,25 @@ fun MediaViewerFrame(
                     modifier = Modifier
                         .fillMaxSize()
                         .then(if (look != null) Modifier.glassSource(pagerBackdrop, look) else Modifier)
-                        .offset { IntOffset(0, dragY.value.roundToInt()) }
+                        .offset { IntOffset(0, dragY.roundToInt()) }
                         .draggable(
                             orientation = Orientation.Vertical,
                             enabled = !zoomed,
-                            state = rememberDraggableState { delta ->
-                                scope.launch { dragY.snapTo(dragY.value + delta) }
-                            },
+                            state = rememberDraggableState { delta -> dragY += delta },
+                            onDragStarted = { settle?.cancel() },
                             onDragStopped = { velocity ->
-                                if (abs(dragY.value) > DISMISS_DISTANCE || abs(velocity) > DISMISS_VELOCITY) {
-                                    onDismiss()
-                                } else {
-                                    dragY.animateTo(0f)
+                                settle = scope.launch {
+                                    if (abs(dragY) > DISMISS_DISTANCE || abs(velocity) > DISMISS_VELOCITY) {
+                                        // Away off the screen the way it was thrown, then closed.
+                                        val way = if (dragY != 0f) Math.signum(dragY) else Math.signum(velocity)
+                                        val away = way * (if (screenHeight > 0) screenHeight else 2000).toFloat()
+                                        animate(dragY, away, velocity, spring(dampingRatio = 1f, stiffness = 400f)) { value, _ ->
+                                            dragY = value
+                                        }
+                                        onDismiss()
+                                    } else {
+                                        animate(dragY, 0f, velocity, spring()) { value, _ -> dragY = value }
+                                    }
                                 }
                             }
                         )
@@ -225,74 +244,18 @@ private val ViewerActionSize = 48.dp
 @Composable
 fun ZoomableImage(model: Any?, onZoomChanged: (Boolean) -> Unit) {
     val chrome = LocalViewerChrome.current
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
-    var size by remember { mutableStateOf(IntSize.Zero) }
-
-    fun clamp(candidate: Offset): Offset {
-        val maxX = size.width * (scale - 1f) / 2f
-        val maxY = size.height * (scale - 1f) / 2f
-        return Offset(candidate.x.coerceIn(-maxX, maxX), candidate.y.coerceIn(-maxY, maxY))
-    }
-
-    fun update(newScale: Float, newOffset: Offset) {
-        val wasZoomed = scale > 1f
-        scale = newScale
-        offset = if (newScale <= 1f) Offset.Zero else clamp(newOffset)
-        if (wasZoomed != scale > 1f) onZoomChanged(scale > 1f)
-    }
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .onSizeChanged { size = it }
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { chrome?.let { it.value = !it.value } },
-                    onDoubleTap = { tap ->
-                        if (scale > 1f) {
-                            update(1f, Offset.Zero)
-                        } else {
-                            val center = Offset(size.width / 2f, size.height / 2f)
-                            update(DOUBLE_TAP_SCALE, (center - tap) * (DOUBLE_TAP_SCALE - 1f))
-                        }
-                    }
-                )
-            }
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    do {
-                        val event = awaitPointerEvent()
-                        val fingers = event.changes.count { it.pressed }
-                        if (fingers > 1 || scale > 1f) {
-                            val zoom = event.calculateZoom()
-                            val pan = event.calculatePan()
-                            update((scale * zoom).coerceIn(1f, MAX_SCALE), offset + pan)
-                            event.changes.forEach { if (it.positionChanged()) it.consume() }
-                        }
-                    } while (event.changes.any { it.pressed })
-                }
-            }
-    ) {
+    // The double tap springs between 1x and 2.5x and a pinch stops that spring first: Zoomable does both
+    // (https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation-core/samples/src/main/java/androidx/compose/animation/core/samples/AnimatableSamples.kt#AnimatableAnimateToGenericsType).
+    Zoomable(onZoomChanged = onZoomChanged, onTap = { chrome?.let { it.value = !it.value } }) {
         AsyncImage(
             model = model,
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    translationX = offset.x
-                    translationY = offset.y
-                }
+            modifier = Modifier.fillMaxSize()
         )
     }
 }
 
-private const val MAX_SCALE = 5f
-private const val DOUBLE_TAP_SCALE = 2.5f
 private const val DISMISS_DISTANCE = 300f
 private const val DISMISS_VELOCITY = 2500f
 

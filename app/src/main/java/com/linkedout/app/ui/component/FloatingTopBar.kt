@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
@@ -64,7 +65,7 @@ fun BarTitle(text: String, modifier: Modifier = Modifier) {
     BasicText(
         text,
         modifier = modifier.semantics { heading() },
-        style = style.copy(color = LocalContentColor.current, textAlign = TextAlign.Center),
+        style = style.copy(color = LocalContentColor.current, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
         maxLines = 2,
         overflow = TextOverflow.Ellipsis,
         autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = style.fontSize, stepSize = 0.5.sp)

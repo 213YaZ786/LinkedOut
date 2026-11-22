@@ -1,7 +1,11 @@
 package com.linkedout.app.ui.component
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.MutatorMutex
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -73,8 +77,10 @@ class DampedDragAnimation(
 
     private val valueAnimation =
         Animatable(initialValue, visibilityThreshold)
-    private val velocityAnimation =
-        Animatable(0f, 5f)
+    // The velocity is the tracker's own, set at once in each frame of the value's spring: a new animateTo launched
+    // every frame (Kyant0's updateVelocity) cut the one before it. Only the return to rest is animated.
+    // https://github.com/Kyant0/AndroidLiquidGlass/blob/kmp/app/src/commonMain/kotlin/com/kyant/backdrop/catalog/utils/DampedDragAnimation.kt
+    private var velocityAnimation by mutableFloatStateOf(0f)
     private val pressProgressAnimation =
         Animatable(0f, 0.001f)
     private val scaleXAnimation =
@@ -92,7 +98,7 @@ class DampedDragAnimation(
     val pressProgress: Float get() = pressProgressAnimation.value
     val scaleX: Float get() = scaleXAnimation.value
     val scaleY: Float get() = scaleYAnimation.value
-    val velocity: Float get() = velocityAnimation.value
+    val velocity: Float get() = velocityAnimation
 
     val modifier: Modifier = Modifier.pointerInput(Unit) {
         inspectDragGestures(
@@ -158,7 +164,7 @@ class DampedDragAnimation(
                 val targetValue = value.coerceIn(valueRange)
                 launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
                 if (velocity != 0f) {
-                    launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
+                    launch { animate(velocityAnimation, 0f, animationSpec = velocityAnimationSpec) { value, _ -> velocityAnimation = value } }
                 }
                 release()
             }
@@ -171,7 +177,7 @@ class DampedDragAnimation(
             Offset(value, 0f)
         )
         val targetVelocity = velocityTracker.calculateVelocity().x / (valueRange.endInclusive - valueRange.start)
-        animationScope.launch { velocityAnimation.animateTo(targetVelocity, velocityAnimationSpec) }
+        velocityAnimation = targetVelocity
     }
 }
 
