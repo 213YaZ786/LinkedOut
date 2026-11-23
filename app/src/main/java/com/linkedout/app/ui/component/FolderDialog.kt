@@ -10,7 +10,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +26,10 @@ import androidx.compose.ui.unit.dp
  * switches, the way every other choice in this app is made. [everything] is
  * the row that means no folder at all, which on Home is the whole stream. An
  * account always lands in a folder, so it passes null and gets folders only.
+ *
+ * The new folder's name field is the kit's DialogNameField, Done creates, as in
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/ui/component/FolderDialog.kt#FolderDialog
+ * (its Tick and Choice rows are MTGA's own look, not ported: LinkedOut keeps its Choice with GlassRadio).
  */
 @Composable
 fun FolderDialog(
@@ -41,7 +44,8 @@ fun FolderDialog(
     extras: List<String> = emptyList()
 ) {
     var creating by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
+    val nameState = rememberDialogNameState()
+    val name = nameState.text.toString()
 
     ZoneAlertDialog(
         onDismissRequest = onDismiss,
@@ -58,13 +62,7 @@ fun FolderDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-                    TextField(
-                        value = name,
-                        onValueChange = { name = it },
-                        singleLine = true,
-                        placeholder = { Text("Folder name") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    DialogNameField(nameState, "Folder name", onDone = { if (name.isNotBlank()) onSelect(name.trim()) })
                 } else {
                     everything?.let { Choice(it, selected == null) { onSelect(null) } }
                     folders.forEach { folder ->

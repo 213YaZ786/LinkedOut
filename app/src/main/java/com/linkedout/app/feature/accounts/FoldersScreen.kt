@@ -25,7 +25,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.graphics.Color
 import com.linkedout.app.ui.component.BoldIconButton
 import com.linkedout.app.ui.component.QuietButton
-import androidx.compose.material3.TextField
+import com.linkedout.app.ui.component.DialogNameField
+import com.linkedout.app.ui.component.rememberDialogNameState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -312,6 +313,8 @@ fun FoldersScreen(
     }
 }
 
+// Ported from MTGA's NameDialog, which takes Android Files' New folder field:
+// https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/accounts/FoldersScreen.kt#NameDialog
 @Composable
 private fun NameDialog(
     title: String,
@@ -320,18 +323,13 @@ private fun NameDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf(initial) }
+    val state = rememberDialogNameState(initial, selectAll = initial.isNotEmpty())
+    val name = state.text.toString()
     ZoneAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            TextField(
-                value = name,
-                onValueChange = { name = it },
-                singleLine = true,
-                placeholder = { Text("Folder name") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            DialogNameField(state, "Folder name", onDone = { if (name.isNotBlank()) onConfirm(name) })
         },
         confirmButton = {
             BoldButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank(), filled = true) {
