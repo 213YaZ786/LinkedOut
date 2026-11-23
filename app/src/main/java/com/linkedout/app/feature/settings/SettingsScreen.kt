@@ -18,6 +18,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -145,6 +155,7 @@ private fun keepLabel(days: Int): String = when (days) {
  * The kit's UpdateSourceRow is a ListItem row, which does not fit a grid of tiles, so its logic is ported into the tile here.
  */
 // not ported: UpdateSourceRow (the kit's ListItem row, its logic lives in the "self" tile below)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onOpenDebugLog: () -> Unit,
@@ -158,6 +169,10 @@ fun SettingsScreen(
     val savedMedia by viewModel.savedMedia.collectAsState()
     val guestCookies by viewModel.guestCookies.collectAsState()
     val context = LocalContext.current
+    // The top row folds away going down and returns going up, the content full screen, as MTGA's SettingsScreen
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/settings/SettingsScreen.kt#SettingsScreen).
+    val topBarScroll = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    val statusTop = WindowInsets.statusBars.getTop(LocalDensity.current)
     val uriHandler = LocalUriHandler.current
     val haptics = rememberHaptics()
     // The guide's tile says how many steps are left, read from the system as the guide reads them.
@@ -525,11 +540,23 @@ fun SettingsScreen(
         val dockRoom = if (wide && inset >= SideDockClearance) SideDockClearance else 0.dp
         val dockPadding = LocalDockPadding.current
         CompositionLocalProvider(LocalReadableInset provides if (wide) 0.dp else inset) {
-            Box(Modifier.fillMaxSize().padding(start = dockRoom)) {
+            Box(
+                Modifier.fillMaxSize().padding(start = dockRoom)
+                    .nestedScroll(topBarScroll.nestedScrollConnection)
+            ) {
                 FloatingFrame(
                     bottom = 0.dp,
                     scroll = if (wide) detailScroll else compactScroll,
-                    top = { FloatingTop("Settings") },
+                    // The content runs whole under the window's top while the row folds.
+                    softEdge = false,
+                    top = {
+                        Box(
+                            Modifier
+                                // The row and the status bar's height, so it leaves the window whole.
+                                .onSizeChanged { topBarScroll.state.heightOffsetLimit = -(it.height + statusTop).toFloat() }
+                                .offset { IntOffset(0, topBarScroll.state.heightOffset.roundToInt()) }
+                        ) { FloatingTop("Settings") }
+                    },
                     largeTitle = LargeTitle("Settings")
                 ) { padding ->
                     if (wide) {

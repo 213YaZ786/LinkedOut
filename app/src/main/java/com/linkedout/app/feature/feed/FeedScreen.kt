@@ -71,8 +71,6 @@ import com.linkedout.app.ui.component.PostCard
 import com.linkedout.app.feature.BarAction
 import com.linkedout.app.ui.component.BarTitle
 import com.linkedout.app.ui.component.FloatingTopBar
-import com.linkedout.app.ui.component.scrolledFromTop
-import com.linkedout.app.ui.component.underFloatingTopBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
@@ -178,8 +176,8 @@ fun FeedScreen(
     // top to bend it as Home's does.
     val look = LocalGlass.current
     val listBackdrop = rememberGlassBackdrop()
-    // Ported from MTGA's FeedScreen: the Scaffold whose topBar is the FloatingTopBar, the list under it with
-    // underFloatingTopBar, the bar folding by enterAlwaysScrollBehavior
+    // Ported from MTGA's FeedScreen: the Scaffold whose topBar is the FloatingTopBar, the list full screen with no
+    // fade under it, the bar folding by enterAlwaysScrollBehavior
     // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     // LinkedOut's change: the profile card is the list's first item. While it is on screen it carries Back and
@@ -210,17 +208,12 @@ fun FeedScreen(
                     )
                 }
             }
-        ) { padding ->
+        ) { _ ->
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .underFloatingTopBar(
-                        barHeight = padding.calculateTopPadding(),
-                        scrolled = listState::scrolledFromTop,
-                        foldOffset = { scrollBehavior.state.heightOffset }
-                    )
                     .then(if (look != null) Modifier.glassSource(listBackdrop, look) else Modifier),
                 // The top is the list's start only: the profile card begins under the status bar, where the bar
                 // would be, and what scrolls up goes under the bar whatever its height.

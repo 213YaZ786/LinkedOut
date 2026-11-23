@@ -47,8 +47,8 @@ import com.linkedout.app.ui.component.BoldIconButton
 import com.linkedout.app.ui.component.FloatingTopBar
 import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.component.plus
-import com.linkedout.app.ui.component.scrolledFromTop
-import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.androidx.compose.koinViewModel
 
@@ -99,12 +99,17 @@ fun SavedMediaScreen(
         )
     }
 
+    // The bar folds away going down and returns going up, the grid full screen, as MTGA's SavedMediaScreen
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/media/SavedMediaScreen.kt#SavedMediaScreen).
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         // The page's ground is painted under the whole app, see MainActivity.
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
             FloatingTopBar(
+                scrollBehavior = scrollBehavior,
                 title = { BarTitle("Saved media") },
                 navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
                 actions = {
@@ -135,10 +140,7 @@ fun SavedMediaScreen(
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(CELL_MIN),
-                modifier = Modifier.fillMaxSize().underFloatingTopBar(
-                    barHeight = padding.calculateTopPadding(),
-                    scrolled = gridState::scrolledFromTop
-                ),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     start = LocalReadableInset.current + 16.dp,
                     end = LocalReadableInset.current + 16.dp,

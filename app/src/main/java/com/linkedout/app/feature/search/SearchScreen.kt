@@ -5,8 +5,8 @@ import com.linkedout.app.feature.BarAction
 import com.linkedout.app.ui.component.BarTitle
 import com.linkedout.app.ui.component.FloatingTopBar
 import com.linkedout.app.ui.component.plus
-import com.linkedout.app.ui.component.scrolledFromTop
-import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.linkedout.app.ui.component.navigationBarBottom
 import androidx.compose.foundation.layout.PaddingValues
@@ -81,7 +81,11 @@ fun SearchScreen(
         )
     }
 
+    // Ported from MTGA's DiagnosticsScreen: the bar folds away going down and returns going up, the list full screen
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/diagnostics/DiagnosticsScreen.kt#DiagnosticsScreen).
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         // The page's ground is painted under the whole app, see MainActivity.
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
@@ -90,11 +94,9 @@ fun SearchScreen(
         // is where the empty band above and below the content came from. The
         // list below owns them once, in its content padding.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        // Ported from MTGA's FeedScreen: the FloatingTopBar as the Scaffold's topBar, the list under it with
-        // underFloatingTopBar
-        // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
         topBar = {
             FloatingTopBar(
+                scrollBehavior = scrollBehavior,
                 title = { BarTitle("Search") },
                 navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) }
             )
@@ -112,10 +114,7 @@ fun SearchScreen(
         val listState = rememberLazyListState()
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().underFloatingTopBar(
-                barHeight = padding.calculateTopPadding(),
-                scrolled = listState::scrolledFromTop
-            ),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = LocalReadableInset.current,
                 end = LocalReadableInset.current,

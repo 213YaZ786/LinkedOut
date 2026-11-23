@@ -5,8 +5,9 @@ import com.linkedout.app.feature.BarAction
 import com.linkedout.app.ui.component.BarTitle
 import com.linkedout.app.ui.component.FloatingTopBar
 import com.linkedout.app.ui.component.plus
-import com.linkedout.app.ui.component.scrolledFromTop
-import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.RejectOnFailure
@@ -95,6 +96,7 @@ import androidx.compose.foundation.layout.WindowInsets
  * profile in the app, links open the real URL, and sharing uses the x.com
  * address so the recipient needs nothing special to open it.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun PostDetailScreen(
     id: String,
@@ -175,8 +177,9 @@ fun PostDetailScreen(
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun PostBar(onBack: () -> Unit, onShare: (() -> Unit)?) {
+private fun PostBar(onBack: () -> Unit, onShare: (() -> Unit)?, scrollBehavior: TopAppBarScrollBehavior? = null) {
     FloatingTopBar(
+        scrollBehavior = scrollBehavior,
         title = { BarTitle("Post") },
         navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
         actions = {
@@ -235,23 +238,21 @@ internal fun ConversationView(
         )
     }
 
-    // Ported from MTGA's PostDetailScreen: the Scaffold whose topBar is the FloatingTopBar (Back, Share), the list
-    // under it with underFloatingTopBar
+    // Ported from MTGA's PostDetailScreen: the bar folds away going down and returns going up, the list full screen
     // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/post/PostDetailScreen.kt#PostDetailScreen).
     // The status and navigation bars are the list's own, the Scaffold takes none (the bar clears the status bar itself).
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = { PostBar(onBack = onBack, onShare = onShare) }
+        topBar = { PostBar(onBack = onBack, onShare = onShare, scrollBehavior = scrollBehavior) }
     ) { padding ->
     val listState = rememberLazyListState()
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().underFloatingTopBar(
-            barHeight = padding.calculateTopPadding(),
-            scrolled = listState::scrolledFromTop
-        ),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,

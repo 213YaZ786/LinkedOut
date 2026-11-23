@@ -37,8 +37,8 @@ import com.linkedout.app.feature.BarAction
 import com.linkedout.app.ui.component.BarTitle
 import com.linkedout.app.ui.component.FloatingTopBar
 import com.linkedout.app.ui.component.plus
-import com.linkedout.app.ui.component.scrolledFromTop
-import com.linkedout.app.ui.component.underFloatingTopBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Scaffold
@@ -70,11 +70,12 @@ fun JobDetailScreen(
     val offer = state.detail
     val kept = offer != null && saved.isSaved(offer.id)
 
-    // Ported from MTGA's FeedScreen: the FloatingTopBar as the Scaffold's topBar, the list under it with
-    // underFloatingTopBar
-    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
-    // not ported: FeedScreen's other pieces (the profile, its posts, Follow, media saving, the header-gone title)
+    // Ported from MTGA's DiagnosticsScreen: the bar folds away going down and returns going up, the list full screen
+    // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/diagnostics/DiagnosticsScreen.kt#DiagnosticsScreen).
+    // not ported: DiagnosticsScreen's other pieces (the instance cards, Add dialog, list update)
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         // The page's ground is painted under the whole app, see MainActivity.
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
@@ -82,6 +83,7 @@ fun JobDetailScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             FloatingTopBar(
+                scrollBehavior = scrollBehavior,
                 title = { BarTitle("Offer") },
                 navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
                 // Save on the trailing side, as Refresh on a profile and Share on a post: the bookmark in the
@@ -102,10 +104,7 @@ fun JobDetailScreen(
     val listState = rememberLazyListState()
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().underFloatingTopBar(
-            barHeight = padding.calculateTopPadding(),
-            scrolled = listState::scrolledFromTop
-        ),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,
