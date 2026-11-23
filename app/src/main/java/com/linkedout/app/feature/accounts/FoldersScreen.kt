@@ -39,15 +39,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.core.model.FollowedAccount
 import com.linkedout.app.ui.component.Avatar
-import com.linkedout.app.feature.BarAction
 import com.linkedout.app.ui.component.BarTitle
-import com.linkedout.app.ui.component.FloatingTopBar
-import com.linkedout.app.ui.component.plus
-import com.linkedout.app.ui.component.scrolledFromTop
-import com.linkedout.app.ui.component.underFloatingTopBar
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import com.linkedout.app.data.settings.SettingsStore
+import com.linkedout.app.ui.component.MovableAction
+import com.linkedout.app.ui.component.TopActionSize
+import org.koin.compose.koinInject
 import com.linkedout.app.ui.component.Zone
 import com.linkedout.app.ui.component.ZoneGap
 import com.linkedout.app.ui.component.rememberHaptics
@@ -71,9 +72,12 @@ import org.koin.androidx.compose.koinViewModel
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun FoldersScreen(
+    // Kept for the caller: the system back gesture does the going back now, the arrow is gone.
     onBack: () -> Unit,
-    viewModel: AccountsViewModel = koinViewModel()
+    viewModel: AccountsViewModel = koinViewModel(),
+    store: SettingsStore = koinInject()
 ) {
     val rows by viewModel.rows.collectAsState()
     val folders by viewModel.folders.collectAsState()
@@ -141,34 +145,34 @@ fun FoldersScreen(
         )
     }
 
-    // Ported from MTGA's FoldersScreen: a Scaffold whose topBar is the FloatingTopBar (Back, New folder), the list
-    // under it with underFloatingTopBar
+    // Ported from MTGA's FoldersScreen: no bar and no arrow, the title first in the list, a movable + on the page
     // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/accounts/FoldersScreen.kt#FoldersScreen).
-    Scaffold(
-        // The page's ground is painted under the whole app, see MainActivity.
-        containerColor = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.onBackground,
-        topBar = {
-            FloatingTopBar(
-                title = { BarTitle("Folders") },
-                navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
-                actions = { BarAction(LinkedOutIcons.Add, "New folder", { creating = true }) }
-            )
-        }
-    ) { padding ->
+    // The system gesture goes back. The page's ground is painted under the whole app, see MainActivity.
+    val settings by store.settings.collectAsState()
+    val statusTop = statusBarTop()
+    val navigationBottom = navigationBarBottom()
+    Box(Modifier.fillMaxSize()) {
     val listState = rememberLazyListState()
     LazyColumn(
         state = listState,
-        modifier = Modifier.fillMaxSize().underFloatingTopBar(
-            barHeight = padding.calculateTopPadding(),
-            scrolled = listState::scrolledFromTop
-        ),
+        modifier = Modifier.fillMaxSize(),
+        // Room under the last folder for the button: its 48 dp and the 16 dp around it.
         contentPadding = PaddingValues(
             start = LocalReadableInset.current,
             end = LocalReadableInset.current,
-            bottom = 24.dp
-        ).plus(padding)
+            top = 0.dp,
+            bottom = navigationBottom + 16.dp + TopActionSize + 16.dp
+        )
     ) {
+        // The title on the page, no zone, first in the list: it scrolls away with it.
+        item(key = "title") {
+            Box(
+                Modifier.fillMaxWidth().padding(top = statusTop + 16.dp, bottom = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.primary) { BarTitle("Folders") }
+            }
+        }
         items(folders, key = { it }) { name ->
             val count = rows.count { it.folder == name }
             Zone(
@@ -298,6 +302,13 @@ fun FoldersScreen(
             }
         }
     }
+    MovableAction(
+        icon = LinkedOutIcons.Add,
+        label = "New folder",
+        snapFraction = settings.foldersButtonSnap,
+        onSnapFraction = { fraction -> store.update { it.copy(foldersButtonSnap = fraction) } },
+        onClick = { creating = true }
+    )
     }
 }
 

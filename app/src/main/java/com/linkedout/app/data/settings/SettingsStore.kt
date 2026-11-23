@@ -99,7 +99,13 @@ data class Settings(
     val welcomeSeen: Boolean = false,
     /** The last job search, so the Jobs tab opens where it was left. */
     val jobKeywords: String = "",
-    val jobLocation: String = ""
+    val jobLocation: String = "",
+    /**
+     * Where the Folders screen's new folder button was left, as a snap fraction of the page's movement bounds
+     * (see ui/component/MovableAction), or null until it is moved (then bottom right).
+     * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/settings/SettingsStore.kt#foldersButtonSnap
+     */
+    val foldersButtonSnap: Float? = null
 )
 
 /**
