@@ -40,11 +40,9 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
 import com.linkedout.app.ui.component.BannerAction
-import com.linkedout.app.ui.component.FeedBanner
 import com.linkedout.app.ui.component.FailureDialog
 import com.linkedout.app.ui.component.FloatingPane
 import com.linkedout.app.ui.component.ScrollUpButton
@@ -252,7 +250,7 @@ fun TimelineScreen(
     // NavigationDrawerItem (GlassMenu's SelectableDropdownMenuItem `count`).
     // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/timeline/TimelineScreen.kt#banner
     // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/SearchBar.kt#AppBarWithSearch
-    // not ported: feedPill (MTGA's pill with its banner probe; the nobody followed banner here has only the "Home" title)
+    // not ported: feedPill (MTGA's pill with its banner probe; the capsule here serves nobody followed too)
     // not ported: AppBarWithSearch (the app's AppBarWithSearch in ui/component/FeedBanner.kt is its port, used as it is)
     val followed by koinInject<AccountStore>().accounts.collectAsState()
     val feedMenu: @Composable () -> Unit = {
@@ -315,29 +313,22 @@ fun TimelineScreen(
         }
     }
 
+    // One glass capsule, nothing under it: the folder switch, "Search saved posts" (hidden while nobody is followed: an
+    // empty input field, as the draft draws it), the alert on a failure only. MTGA keeps its feed pill (All) in the same
+    // case: the feed switcher stays at the top even when empty.
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/timeline/TimelineScreen.kt#TimelineScreen
+    // not ported: TimelineScreen (the screen is this file's own, only the banner's empty branch is changed)
+    // not ported: feedPill and its banner probe (LinkedOut uses the capsule of point 23)
     val banner: @Composable () -> Unit = {
-        if (state.followedCount > 0) {
-            // One glass capsule, nothing under it: the folder switch, "Search saved posts", the alert on a failure only.
-            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                AppBarWithSearch(
-                    inputField = { SearchCapsuleHint(LinkedOutIcons.Search, listOf("Search saved posts"), onOpenSearch) },
-                    navigationIcon = feedSwitch,
-                    actions = { alert() }
-                )
-            }
-        } else {
-            // Nobody followed: no feed to choose, the plain title keeps the row from being empty.
-            FeedBanner(
-                centre = {
-                    Text(
-                        "Home",
-                        style = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.primary),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.semantics { heading() }
-                    )
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            AppBarWithSearch(
+                inputField = {
+                    if (state.followedCount > 0) {
+                        SearchCapsuleHint(LinkedOutIcons.Search, listOf("Search saved posts"), onOpenSearch)
+                    }
                 },
-                leading = alert
+                navigationIcon = feedSwitch,
+                actions = { alert() }
             )
         }
     }

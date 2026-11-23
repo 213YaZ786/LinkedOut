@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.offset
@@ -70,7 +71,6 @@ import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.component.ChoiceDialog
 import com.linkedout.app.ui.component.FloatingFrame
 import com.linkedout.app.ui.component.FloatingTop
-import com.linkedout.app.ui.component.LargeTitle
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.component.SettingsActionTile
@@ -549,6 +549,9 @@ fun SettingsScreen(
                     scroll = if (wide) detailScroll else compactScroll,
                     // The content runs whole under the window's top while the row folds.
                     softEdge = false,
+                    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/settings/SettingsScreen.kt#SettingsScreen
+                    // "Settings" small and centred on the top line, no large title: the sections start 16 dp under it.
+                    // not ported: SettingsScreen (the screen is this file's own, only its header is changed), MTGA's dock padding, its sources section and tiles (X only)
                     top = {
                         Box(
                             Modifier
@@ -556,12 +559,12 @@ fun SettingsScreen(
                                 .onSizeChanged { topBarScroll.state.heightOffsetLimit = -(it.height + statusTop).toFloat() }
                                 .offset { IntOffset(0, topBarScroll.state.heightOffset.roundToInt()) }
                         ) { FloatingTop("Settings") }
-                    },
-                    largeTitle = LargeTitle("Settings")
+                    }
                 ) { padding ->
                     if (wide) {
                         SettingsListDetail(
-                            padding = padding,
+                            // SettingsListDetail adds its own 24 dp: 8 dp less in the header gives the 16.
+                            padding = PaddingValues(top = (padding.calculateTopPadding() - 8.dp).coerceAtLeast(0.dp)),
                             sections = SECTIONS,
                             section = section,
                             onSection = { sectionId = it.id },
@@ -578,7 +581,7 @@ fun SettingsScreen(
                                 .padding(horizontal = LocalReadableInset.current)
                         ) {
                             SettingsHeaderSpacer(padding)
-                            Spacer(Modifier.height(24.dp))
+                            Spacer(Modifier.height(16.dp))
                             SettingsFoldedSections(SECTIONS, open = openSection, onOpen = { openId = it?.id.orEmpty() }) { which ->
                                 val list: List<SettingsTile> = sectionTiles(which, tiles, actions)
                                 if (list.isNotEmpty()) SettingsTileGrid(list) { tileId = it.id }
