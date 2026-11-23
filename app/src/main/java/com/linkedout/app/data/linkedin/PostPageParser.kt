@@ -128,8 +128,10 @@ class PostPageParser {
             // all is still worth showing, so neither is required.
             text = fromGraph?.takeIf { it.isNotBlank() } ?: fromCard.orEmpty(),
             links = Markup.links(card.commentaryHtml().orEmpty()),
-            publishedAtMillis = post?.let { graph.ownString("datePublished", it) }
-                ?.let(Timestamps::parseIso)
+            // The id's own instant, then the graph's exact value, then the rounded label.
+            publishedAtMillis = Timestamps.fromActivityId(activityId)
+                ?: post?.let { graph.ownString("datePublished", it) }
+                    ?.let(Timestamps::parseIso)
                 ?: Timestamps.fromRelative(card.relativeAge()),
             permalink = permalink.substringBefore('?'),
             kind = if (RESHARE in card) PostKind.REPOST else PostKind.ORIGINAL,
@@ -437,7 +439,8 @@ class PostPageParser {
             avatarUrl = attributeAfter("hue-web-entity__image", "data-delayed-url")?.let(Markup::decodeEntities),
             text = text,
             links = Markup.links(this),
-            publishedAtMillis = Timestamps.fromRelative(commentAge()),
+            // The comment's own id is built from its creation time, like a post's.
+            publishedAtMillis = Timestamps.fromActivityId(id) ?: Timestamps.fromRelative(commentAge()),
             permalink = main.permalink,
             kind = PostKind.REPLY,
             relatedHandle = main.authorHandle.takeIf { it.isNotEmpty() },

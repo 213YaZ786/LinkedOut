@@ -302,7 +302,11 @@ class ProfilePageParser {
             },
             text = passedOn?.text ?: text,
             links = Markup.links(chunk.commentaryHtml().orEmpty()),
-            publishedAtMillis = Timestamps.fromRelative(chunk.relativeAge()),
+            // The id's own instant first (the permalink carries activity-<id>-<code>), the rounded
+            // label only when it carries none.
+            publishedAtMillis = Timestamps.fromActivityId(permalink)
+                ?: Timestamps.fromActivityId(id)
+                ?: Timestamps.fromRelative(chunk.relativeAge()),
             permalink = permalink,
             kind = kind,
             relatedHandle = when {

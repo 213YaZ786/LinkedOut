@@ -231,7 +231,8 @@ class CompanyPageParser {
                 ?.let(Markup::decodeEntities),
             text = commentary().orEmpty(),
             links = Markup.links(commentaryHtml().orEmpty()),
-            publishedAtMillis = Timestamps.fromRelative(age()),
+            // The id's own instant first, the rounded label only when the id carries none.
+            publishedAtMillis = Timestamps.fromActivityId(urn) ?: Timestamps.fromRelative(age()),
             permalink = permalink,
             // Every card used to be ORIGINAL. A card with the header above it
             // is the page passing on someone else's post, which is a repost
@@ -283,8 +284,9 @@ class CompanyPageParser {
      * The rounded age in the card's own `<time>`. Localised, "1 j." in French
      * and "1d" in English, and [Timestamps.fromRelative] only reads the English
      * forms. That is deliberate rather than an oversight: the app asks for
-     * English, and every post on this page carries an exact time in the graph
-     * anyway, so this is a fallback for a fallback.
+     * English, and the card's activity id gives the exact instant
+     * ([Timestamps.fromActivityId]), so this label is the last resort, used
+     * only when the id carries none.
      */
     private fun String.age(): String? = textAfter("<time", "</time>")
 
