@@ -1,16 +1,8 @@
 package com.linkedout.app.ui.component
 
-import androidx.compose.ui.graphics.Color
-import com.linkedout.app.ui.glass.glassFloating
-import com.linkedout.app.ui.glass.LocalGlassBackdrop
-import com.linkedout.app.ui.glass.LocalGlass
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.runtime.Composable
@@ -18,7 +10,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
@@ -27,8 +18,9 @@ import kotlin.math.max
 /**
  * The pull to refresh indicator, with the app's own loading mark in place of
  * the spinner: the mark follows the pull, as far as it has gone, then plays
- * on its own while the refresh runs. Placed like the standard indicator,
- * sliding down from the top edge of its box in a small raised disc.
+ * on its own while the refresh runs. The mark is 72 dp and stands alone on
+ * the page, with no disc, glass or shadow behind it. Placed like the standard
+ * indicator, sliding down from the top edge of its box.
  *
  * The hand feels the threshold: a crisp tick when the pull has gone far
  * enough to refresh on release, a faint one if it is brought back short.
@@ -65,19 +57,7 @@ fun PullIndicator(state: PullToRefreshState, isRefreshing: Boolean, modifier: Mo
             alpha = max((fraction * 2f).coerceIn(0f, 1f), held.value)
         }
     ) {
-        // In glass, the disc bends the list under it, with no shadow.
-        val look = LocalGlass.current
-        val backdrop = LocalGlassBackdrop.current
-        val glass = look != null && backdrop != null
-        Surface(
-            shape = CircleShape,
-            color = if (glass) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
-            shadowElevation = if (glass) 0.dp else 3.dp,
-            modifier = if (glass) Modifier.size(56.dp).glassFloating(backdrop!!, CircleShape, look!!) else Modifier.size(56.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                LoadingMark(size = 44.dp, running = isRefreshing, progress = { state.distanceFraction.coerceIn(0f, 1f) })
-            }
-        }
+        // The mark alone, drawn straight on the page: no disc, no glass, no shadow.
+        LoadingMark(size = 72.dp, running = isRefreshing, progress = { state.distanceFraction.coerceIn(0f, 1f) })
     }
 }

@@ -43,7 +43,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -66,6 +65,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
@@ -219,13 +219,17 @@ fun FeedScreen(
                         title = { BarTitle(name ?: "@$handle") },
                         navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
                         actions = {
-                            if (state.loading) {
-                                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                    LoadingMark(size = 24.dp)
-                                }
-                            } else {
-                                BarAction(LinkedOutIcons.Refresh, "Refresh", viewModel::refresh)
-                            }
+                            // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/diagnostics/DiagnosticsScreen.kt#DiagnosticsScreen
+                            // The Refresh icon stays, disabled while the profile loads, the page under the card shows the work.
+                            // BarAction draws no dimmed state of its own, so the dimming (alpha 0.38) is set here.
+                            // not ported: OverallBanner, FeatherRing, the checking count (a profile has no servers list; LinkedOut keeps its own mark)
+                            BarAction(
+                                LinkedOutIcons.Refresh,
+                                "Refresh",
+                                viewModel::refresh,
+                                modifier = Modifier.alpha(if (state.loading) 0.38f else 1f),
+                                enabled = !state.loading
+                            )
                         }
                     )
                 }
@@ -277,6 +281,16 @@ fun FeedScreen(
                     )
                 }
 
+                // The profile's one load mark: in the page under the card, whenever it loads (a refresh of a profile that
+                // already has posts too, there is no pull on a profile). Nothing else in the card or the bar moves.
+                if (state.loading) {
+                    item(key = "loading") {
+                        Box(Modifier.fillMaxWidth().padding(48.dp).animateItem(), contentAlignment = Alignment.Center) {
+                            LoadingMark(size = 72.dp)
+                        }
+                    }
+                }
+
                 state.error?.let {
                     item(key = "error") {
                         ErrorPanel(
@@ -288,13 +302,6 @@ fun FeedScreen(
                 }
 
                 if (shown.isEmpty()) {
-                    if (feed == null && state.loading) {
-                        item(key = "loading") {
-                            Box(Modifier.fillMaxWidth().padding(48.dp).animateItem(), contentAlignment = Alignment.Center) {
-                                LoadingMark(size = 96.dp)
-                            }
-                        }
-                    }
                     return@LazyColumn
                 }
 
@@ -399,10 +406,12 @@ private fun ProfileZone(
             BannerAction(icon = LinkedOutIcons.ArrowBack, label = "Back", onClick = onBack)
         }
         Box(Modifier.align(Alignment.TopEnd).padding(end = 12.dp, top = 12.dp)) {
-            if (loading) {
-                Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { LoadingMark(size = 24.dp) }
-            } else {
-                BannerAction(icon = LinkedOutIcons.Refresh, label = "Refresh", onClick = onRefresh)
+            // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/diagnostics/DiagnosticsScreen.kt#DiagnosticsScreen
+            // The Refresh icon stays, dimmed and not tappable while the profile loads (MTGA's Re-check, disabled while
+            // checking); the page under the card shows the work.
+            // not ported: OverallBanner, FeatherRing, the checking count (a profile has no servers list; LinkedOut keeps its own mark)
+            Box(Modifier.alpha(if (loading) 0.38f else 1f)) {
+                BannerAction(icon = LinkedOutIcons.Refresh, label = "Refresh", onClick = { if (!loading) onRefresh() })
             }
         }
         Column(
