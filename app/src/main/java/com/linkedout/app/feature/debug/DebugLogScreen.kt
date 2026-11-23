@@ -67,6 +67,15 @@ fun DebugLogScreen(onBack: () -> Unit) {
     val haptics = rememberHaptics()
     val snackbar = remember { SnackbarHostState() }
     val stamp = remember { SimpleDateFormat("HH:mm:ss", Locale.US) }
+    // Newest first, each with its key: counted from the oldest, so a new entry never renames the ones before it.
+    val keyed = remember(entries) {
+        val seen = HashMap<RequestLog.Entry, Int>()
+        entries.map { entry ->
+            val rank = (seen[entry] ?: 0) + 1
+            seen[entry] = rank
+            "${entry.atMillis}-${entry.kind}-${entry.url.hashCode()}-${entry.outcome.hashCode()}-$rank" to entry
+        }.asReversed()
+    }
 
     // Ported from MTGA's DiagnosticsScreen: the bar folds away going down and returns going up, the list full screen
     // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/diagnostics/DiagnosticsScreen.kt#DiagnosticsScreen).
@@ -140,13 +149,17 @@ fun DebugLogScreen(onBack: () -> Unit) {
             }
             }
 
+            // The last page line, the empty line and each entry fade in and out through animateItem, the entries with a
+            // stable key (the entry has no id of its own: its time, kind and text, and its rank among identical ones).
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/foundation/foundation/samples/src/main/java/androidx/compose/foundation/samples/LazyDslSamples.kt#AnimateItemSample
+            // not ported: AnimateItemSample (its "Add new item" and "Shuffle" Buttons, the list of strings and Column, the rows here are the log's entries and a request adds them)
             lastBody?.let { body ->
                 item(key = "lastpage") {
                 Text(
                     "Last page received: ${body.url}, ${body.text.length} characters.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    modifier = Modifier.animateItem().padding(horizontal = 16.dp, vertical = 4.dp)
                 )
                 }
             }
@@ -158,13 +171,13 @@ fun DebugLogScreen(onBack: () -> Unit) {
                         "come back here.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp)
+                    modifier = Modifier.animateItem().padding(horizontal = 24.dp, vertical = 24.dp)
                 )
                 }
             } else {
-                    items(entries.reversed()) { entry ->
+                    items(keyed, key = { it.first }) { (_, entry) ->
                         ZoneSurface(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                            modifier = Modifier.animateItem().fillMaxWidth().padding(horizontal = 12.dp),
                             shape = RoundedCornerShape(16.dp),
                             color = MaterialTheme.colorScheme.surfaceContainer
                         ) {

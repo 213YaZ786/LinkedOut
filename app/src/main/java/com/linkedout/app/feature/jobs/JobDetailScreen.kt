@@ -1,5 +1,14 @@
 package com.linkedout.app.feature.jobs
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.material3.LocalContentColor
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
@@ -89,18 +98,45 @@ fun JobDetailScreen(
                 // Save on the trailing side, as Refresh on a profile and Share on a post: the bookmark in the
                 // accent while the offer is kept.
                 actions = {
-                    if (offer != null) {
+                    // The action fades and scales in once the offer exists, as ScrollUpButton does, and its tint goes
+                    // between the bar's colour and the accent instead of switching.
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+                    // not ported: animatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's function: its clickable Box,
+                    // the visible toggle and the corner radius transition are the sample's own demo)
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+                    // not ported: simpleAnimatedContentSample, foo, bar, baz (the Save/Saved label has no text to cross:
+                    // BarAction's label is the icon's contentDescription, never drawn)
+                    val visible = offer != null
+                    val tint by animateColorAsState(
+                        if (kept) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                        label = "savedTint"
+                    )
+                    AnimatedVisibility(
+                        visible = visible,
+                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut(animationSpec = tween(200)) + scaleOut(targetScale = 0.8f)
+                    ) {
                         BarAction(
                             icon = LinkedOutIcons.Bookmark,
                             label = if (kept) "Saved" else "Save",
-                            onClick = { savedJobs.toggle(offer) },
-                            tint = if (kept) MaterialTheme.colorScheme.primary else Color.Unspecified
+                            onClick = { if (offer != null) savedJobs.toggle(offer) },
+                            tint = tint
                         )
                     }
                 }
             )
         }
     ) { padding ->
+    // The loading mark, the failure and the offer cross, as the draft's "state" case.
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+    // not ported: crossfadeSample (the sample's function; its Text pages are the screen's own states here)
+    // not ported: "A" and "B" (the sample's own pages)
+    val screen = when {
+        state.loading -> "Loading"
+        state.detail == null -> "Failed"
+        else -> "Offer"
+    }
+    Crossfade(targetState = screen, animationSpec = tween(200)) { contentState ->
     val listState = rememberLazyListState()
     LazyColumn(
         state = listState,
@@ -112,13 +148,13 @@ fun JobDetailScreen(
         ).plus(padding)
     ) {
         val detail = state.detail
-        when {
-            state.loading -> item(key = "loading") {
+        when (contentState) {
+            "Loading" -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
                     LoadingMark(size = 96.dp)
                 }
             }
-            detail == null -> item(key = "error") {
+            "Failed" -> item(key = "error") {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = ZoneGap), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     state.error?.let { ErrorPanel(error = it, onRetry = { viewModel.load(id, force = true) }) }
                     // The page itself may still open in a browser.
@@ -127,7 +163,8 @@ fun JobDetailScreen(
                     }
                 }
             }
-            else -> {
+            // The offer may be gone from the state while its screen is still fading out: nothing is drawn then.
+            else -> if (detail != null) {
                 item(key = "head") {
                     Head(
                         detail,
@@ -139,6 +176,7 @@ fun JobDetailScreen(
                 if (detail.description.isNotBlank()) item(key = "description") { Description(detail.description) }
             }
         }
+    }
     }
     }
 }

@@ -1,5 +1,10 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.combinedClickable
 import com.linkedout.app.ui.theme.innerZone
 import androidx.compose.foundation.background
@@ -173,16 +178,22 @@ internal fun Avatar(url: String?, name: String, size: Dp = 44.dp) {
         // on an empty circle. The initial was there before and said nothing
         // useful on a repost, where the letter belonged to whoever was quoted.
         var failed by remember(url) { mutableStateOf(false) }
-        if (url != null && !failed) {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                onState = { state -> if (state is AsyncImagePainter.State.Error) failed = true },
-                modifier = Modifier.size(size)
-            )
-        } else {
-            AvatarGhost(size)
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+        // The picture and the silhouette cross into each other when the address is refused, as the draft shows.
+        // not ported: CrossfadeSample (the sample's function; its Crossfade is used here, inline)
+        // not ported: "Page A", "Page B" (the sample's own pages)
+        Crossfade(targetState = url != null && !failed, animationSpec = tween(200), label = "avatarGhost") { screen ->
+            if (screen && url != null) {
+                AsyncImage(
+                    model = url,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    onState = { state -> if (state is AsyncImagePainter.State.Error) failed = true },
+                    modifier = Modifier.size(size)
+                )
+            } else {
+                AvatarGhost(size)
+            }
         }
     }
 }
@@ -285,7 +296,12 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     .clickable { if (waiting) revealed = true else onOpen(index) }
             ) {
-                if (waiting) {
+                // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+                // The held placeholder and the picture cross into each other on the tap, as the draft shows.
+                // not ported: CrossfadeSample (the sample's function; its Crossfade is used here, inline)
+                // not ported: "Page A", "Page B" (the sample's own pages)
+                Crossfade(targetState = waiting, animationSpec = tween(200), label = "heldMedia") { screen ->
+                if (screen) {
                     HeldMedia(item.type, Modifier.fillMaxWidth().aspectRatio(ratio))
                 } else {
                     AsyncImage(
@@ -318,14 +334,27 @@ internal fun MediaBlock(post: Post, onDownload: (MediaItem) -> Unit, onOpen: (In
                         LaunchedEffect(post.id, item.playable, source.offline) {
                             if (playing == null) playing = sources.sourceFor(post.id)
                         }
-                        playing?.let { address ->
-                            InlineVideo(
-                                url = address,
-                                onClick = { onOpen(index) },
-                                modifier = Modifier.matchParentSize()
-                            )
+                        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+                        // The video fades in over its cover instead of popping, as the draft shows.
+                        // not ported: AnimatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's function; its AnimatedVisibility is used here, inline)
+                        // not ported: the sample's clickable Box toggle, cornerRadius transition and exit (its own demo: the video only fades in)
+                        // Package-qualified: the enclosing Column's ColumnScope.AnimatedVisibility must not be picked from inside the Box.
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = playing != null,
+                            modifier = Modifier.matchParentSize(),
+                            enter = fadeIn(tween(200)),
+                            exit = ExitTransition.None
+                        ) {
+                            playing?.let { address ->
+                                InlineVideo(
+                                    url = address,
+                                    onClick = { onOpen(index) },
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
+                }
                 }
 
                 if (item.type != MediaType.PHOTO) {
@@ -472,15 +501,26 @@ internal fun LinkCardBlock(card: LinkCard, onClick: () -> Unit) {
                             .aspectRatio(ratio)
                             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                     ) {
-                        if (waiting) {
-                            HeldCardImage(Modifier.matchParentSize().clickable { revealed = true })
-                        } else {
-                            AsyncImage(
-                                model = image,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.matchParentSize()
-                            )
+                        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+                        // The held image and the picture cross into each other on the tap, as the draft shows.
+                        // not ported: CrossfadeSample (the sample's function; its Crossfade is used here, inline)
+                        // not ported: "Page A", "Page B" (the sample's own pages)
+                        Crossfade(
+                            targetState = waiting,
+                            modifier = Modifier.matchParentSize(),
+                            animationSpec = tween(200),
+                            label = "heldCard"
+                        ) { screen ->
+                            if (screen) {
+                                HeldCardImage(Modifier.matchParentSize().clickable { revealed = true })
+                            } else {
+                                AsyncImage(
+                                    model = image,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.matchParentSize()
+                                )
+                            }
                         }
                         if (card.isArticle) ArticleBadge(Modifier.align(Alignment.BottomStart).padding(8.dp))
                     }
@@ -494,15 +534,26 @@ internal fun LinkCardBlock(card: LinkCard, onClick: () -> Unit) {
                         .size(84.dp)
                         .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 ) {
-                    if (waiting) {
-                        HeldCardImage(Modifier.matchParentSize().clickable { revealed = true }, short = true)
-                    } else {
-                        AsyncImage(
-                            model = image,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.matchParentSize()
-                        )
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+                    // The same swap beside the text.
+                    // not ported: CrossfadeSample (the sample's function; its Crossfade is used here, inline)
+                    // not ported: "Page A", "Page B" (the sample's own pages)
+                    Crossfade(
+                        targetState = waiting,
+                        modifier = Modifier.matchParentSize(),
+                        animationSpec = tween(200),
+                        label = "heldCardSide"
+                    ) { screen ->
+                        if (screen) {
+                            HeldCardImage(Modifier.matchParentSize().clickable { revealed = true }, short = true)
+                        } else {
+                            AsyncImage(
+                                model = image,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.matchParentSize()
+                            )
+                        }
                     }
                 }
                 LinkCardText(card, Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 8.dp))
@@ -540,16 +591,27 @@ internal fun DocumentBlock(document: SharedDocument, authorHandle: String) {
                     .size(width = 72.dp, height = 96.dp)
                     .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             ) {
-                when {
-                    cover == null -> Unit
-                    hold && !revealed ->
-                        HeldCardImage(Modifier.matchParentSize().clickable { revealed = true }, short = true)
-                    else -> AsyncImage(
-                        model = cover,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.matchParentSize()
-                    )
+                // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+                // The held cover and the cover cross into each other on the tap (null: no cover).
+                // not ported: CrossfadeSample (the sample's function; its Crossfade is used here, inline)
+                // not ported: "Page A", "Page B" (the sample's own pages)
+                Crossfade(
+                    targetState = if (cover == null) null else hold && !revealed,
+                    modifier = Modifier.matchParentSize(),
+                    animationSpec = tween(200),
+                    label = "heldCover"
+                ) { screen ->
+                    when (screen) {
+                        null -> Unit
+                        true ->
+                            HeldCardImage(Modifier.matchParentSize().clickable { revealed = true }, short = true)
+                        false -> AsyncImage(
+                            model = cover,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
                 }
             }
             Column(

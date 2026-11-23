@@ -69,6 +69,19 @@ import com.linkedout.app.ui.component.HoldAction
 import com.linkedout.app.ui.component.HoldMenu
 import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.component.ZoneAlertDialog
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.widthIn
@@ -245,8 +258,16 @@ fun AccountsScreen(
             else -> focus.clearFocus()
         }
     })
+    // The Clear icon grows in and out with the field's end, so the field does not jump when the first letter is typed.
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+    // not ported: AnimatedVisibilityWithBooleanVisibleParamNoReceiver's clickable Box toggling `visible`, its Alignment.Center
+    // and its corner radius animated by `transition.animateDp` (the Clear icon is shown by the query, and has no corner)
     val fieldActions: @Composable () -> Unit = {
-        if (query.isNotEmpty()) {
+        AnimatedVisibility(
+            visible = query.isNotEmpty(),
+            enter = fadeIn(tween(200)) + expandHorizontally(tween(200)),
+            exit = fadeOut(tween(200)) + shrinkHorizontally(tween(200))
+        ) {
             BoldIconButton(onClick = {
                 query = ""
                 notice = null
@@ -352,6 +373,8 @@ fun AccountsScreen(
                     )
                 }
             }
+            // The capsule and the bare field are two items with two keys: one leaves while the other arrives at the same
+            // place, so neither takes animateItem (the two would overlap and the rows below jump twice). Left as it is.
             if (rows.isEmpty()) item(key = "search") {
                 // Nothing to see, but TalkBack still finds the screen's name (the old empty banner row's Box).
                 // Port of AccountsScreen's heading Box: 1 dp here, 7 dp of padding below, so the field stays 8 dp down.
@@ -370,13 +393,19 @@ fun AccountsScreen(
                     modifier = Modifier.fillMaxWidth().padding(top = 7.dp)
                 )
             }
+            // Each row and each single-purpose line has a stable key and animateItem: it fades in and out, and the rows
+            // around glide into their new places instead of snapping.
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/foundation/foundation/samples/src/main/java/androidx/compose/foundation/samples/LazyDslSamples.kt#AnimateItemSample
+            // not ported: AnimateItemSample (its "Add new item" and "Shuffle" Buttons, the list of strings and Column, the
+            // rows here are the accounts and the filter moves them)
             notice?.let { message ->
-                item(key = "notice") { Hint(message) }
+                item(key = "notice") { Hint(message, Modifier.animateItem()) }
             }
 
             if (candidate != null && !alreadyFollowed) {
                 item(key = "candidate") {
                     CandidateCard(
+                        modifier = Modifier.animateItem(),
                         handle = candidate,
                         kind = candidateKind,
                         onOpen = { open(candidate, candidateKind) },
@@ -387,12 +416,13 @@ fun AccountsScreen(
                 // Each reason gets its own line. "No match" alone would leave
                 // the reader guessing at a field that has no guessable rule.
                 explain(queryKind)?.let { message ->
-                    item(key = "explain") { Hint(message) }
+                    item(key = "explain") { Hint(message, Modifier.animateItem()) }
                 }
             }
 
             items(visible, key = { it.handle }) { row ->
                 AccountCard(
+                    modifier = Modifier.animateItem(),
                     row = row,
                     onClick = { open(row.handle, row.kind) },
                     onFile = { filing = row },
@@ -401,7 +431,7 @@ fun AccountsScreen(
             }
 
             if (rows.isEmpty() && trimmed.isEmpty()) {
-                item(key = "empty") { EmptyState(Modifier.fillParentMaxHeight(0.7f)) }
+                item(key = "empty") { EmptyState(Modifier.animateItem().fillParentMaxHeight(0.7f)) }
             }
         }
     }
@@ -417,8 +447,17 @@ fun AccountsScreen(
  * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/ui/component/PostCard.kt#L146-L159
  */
 @Composable
-private fun AccountCard(row: AccountRow, onClick: () -> Unit, onFile: () -> Unit, onUnfollow: () -> Unit) {
+private fun AccountCard(
+    row: AccountRow,
+    onClick: () -> Unit,
+    onFile: () -> Unit,
+    onUnfollow: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     val haptics = rememberHaptics()
+    // The badge's number kept while it fades out: the row's count is already 0 then.
+    val lastUnread = remember { intArrayOf(row.unread) }
+    if (row.unread > 0) lastUnread[0] = row.unread
     var menuOpen by remember { mutableStateOf(false) }
     // The zone's place in its window, which HoldMenu lifts the copy from.
     var bounds by remember { mutableStateOf(Rect.Zero) }
@@ -452,33 +491,61 @@ private fun AccountCard(row: AccountRow, onClick: () -> Unit, onFile: () -> Unit
                         )
                     }
                 }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        row.lastPostMillis?.let(::relativeTime) ?: "Not read yet",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (row.unread > 0) {
-                        Box(
-                            modifier = Modifier
-                                .widthIn(min = 28.dp)
-                                .background(MaterialTheme.colorScheme.primary, CircleShape)
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                row.unread.toString(),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
+                // The age and the number change through AnimatedContent (fade through), the badge fades and scales in
+                // and out; its 4 dp gap lives inside it so a row without a badge keeps its age where it was.
+                // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+                // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+                // not ported: Foo (a sample box; the contents here are the age text and the number)
+                // not ported: Bar (a sample box; the contents here are the age text and the number)
+                // not ported: Baz (a sample box; the contents here are the age text and the number)
+                // not ported: ContentState (the sample's enum; the targets are the age string and the count)
+                // not ported: SimpleAnimatedContentSample (the sample itself; its AnimatedContent call is used above)
+                // not ported: AnimatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's clickable Box and corner radius; the badge shows by row.unread)
+                Column(horizontalAlignment = Alignment.End) {
+                    AnimatedContent(
+                        targetState = row.lastPostMillis?.let(::relativeTime) ?: "Not read yet",
+                        transitionSpec = fadeThrough(),
+                        label = "accountAge"
+                    ) { age ->
+                        Text(
+                            age,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    AnimatedVisibility(
+                        visible = row.unread > 0,
+                        enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.6f),
+                        exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.6f)
+                    ) {
+                        Box(Modifier.padding(top = 4.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .widthIn(min = 28.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                AnimatedContent(
+                                    targetState = lastUnread[0],
+                                    transitionSpec = fadeThrough(),
+                                    label = "accountUnread"
+                                ) { unread ->
+                                    Text(
+                                        unread.toString(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
-    Box {
+    Box(modifier) {
         zone(
             Modifier
                 .onGloballyPositioned { bounds = it.boundsInWindow() }
@@ -502,17 +569,25 @@ private fun AccountCard(row: AccountRow, onClick: () -> Unit, onFile: () -> Unit
     }
 }
 
+// The fade through of a small piece that swaps: the old one out in 90 ms, the new one in after it, the size of the
+// piece glides and nothing is clipped. As the draft's filmstrip proposes.
+// https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+private fun <S> fadeThrough(): AnimatedContentTransitionScope<S>.() -> ContentTransform = {
+    (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90))).using(SizeTransform(clip = false))
+}
+
 @Composable
 private fun CandidateCard(
     handle: String,
     kind: AccountKind,
     onOpen: () -> Unit,
-    onFollow: () -> Unit
+    onFollow: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Zone(
         onClick = onOpen,
         color = MaterialTheme.colorScheme.secondaryContainer,
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
@@ -555,13 +630,13 @@ private fun explain(kind: QueryKind): String? = when (kind) {
 }
 
 @Composable
-private fun Hint(text: String) {
+private fun Hint(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(24.dp)
+        modifier = modifier.fillMaxWidth().padding(24.dp)
     )
 }
 

@@ -1,6 +1,16 @@
 package com.linkedout.app.feature.storage
 
 import android.text.format.Formatter
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -113,17 +123,35 @@ fun SavedMediaScreen(
                 title = { BarTitle("Saved media") },
                 navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
                 actions = {
-                    if (state.rows.isNotEmpty()) {
+                    // Delete all fades and scales in once there is something to delete, as ScrollUpButton does.
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+                    // not ported: animatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's function: its clickable Box,
+                    // the visible toggle and the corner radius transition are the sample's own demo)
+                    AnimatedVisibility(
+                        visible = state.rows.isNotEmpty(),
+                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut(animationSpec = tween(200)) + scaleOut(targetScale = 0.8f)
+                    ) {
                         BarAction(LinkedOutIcons.Delete, "Delete all", { confirmAll = true })
                     }
                 }
             )
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize()) {
-            if (state.rows.isEmpty()) {
+        // The folder being read, the empty text and the grid cross, the draft's "state" case.
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+        // not ported: crossfadeSample (the sample's function; its Text pages are the screen's own states here)
+        // not ported: "A" and "B" (the sample's own pages)
+        val screen = when {
+            state.rows.isNotEmpty() -> "Grid"
+            state.loading -> "Reading"
+            else -> "Nothing"
+        }
+        Crossfade(targetState = screen, modifier = Modifier.fillMaxSize(), animationSpec = tween(200)) { contentState ->
+            when (contentState) {
+            "Reading", "Nothing" -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    if (state.loading) {
+                    if (contentState == "Reading") {
                         "Reading the folder"
                     } else {
                         "Nothing saved yet. Turn on automatic saving in Settings, Media."
@@ -131,11 +159,10 @@ fun SavedMediaScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.align(Alignment.Center).padding(32.dp)
+                    modifier = Modifier.padding(32.dp)
                 )
-                return@Box
             }
-
+            else -> {
             val gridState = rememberLazyGridState()
             LazyVerticalGrid(
                 state = gridState,
@@ -151,21 +178,45 @@ fun SavedMediaScreen(
             ) {
                 item(key = "total", span = { GridItemSpan(maxLineSpan) }, contentType = "total") {
                     Column(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
-                        Text(
-                            "${state.fileCount} files",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (state.appBytes > 0) {
+                        // The count and the size cross through nothing when they change, the draft's "pill" case.
+                        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+                        // not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used inline)
+                        // not ported: foo, bar, baz (the sample's own demo functions)
+                        AnimatedContent(
+                            state.fileCount,
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                            transitionSpec = {
+                                (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90)))
+                                    .using(SizeTransform(clip = false))
+                            }
+                        ) { files ->
                             Text(
-                                Formatter.formatShortFileSize(context, state.appBytes) + " in the app's folder",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                "$files files",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.primary,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
+                        }
+                        AnimatedContent(
+                            state.appBytes,
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center,
+                            transitionSpec = {
+                                (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90)))
+                                    .using(SizeTransform(clip = false))
+                            }
+                        ) { bytes ->
+                            if (bytes > 0) {
+                                Text(
+                                    Formatter.formatShortFileSize(context, bytes) + " in the app's folder",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
@@ -184,12 +235,17 @@ fun SavedMediaScreen(
                         }
                     }
                 ) { row ->
+                    // A post deleted or a page read slides the rest into place and fades the cells in and out.
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/foundation/foundation/samples/src/main/java/androidx/compose/foundation/samples/LazyDslSamples.kt#AnimateItemSample
+                    // not ported: animateItemSample (the sample's function; its Add and Shuffle buttons and Text items are its own)
                     when (row) {
-                        is SavedHeader -> AccountHeader(row) { viewModel.deleteAccount(row.handle) }
-                        is SavedPostBar -> PostBar(row, { onOpenPost(row.postId, row.handle) }) { viewModel.deletePost(row.postId) }
-                        is SavedCell -> Cell(row) { onOpenPost(row.postId, row.handle) }
+                        is SavedHeader -> AccountHeader(row, { viewModel.deleteAccount(row.handle) }, Modifier.animateItem())
+                        is SavedPostBar -> PostBar(row, { onOpenPost(row.postId, row.handle) }, { viewModel.deletePost(row.postId) }, Modifier.animateItem())
+                        is SavedCell -> Cell(row, { onOpenPost(row.postId, row.handle) }, Modifier.animateItem())
                     }
                 }
+            }
+            }
             }
         }
     }
@@ -197,10 +253,10 @@ fun SavedMediaScreen(
 
 /** An account's name and count above its cells, with the delete of its copies when it has any. */
 @Composable
-private fun AccountHeader(header: SavedHeader, onDelete: () -> Unit) {
+private fun AccountHeader(header: SavedHeader, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Row(
-        modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -221,10 +277,10 @@ private fun AccountHeader(header: SavedHeader, onDelete: () -> Unit) {
 
 /** A post's line: its file count opens the post, the bin deletes its copies in the app's folder. */
 @Composable
-private fun PostBar(bar: SavedPostBar, onOpen: () -> Unit, onDelete: () -> Unit) {
+private fun PostBar(bar: SavedPostBar, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -245,9 +301,9 @@ private fun PostBar(bar: SavedPostBar, onOpen: () -> Unit, onDelete: () -> Unit)
  * of the app. The cell has a shape (a square, as wide as the grid gives) and no text, so nothing in it can break.
  */
 @Composable
-private fun Cell(cell: SavedCell, onOpen: () -> Unit) {
+private fun Cell(cell: SavedCell, onOpen: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(MaterialTheme.shapes.medium)

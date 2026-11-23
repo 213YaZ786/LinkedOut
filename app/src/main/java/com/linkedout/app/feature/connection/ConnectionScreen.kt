@@ -1,5 +1,11 @@
 package com.linkedout.app.feature.connection
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -91,14 +97,25 @@ fun ConnectionScreen(onBack: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(LinkedInHost.HOST, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        text = if (cooldownMs > 0) {
-                            "Pausing for ${cooldownMs / 1000} more seconds after a rate limit"
-                        } else {
-                            "Ready"
-                        },
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    // "Ready" and "Pausing for N more seconds" cross through nothing, the draft's "pill" case: the old text
+                    // out in 90 ms, the new one in after it, never clipped while the size changes.
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+                    // not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used inline)
+                    // not ported: foo, bar, baz (the sample's own demo functions)
+                    val contentState = if (cooldownMs > 0) {
+                        "Pausing for ${cooldownMs / 1000} more seconds after a rate limit"
+                    } else {
+                        "Ready"
+                    }
+                    AnimatedContent(
+                        contentState,
+                        transitionSpec = {
+                            (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90)))
+                                .using(SizeTransform(clip = false))
+                        }
+                    ) {
+                        Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
 

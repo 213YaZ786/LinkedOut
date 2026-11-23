@@ -1,5 +1,14 @@
 package com.linkedout.app.feature.challenge
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,16 +78,29 @@ fun ChallengeBackstage(solver: ChallengeSolver = koinInject()) {
 @Composable
 fun ChallengeOverlay(solver: ChallengeSolver = koinInject()) {
     val task by solver.task.collectAsState()
-    val current = task ?: return
+    val current = task
 
-    key(current) {
-        if (current.interactive) {
-            InteractiveCheck(current, solver)
-        } else {
-            Box(
-                modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 96.dp),
-                contentAlignment = Alignment.BottomCenter
-            ) {
+    if (current != null && current.interactive) {
+        key(current) { InteractiveCheck(current, solver) }
+    }
+
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+    // The pill comes up from the bottom edge it sits on and goes back down, fading, as the draft shows. The last
+    // background task is remembered so the exit still has its text.
+    // not ported: AnimatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's function; its AnimatedVisibility is used here, inline)
+    // not ported: the sample's Box with clickable toggle, cornerRadius transition and scaleOut (its own demo: the pill slides and fades)
+    var last by remember { mutableStateOf<ChallengeSolver.Task?>(null) }
+    if (current != null && !current.interactive) last = current
+    Box(
+        modifier = Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 96.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        AnimatedVisibility(
+            visible = current != null && !current.interactive,
+            enter = fadeIn(tween(200)) + slideInVertically(tween(200)) { it },
+            exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { it }
+        ) {
+            last?.let { shown ->
                 Surface(
                     shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.inverseSurface,
@@ -96,7 +118,7 @@ fun ChallengeOverlay(solver: ChallengeSolver = koinInject()) {
                             color = MaterialTheme.colorScheme.inverseOnSurface
                         )
                         Text(
-                            "Checking access to ${current.host}",
+                            "Checking access to ${shown.host}",
                             style = MaterialTheme.typography.labelLarge
                         )
                     }

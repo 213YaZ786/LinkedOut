@@ -1,5 +1,10 @@
 package com.linkedout.app.feature.post
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.ui.graphics.Color
 import com.linkedout.app.feature.BarAction
 import com.linkedout.app.ui.component.BarTitle
@@ -124,44 +129,58 @@ fun PostDetailScreen(
         // page below owns them once, in its own padding.
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) {
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+        // The page's states cross into each other as the draft shows (the mark, "can't be shown", the post). The bar of
+        // the waiting page stays put and only what is under it crosses, so two bars never blend.
+        // not ported: CrossfadeSample (the sample's function; its Crossfade is used here, inline)
+        // not ported: "Page A", "Page B" (the sample's own pages)
         Box(Modifier.fillMaxSize()) {
-            if (post != null) {
-                ConversationView(
-                    onBack = onBack,
-                    onShare = { share(context, viewModel.shareLink(post)) },
-                    post = post,
-                    thread = state.thread,
-                    onOpenProfile = onOpenProfile,
-                    onOpenPost = onOpenPost,
-                    onRetry = viewModel::retryThread,
-                    shareLink = viewModel.shareLink(post)
-                )
-            } else {
-                Column(
-                    Modifier.fillMaxSize().padding(
-                        start = LocalReadableInset.current,
-                        end = LocalReadableInset.current,
-                        bottom = navigationBarBottom()
+            Crossfade(targetState = post != null, animationSpec = tween(200), label = "postPage") { known ->
+                if (known && post != null) {
+                    ConversationView(
+                        onBack = onBack,
+                        onShare = { share(context, viewModel.shareLink(post)) },
+                        post = post,
+                        thread = state.thread,
+                        onOpenProfile = onOpenProfile,
+                        onOpenPost = onOpenPost,
+                        onRetry = viewModel::retryThread,
+                        shareLink = viewModel.shareLink(post)
                     )
-                ) {
-                    // A way back while the post loads and when it is gone.
-                    PostBar(onBack = onBack, onShare = null)
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        if (state.missing) {
-                            val error = (state.thread as? ThreadState.Failed)?.error
-                            Text(
-                                // LinkedIn's own reason when the page gave one, a deletion
-                                // or a profile gone private, rather than a guess.
-                                (error as? AppError.PostUnavailable)
-                                    ?.present()?.let { "${it.headline}. ${it.explanation}" }
-                                    ?: "This post can't be shown. It may have been deleted, and it is not saved on this phone.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.align(Alignment.Center).padding(32.dp)
-                            )
-                        } else {
-                            LoadingMark(Modifier.align(Alignment.Center), size = 96.dp)
+                } else {
+                    Column(
+                        Modifier.fillMaxSize().padding(
+                            start = LocalReadableInset.current,
+                            end = LocalReadableInset.current,
+                            bottom = navigationBarBottom()
+                        )
+                    ) {
+                        // A way back while the post loads and when it is gone.
+                        PostBar(onBack = onBack, onShare = null)
+                        Crossfade(
+                            targetState = state.missing,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            animationSpec = tween(200),
+                            label = "postMissing"
+                        ) { missing ->
+                            Box(Modifier.fillMaxSize()) {
+                                if (missing) {
+                                    val error = (state.thread as? ThreadState.Failed)?.error
+                                    Text(
+                                        // LinkedIn's own reason when the page gave one, a deletion
+                                        // or a profile gone private, rather than a guess.
+                                        (error as? AppError.PostUnavailable)
+                                            ?.present()?.let { "${it.headline}. ${it.explanation}" }
+                                            ?: "This post can't be shown. It may have been deleted, and it is not saved on this phone.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.align(Alignment.Center).padding(32.dp)
+                                    )
+                                } else {
+                                    LoadingMark(Modifier.align(Alignment.Center), size = 96.dp)
+                                }
+                            }
                         }
                     }
                 }
@@ -183,8 +202,14 @@ private fun PostBar(onBack: () -> Unit, onShare: (() -> Unit)?, scrollBehavior: 
         title = { BarTitle("Post") },
         navigationIcon = { BarAction(LinkedOutIcons.ArrowBack, "Back", onBack) },
         actions = {
-            if (onShare != null) {
-                BarAction(LinkedOutIcons.Share, "Share", onShare)
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+            // Share arrives once the post is known; the last action is kept so an exit still has its click.
+            // not ported: AnimatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's function; its AnimatedVisibility is used here, inline)
+            // not ported: the sample's Box with clickable toggle, cornerRadius transition and scaleOut (its own demo: Share only fades)
+            var lastShare by remember { mutableStateOf(onShare) }
+            if (onShare != null) lastShare = onShare
+            AnimatedVisibility(visible = onShare != null, enter = fadeIn(tween(200)), exit = fadeOut(tween(150))) {
+                lastShare?.let { BarAction(LinkedOutIcons.Share, "Share", it) }
             }
         }
     )
@@ -259,10 +284,15 @@ internal fun ConversationView(
             bottom = navigationBarBottom()
         ).plus(padding)
     ) {
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/foundation/foundation/samples/src/main/java/androidx/compose/foundation/samples/LazyDslSamples.kt#AnimateItemSample
+        // Every item keeps its key and takes Modifier.animateItem(): replies, labels and the single-purpose rows (loading,
+        // failed, no replies, more) fade and move in and out as the thread arrives.
+        // not ported: AnimateItemSample (the sample's function; its animateItem is used here, on our own items)
+        // not ported: Add new item and Shuffle buttons, the list of strings (the sample's own demo)
         val ancestors = conversation?.ancestors.orEmpty()
         if (ancestors.isNotEmpty()) {
-            item(key = "earlier") { SectionLabel("Earlier in the conversation") }
-            items(ancestors, key = { "a" + it.id }) { ReplyCard(it) }
+            item(key = "earlier") { SectionLabel("Earlier in the conversation", Modifier.animateItem()) }
+            items(ancestors, key = { "a" + it.id }) { ReplyCard(it, Modifier.animateItem()) }
         }
 
         item(key = "main") {
@@ -277,16 +307,16 @@ internal fun ConversationView(
 
         val continuation = conversation?.continuation.orEmpty()
         if (continuation.isNotEmpty()) {
-            item(key = "threadlabel") { SectionLabel("Thread") }
-            items(continuation, key = { "t" + it.id }) { ReplyCard(it) }
+            item(key = "threadlabel") { SectionLabel("Thread", Modifier.animateItem()) }
+            items(continuation, key = { "t" + it.id }) { ReplyCard(it, Modifier.animateItem()) }
         }
 
-        item(key = "replieslabel") { SectionLabel("Replies") }
+        item(key = "replieslabel") { SectionLabel("Replies", Modifier.animateItem()) }
 
         when (thread) {
             ThreadState.Loading -> item(key = "loading") {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    modifier = Modifier.animateItem().fillMaxWidth().padding(24.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -298,7 +328,7 @@ internal fun ConversationView(
             is ThreadState.Failed -> item(key = "failed") {
                 val presentation = thread.error.present()
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    modifier = Modifier.animateItem().fillMaxWidth().padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -332,7 +362,7 @@ internal fun ConversationView(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth().padding(24.dp)
+                            modifier = Modifier.animateItem().fillMaxWidth().padding(24.dp)
                         )
                     }
                 } else {
@@ -341,12 +371,12 @@ internal fun ConversationView(
                             item(key = "r$chainIndex-${reply.id}") {
                                 // Answers inside a chain sit slightly in, so the
                                 // exchange reads as one conversation.
-                                ReplyCard(reply, if (index > 0) Modifier.padding(start = 24.dp) else Modifier)
+                                ReplyCard(reply, Modifier.animateItem().then(if (index > 0) Modifier.padding(start = 24.dp) else Modifier))
                             }
                         }
                     }
                     item(key = "more") {
-                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        Box(Modifier.animateItem().fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
                             BoldButton(onClick = { LinkRouter.openOutside(context, postUrl(post)) }) {
                                 Text("See all comments on LinkedIn")
                             }
@@ -360,12 +390,12 @@ internal fun ConversationView(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
     )
 }
 

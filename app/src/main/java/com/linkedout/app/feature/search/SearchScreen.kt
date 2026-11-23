@@ -50,6 +50,15 @@ import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 
 /** Search through every post saved on this phone, instantly and offline. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -128,8 +137,15 @@ fun SearchScreen(
                     value = typed,
                     onValueChange = viewModel::setQuery,
                     placeholder = "Search saved posts",
+                    // The Clear icon grows in and out with the field's end, so the field does not jump at the first letter.
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+                    // not ported: AnimatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's clickable Box toggling `visible`, its corner radius transition; the icon shows by the typed text)
                     trailingIcon = {
-                        if (typed.isNotEmpty()) {
+                        AnimatedVisibility(
+                            visible = typed.isNotEmpty(),
+                            enter = fadeIn(tween(200)) + expandHorizontally(tween(200)),
+                            exit = fadeOut(tween(200)) + shrinkHorizontally(tween(200))
+                        ) {
                             // A tap target of 48 dp in the field's glass, without a Material icon button.
                             Icon(
                                 LinkedOutIcons.Close,
@@ -148,29 +164,46 @@ fun SearchScreen(
                 )
             }
 
-            if (hint != null) {
-                item(key = "hint") {
-                    Text(
-                        hint,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(32.dp)
-                    )
+            // The hint and the count are one item whose content crossfades, its height gliding, instead of two items
+            // swapped at once.
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+            // not ported: CrossfadeSample (the sample's "A" and "B" pages; the pages here are the hint, the count and nothing)
+            item(key = "status") {
+                // The text and whether it is a hint (centred, large) or the count (small, at the start).
+                val status: Pair<String, Boolean>? = when {
+                    hint != null -> hint to true
+                    state.results.isNotEmpty() ->
+                        (if (state.results.size == 1) "1 post" else "${state.results.size} posts") to false
+                    else -> null
                 }
-            } else if (state.results.isNotEmpty()) {
-                item(key = "count") {
-                    Text(
-                        if (state.results.size == 1) "1 post" else "${state.results.size} posts",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                Box(Modifier.animateItem().animateContentSize()) {
+                    Crossfade(targetState = status, label = "searchStatus") { shown ->
+                        when {
+                            shown == null -> Unit
+                            shown.second -> Text(
+                                shown.first,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().padding(32.dp)
+                            )
+                            else -> Text(
+                                shown.first,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
                 }
             }
 
+            // Each result keeps its key and glides to its new place when the query changes the list.
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/foundation/foundation/samples/src/main/java/androidx/compose/foundation/samples/LazyDslSamples.kt#AnimateItemSample
+            // not ported: AnimateItemSample (its "Add new item" and "Shuffle" Buttons, the list of strings and Column, the rows here are the posts and the query moves them)
             items(state.results, key = { it.id }) { post ->
                 PostCard(
+                    modifier = Modifier.animateItem(),
                     post = post,
                     onClick = {
                         focus.clearFocus()

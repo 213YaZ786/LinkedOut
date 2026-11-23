@@ -1,6 +1,12 @@
 package com.linkedout.app.feature.media
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -171,34 +177,55 @@ private fun VideoPage(item: MediaItem, saved: MediaSource, active: Boolean) {
         if (found == null) lost = true else fetched = found
     }
 
-    if (source == null) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            AsyncImage(
-                model = saved.preview,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Text(
-                when {
-                    looking -> "Fetching the video from its post."
-                    lost || item.sourcePostId == null ->
-                        "LinkedIn did not give this video's address, on the profile page or " +
-                            "on the post's own."
-                    else -> "Fetching the video from its post."
-                },
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-        }
-        return
-    }
-
     var failed by remember(source) { mutableStateOf(false) }
+
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+    // The text while the address is fetched, the failed pane and the player cross into each other as the draft shows.
+    // The last address is remembered so the failed pane and the player's exit still have it. The player's lines stay
+    // below, unmoved, inside the "Player" branch that closes at the end of this function.
+    // not ported: CrossfadeSample (the sample's function; its Crossfade is used here, inline)
+    // not ported: "Page A", "Page B" (the sample's own pages)
+    var shownSource by remember { mutableStateOf(source) }
+    if (source != null) shownSource = source
+    val screen = if (source == null) "Fetching" else if (failed) "Failed" else "Player"
+    Crossfade(targetState = screen, modifier = Modifier.fillMaxSize(), animationSpec = tween(200)) { screen ->
+        when (screen) {
+            "Fetching" -> Column(
+                modifier = Modifier.fillMaxSize().padding(32.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                AsyncImage(
+                    model = saved.preview,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    when {
+                        looking -> "Fetching the video from its post."
+                        lost || item.sourcePostId == null ->
+                            "LinkedIn did not give this video's address, on the profile page or " +
+                                "on the post's own."
+                        else -> "Fetching the video from its post."
+                    },
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+            }
+            "Failed" -> shownSource?.let { address ->
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("This video could not be played here.", color = Color.White)
+                    BoldButton(onClick = { uriHandler.openUri(address) }, filled = true) {
+                        Text("Open in browser")
+                    }
+                }
+            }
+            "Player" -> shownSource?.let { source ->
 
     // On mobile data with Wi-Fi only on, nothing is fetched until the reader
     // taps play. Otherwise the player prepares as soon as the page exists.
@@ -264,20 +291,6 @@ private fun VideoPage(item: MediaItem, saved: MediaSource, active: Boolean) {
     // Out of sight it stops loading too (a paused player goes on downloading); it goes on from the same place.
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { exo.stop() }
 
-    if (failed) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("This video could not be played here.", color = Color.White)
-            BoldButton(onClick = { uriHandler.openUri(source) }, filled = true) {
-                Text("Open in browser")
-            }
-        }
-        return
-    }
-
     Box(Modifier.fillMaxSize()) {
         GlassVideo(
             player = exo,
@@ -286,9 +299,17 @@ private fun VideoPage(item: MediaItem, saved: MediaSource, active: Boolean) {
             controls = item.type == MediaType.VIDEO && started
         )
 
-        if (!started) {
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+        // The Play block fades in and, once started, fades out a little smaller, as the draft shows.
+        // not ported: AnimatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's function; its AnimatedVisibility is used here, inline)
+        // not ported: the sample's clickable Box toggle and cornerRadius transition (its own demo)
+        AnimatedVisibility(
+            visible = !started,
+            modifier = Modifier.align(Alignment.Center),
+            enter = fadeIn(tween(200)),
+            exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.9f)
+        ) {
             Column(
-                modifier = Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -313,6 +334,9 @@ private fun VideoPage(item: MediaItem, saved: MediaSource, active: Boolean) {
                 )
             }
         }
-
+    }
+            }
+            else -> Unit
+        }
     }
 }

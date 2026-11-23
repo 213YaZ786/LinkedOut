@@ -1,5 +1,15 @@
 package com.linkedout.app.feature.jobs
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import com.linkedout.app.ui.component.GlassSearchField
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.navigationBarBottom
@@ -219,14 +229,22 @@ fun JobsScreen(
 
         // What LinkedIn says of the results, as it words it, plain text: it does nothing, so it has no zone.
         state.count?.takeIf { !showSaved && !state.loading && state.cards.isNotEmpty() }?.let { count ->
+            // The count crosses through nothing when it changes, the draft's "count" case.
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+            // not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used inline)
+            // not ported: foo, bar, baz (the sample's own demo functions)
             item(key = "count") {
+                Box(Modifier.animateItem().animateContentSize()) {
+                AnimatedContent(count, transitionSpec = jobsFadeThrough()) { contentState ->
                 Text(
-                    count,
+                    contentState,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 8.dp)
                 )
+                }
+                }
             }
         }
 
@@ -235,53 +253,101 @@ fun JobsScreen(
                 ErrorPanel(
                     error = error,
                     onRetry = if (state.cards.isEmpty()) viewModel::search else viewModel::loadMore,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = ZoneGap)
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/foundation/foundation/samples/src/main/java/androidx/compose/foundation/samples/LazyDslSamples.kt#AnimateItemSample
+                    // not ported: animateItemSample (the sample's function; its Add and Shuffle buttons and Text items are its own)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = ZoneGap).animateItem()
                 )
             }
         }
 
-        when {
-            showSaved -> {
-                if (saved.jobs.isEmpty()) item(key = "no-saved") { Hint("No saved offer") }
-            }
-            state.loading -> item(key = "loading") {
-                Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
-                    LoadingMark(size = 96.dp)
-                }
-            }
-            state.searched == null -> item(key = "hint") {
-                Hint(
-                    "Public offers from LinkedIn, read without an account. " +
-                        "What you search is sent to LinkedIn, as on its own site, and stays on this phone otherwise."
-                )
-            }
-            state.cards.isEmpty() && state.error == null -> item(key = "none") {
-                Hint("No offer matches. Fewer words or a wider place usually help.")
-            }
+        val screen = when {
+            showSaved -> if (saved.jobs.isEmpty()) JobsStatus.NoSaved else JobsStatus.Nothing
+            state.loading -> JobsStatus.Loading
+            state.searched == null -> JobsStatus.Hint
+            state.cards.isEmpty() && state.error == null -> JobsStatus.NoMatch
+            else -> JobsStatus.Nothing
         }
-
-        // The saved cards open the offer as the others.
-        items(if (showSaved) saved.jobs.map(SavedJob::toCard) else state.cards, key = { it.id }) { card ->
-            JobCardZone(card = card, onClick = { onOpenJob(card) })
-        }
-
-        if (!showSaved && state.cards.isNotEmpty()) {
-            item(key = "more") {
-                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    when {
-                        state.loadingMore -> LoadingMark(size = 96.dp)
-                        state.endReached -> Text(
-                            "No more offers for this search.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+        // not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used inline)
+        // not ported: foo, bar, baz (the sample's own demo functions)
+        item(key = "state") {
+            Box(Modifier.animateContentSize()) {
+                AnimatedContent(screen, transitionSpec = jobsFadeThrough()) { contentState ->
+                    when (contentState) {
+                        JobsStatus.Nothing -> Unit
+                        JobsStatus.NoSaved -> Hint("No saved offer")
+                        JobsStatus.Loading -> Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                            LoadingMark(size = 96.dp)
+                        }
+                        JobsStatus.Hint -> Hint(
+                            "Public offers from LinkedIn, read without an account. " +
+                                "What you search is sent to LinkedIn, as on its own site, and stays on this phone otherwise."
                         )
-                        else -> BoldButton(onClick = viewModel::loadMore) { Text("More offers") }
+                        JobsStatus.NoMatch -> Hint("No offer matches. Fewer words or a wider place usually help.")
                     }
                 }
             }
         }
+
+        // The saved cards open the offer as the others. A search, the Saved pill or a new page fades and slides the
+        // cards in and out: the draft's "rows" case.
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/CrossfadeSample.kt#CrossfadeSample
+        // not ported: crossfadeSample (the sample's function: the Saved toggle's two lists are one LazyColumn on one scroll
+        // state, so animateItem's fade is their crossfade; the other swaps here cross through nothing)
+        // not ported: "A" and "B" (the sample's own pages)
+        // not ported: "Filters, N" label animation (MenuPill, a kit file in ui/component, takes its label as a String)
+        // https://github.com/androidx/androidx/blob/androidx-main/compose/foundation/foundation/samples/src/main/java/androidx/compose/foundation/samples/LazyDslSamples.kt#AnimateItemSample
+        // not ported: animateItemSample (the sample's function; its Add and Shuffle buttons and Text items are its own)
+        items(if (showSaved) saved.jobs.map(SavedJob::toCard) else state.cards, key = { it.id }) { card ->
+            JobCardZone(card = card, onClick = { onOpenJob(card) }, modifier = Modifier.animateItem())
+        }
+
+        if (!showSaved && state.cards.isNotEmpty()) {
+            item(key = "more") {
+                // The footer's states cross through nothing, the draft's "footer" case.
+                // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+                // not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used inline)
+                // not ported: foo, bar, baz (the sample's own demo functions)
+                val footerScreen = when {
+                    state.loadingMore -> JobsFooter.Loading
+                    state.endReached -> JobsFooter.End
+                    else -> JobsFooter.More
+                }
+                Box(
+                    Modifier.animateItem().fillMaxWidth().animateContentSize().padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                  AnimatedContent(footerScreen, transitionSpec = jobsFadeThrough()) { contentState ->
+                    when (contentState) {
+                        JobsFooter.Loading -> LoadingMark(size = 96.dp)
+                        JobsFooter.End -> Text(
+                            "No more offers for this search.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        JobsFooter.More -> BoldButton(onClick = viewModel::loadMore) { Text("More offers") }
+                    }
+                  }
+                }
+            }
+        }
     }
     }
+}
+
+// The contentState of each swap: Foo, Bar and Baz of the sample are the screen's own states here.
+// https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+// not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used inline on the list's items)
+// not ported: foo, bar, baz (the sample's own demo functions, boxes of three sizes)
+private enum class JobsStatus { Nothing, Loading, Hint, NoMatch, NoSaved }
+
+private enum class JobsFooter { Loading, More, End }
+
+// The swap the draft shows: the old content out in 90 ms, the new one in after it, never clipped while the size changes
+// (the height itself follows animateContentSize on the Box around).
+private fun <ContentState> jobsFadeThrough(): AnimatedContentTransitionScope<ContentState>.() -> ContentTransform = {
+    (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90)))
+        .using(SizeTransform(clip = false) { _, _ -> snap() })
 }
 
 @Composable
@@ -303,9 +369,9 @@ private fun SearchField(
 }
 
 @Composable
-private fun JobCardZone(card: JobCard, onClick: () -> Unit) {
+private fun JobCardZone(card: JobCard, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Zone(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = ZoneGap),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = ZoneGap),
         onClick = onClick
     ) {
         Row(
