@@ -249,7 +249,13 @@ data class Feed(
      * The line under a person's name on the guest top card ("CEO at Google"). Null for a company, whose
      * line is [currentCompany], and for files written before it was read.
      */
-    val headline: String? = null
+    val headline: String? = null,
+    /**
+     * A company's own site, read from the About block of its guest page ("Website"): a real http or https
+     * address, never LinkedIn's redirect. Null for a person, when the page has none, and for files written
+     * before it was read.
+     */
+    val website: String? = null
 )
 
 /** The numbers on a profile card. Any may be missing. */

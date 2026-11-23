@@ -72,6 +72,9 @@ class CompanyPageParser {
         private const val HEADER = "main-feed-activity-card__header"
         private const val IMAGES = "data-test-id=\"feed-images-content\""
             private const val DOCUMENT = "data-id=\"feed-paginated-document-content\""
+        /** The "Website" row of the About block, and the prefix every row of that block shares. */
+        private const val WEBSITE = "data-test-id=\"about-us__website\""
+        private const val ABOUT_ROW = "data-test-id=\"about-us__"
         private const val REACTIONS = "data-test-id=\"social-actions__reactions\""
         private const val COMMENTS = "data-test-id=\"social-actions__comments\""
 
@@ -138,8 +141,68 @@ class CompanyPageParser {
             // the field the top card already shows rather than in a new one.
             currentCompany = page.textAfter("top-card-layout__headline", "</h2>")?.takeIf { it.isNotBlank() },
             school = null,
-            stats = ProfileStats(followers = page.followers())
+            stats = ProfileStats(followers = page.followers()),
+            website = page.website()
         )
+    }
+
+    // ---- the website -------------------------------------------------------
+
+    /**
+     * href-sanitizer's validateURL: no blank or control character, an address that parses, and here only
+     * http or https (the scriptlet takes any scheme, a website field must not), never LinkedIn's own.
+     * https://github.com/gorhill/uBlock/blob/master/src/js/resources/href-sanitizer.js#validateURL
+     */
+    internal fun validateURL(text: String?): String {
+        if (text == null) return ""
+        if (text == "") return ""
+        if (text.any { it <= ' ' || it == '\u007f' }) return ""
+        try {
+            val url = java.net.URI(text)
+            if (url.scheme != "http" && url.scheme != "https") return ""
+            if (url.host.orEmpty().endsWith("linkedin.com")) return ""
+            return url.toString()
+        } catch (_: Exception) {
+        }
+        return ""
+    }
+
+    /**
+     * href-sanitizer's extractURL for the source `?url`: the value of the href's `url` parameter, decoded.
+     * An href that is not LinkedIn's wrapper is the address itself (the scriptlet's default source).
+     * https://github.com/gorhill/uBlock/blob/master/src/js/resources/href-sanitizer.js#extractURL
+     * not ported: the `text` and `[name]` sources and urlSkip's transformation steps such as -base64 (LinkedIn's
+     * wrapper uses only `?url`).
+     */
+    internal fun extractURL(href: String, source: String = "?url"): String? {
+        if (!href.substringBefore('?').endsWith("/redir/redirect")) return href
+        val steps = href.substringAfter('?').split('&')
+        for (elem in steps) {
+            if (elem.startsWith(source.substring(1) + "=")) {
+                return try {
+                    java.net.URLDecoder.decode(elem.substringAfter('='), "UTF-8")
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * href-sanitizer's sanitize for one anchor: the address its href stands for, or null when it is not a
+     * valid web address.
+     * https://github.com/gorhill/uBlock/blob/master/src/js/resources/href-sanitizer.js#sanitize
+     * not ported: sanitizeCopycats (it rewrites other anchors of a live DOM)
+     * not ported: onDomChanged (a MutationObserver callback, the page here is a saved string)
+     * not ported: start (it starts the observer and the selector loop of a live DOM)
+     * not ported: hrefSanitizer (the scriptlet's registration and its selector loop, the row below holds one anchor)
+     */
+    fun sanitize(href: String): String? {
+        val text = extractURL(href.trim()) ?: return null
+        val hrefAfter = validateURL(text.trim())
+        if (hrefAfter == "") return null
+        return hrefAfter
     }
 
     // ---- the graph ---------------------------------------------------------
@@ -352,6 +415,21 @@ class CompanyPageParser {
             ?.trim()?.trimEnd(',', '·', '•')?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: takeIf { it.isNotBlank() && FOLLOWERS.find(it) == null }?.trim()
+
+    /**
+     * The "Website" row of the About block, which sits above the updates list, read as location() and
+     * followers() read the top card: from a marker, bounded, null when it is missing. The search stops at the
+     * next row, so a company with no website never borrows the link of another row. The href goes through
+     * [sanitize].
+     * https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/data/linkedin/CompanyPageParser.kt#location
+     */
+    private fun String.website(): String? {
+        val row = indexOf(WEBSITE).takeIf { it >= 0 } ?: return null
+        val next = indexOf(ABOUT_ROW, row + WEBSITE.length).takeIf { it > row } ?: minOf(length, row + 3000)
+        val href = substring(row, next).attributeAfter("<a ", "href", window = 1500)
+            ?.let(Markup::decodeEntities) ?: return null
+        return sanitize(href)
+    }
 
     private fun String.followers(): Long? {
         val line = textAfter("top-card-layout__first-subline", "</h3>") ?: return null

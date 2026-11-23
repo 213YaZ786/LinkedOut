@@ -149,6 +149,7 @@ class FeedCache(
             location = incoming.location ?: existing.location,
             currentCompany = incoming.currentCompany ?: existing.currentCompany,
             school = incoming.school ?: existing.school,
+            website = incoming.website ?: existing.website,
             stats = incoming.stats ?: existing.stats,
             nextCursor = when {
                 exhausted -> null
