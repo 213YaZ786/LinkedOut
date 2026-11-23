@@ -733,14 +733,6 @@ private fun linkedInLinksEnabled(context: Context): Boolean {
     }
 }
 
-/** LinkedOut's own notification page in Android settings. */
-private fun openNotificationSettings(context: Context) {
-    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(intent) }
-}
-
 /** The system screen where supported links are switched on for this app. */
 private fun openLinkSettings(context: Context) {
     val intent = Intent(

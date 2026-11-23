@@ -24,18 +24,21 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
-import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -66,15 +69,13 @@ import com.linkedout.app.data.settings.Settings
 import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.feature.settings.SettingsIcons
 import com.linkedout.app.feature.settings.SettingsViewModel
+import com.linkedout.app.feature.settings.openNotificationSettings
 import com.linkedout.app.sync.NewPostNotifier
-import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.component.ChoiceDialog
 import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.SetupTile
 import com.linkedout.app.ui.component.SetupTileDialog
 import com.linkedout.app.ui.component.SetupTileGrid
-import com.linkedout.app.ui.component.requiredDone
-import com.linkedout.app.ui.component.requiredLeft
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -125,14 +126,29 @@ private fun rememberSetup(): Setup {
 
     val canInstall = remember(checks) { Updates.canInstall(context) }
     val viaStore = remember(checks) { StoreLink.viaStore(context) }
-    val canNotify = remember(checks) { NewPostNotifier(context).canNotify() }
+    // The notification state is NewPostNotifier's own check, so the guide agrees with what a check would do.
+    val notifier = remember { NewPostNotifier(context) }
+    val canNotify = remember(checks) { notifier.canNotify() }
+    val exempt = remember(checks) { BatteryExemption.isExempt(context) }
     val linksOn = remember(checks) { linkedInLinksEnabled(context) }
     val notifyOn = current.backgroundSync && current.notifyNewPosts
     val hasNotificationPermission = remember(checks) {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
-    val askDownloadNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { checks++ }
+    // Refused when the reader was asked and said no: it stays so, shown on the tile, until Android allows it.
+    var notifyRefused by rememberSaveable { mutableStateOf(false) }
+    // Save media's own refusal, as notifyRefused is New posts': set when the permission came back refused.
+    var mediaRefused by rememberSaveable { mutableStateOf(false) }
+    LifecycleResumeEffect(Unit) {
+        if (notifier.canNotify()) mediaRefused = false
+        onPauseOrDispose { }
+    }
+    val askDownloadNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        checks++
+        // The error of Save media shows only once the reader was asked and said no, never before.
+        if (!granted && !notifier.canNotify()) mediaRefused = true
+    }
 
     val chooseMedia: (AutoDownload) -> Unit = { choice ->
         // The watermark back to zero, as Settings does: the first pass saves what is on screen now.
@@ -148,31 +164,51 @@ private fun rememberSetup(): Setup {
         if (mode == UpdateMode.INSTALL && !canInstall) Updates.allowInstalls(context)
     }
     val turnOnNotify = {
+        notifyRefused = false
         sync.setBackgroundSync(true)
         sync.setNotifyNewPosts(true)
         // Checks run with the app closed: see BatteryExemption.
         BatteryExemption.request(context)
     }
+    // Allowed on Android's notification page after a refusal: the reader asked for New posts, so it turns on.
+    LifecycleResumeEffect(Unit) {
+        if (notifyRefused && notifier.canNotify()) turnOnNotify()
+        onPauseOrDispose { }
+    }
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) turnOnNotify()
+        // Shown on the tile instead of silently left off: its tap opens Android's notification page.
+        if (granted) turnOnNotify() else notifyRefused = true
         checks++
     }
     val chooseNotify: (Boolean) -> Unit = { on ->
         when {
-            !on -> sync.setNotifyNewPosts(false)
+            !on -> {
+                notifyRefused = false
+                sync.setNotifyNewPosts(false)
+            }
             !hasNotificationPermission -> askNotify.launch(Manifest.permission.POST_NOTIFICATIONS)
             else -> turnOnNotify()
         }
     }
 
+    // Saving shows its progress as a notification: refused, the tile turns to an error and its tap opens Android's
+    // notification page. New posts likewise, and when the system may hold its checks back its tap asks again.
+    val mediaBlocked = current.autoDownloadMedia != AutoDownload.NEVER && !canNotify && mediaRefused
+    val notifyBlocked = notifyRefused && !canNotify
+    val notifyLate = notifyOn && canNotify && !exempt
     val tiles = listOf(
         SetupTile(
             id = "media", name = "Save media", title = "Save media", icon = LinkedOutIcons.Download,
-            state = autoDownloadLabel(current.autoDownloadMedia),
-            summary = "Posts saved on the phone open again offline. It is the one setting that spends your data, " +
-                "off until you choose otherwise.",
+            state = if (mediaBlocked) "Saved, no progress bar" else autoDownloadLabel(current.autoDownloadMedia),
+            summary = if (mediaBlocked) {
+                "Android blocks this app's notifications, so a saving shows no progress bar. Tap to open its notification page."
+            } else {
+                "Posts saved on the phone open again offline. It is the one setting that spends your data, " +
+                    "off until you choose otherwise."
+            },
             done = true, required = false,
-            onClick = { dialog.value = OpenDialog.MEDIA }
+            error = mediaBlocked,
+            onClick = { if (mediaBlocked) openNotificationSettings(context) else dialog.value = OpenDialog.MEDIA }
         ),
         SetupTile(
             id = "updates", name = "Updates", title = "Updates", icon = SettingsIcons.Update,
@@ -192,16 +228,30 @@ private fun rememberSetup(): Setup {
         ),
         SetupTile(
             id = "notify", name = "New posts", title = "New posts", icon = LinkedOutIcons.Bell,
+            // The states and the taps of MTGA's New posts tile
+            // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/welcome/WelcomeScreen.kt#rememberSetupTiles
             state = when {
+                notifyBlocked -> "Notifications blocked"
                 !notifyOn -> "Off"
                 !canNotify -> "Notifications off"
+                notifyLate -> "Checks may be late"
                 else -> "Notify me"
             },
-            summary = "A notification when the accounts you follow post. LinkedOut then checks in the background, " +
-                "which costs battery.",
-            done = !notifyOn || canNotify, required = false,
-            error = notifyOn && !canNotify,
-            onClick = { dialog.value = OpenDialog.NOTIFY }
+            summary = when {
+                notifyBlocked -> "Android blocks this app's notifications. Tap to open its notification page."
+                notifyLate -> "Android may hold the checks back while the app is closed. Tap to allow it."
+                else -> "A notification when the accounts you follow post. LinkedOut then checks in the background, " +
+                    "which costs battery."
+            },
+            done = !notifyOn || (canNotify && exempt), required = false,
+            error = notifyBlocked || (notifyOn && !canNotify) || notifyLate,
+            onClick = {
+                when {
+                    notifyBlocked -> openNotificationSettings(context)
+                    notifyLate -> BatteryExemption.request(context)
+                    else -> dialog.value = OpenDialog.NOTIFY
+                }
+            }
         ),
         SetupTile(
             id = "links", name = "LinkedIn links", title = "LinkedIn links", icon = SettingsIcons.Link,
@@ -229,8 +279,8 @@ private fun updatesLabel(mode: UpdateMode): String = when (mode) {
 }
 
 /**
- * The guide: the animated logo, the app's function, the tiles, then Start (Done when reopened from Settings),
- * which waits for the required ones. Laid out as SetupScreen: header, steps, footer with the one button.
+ * The guide: the animated logo, the app's function, the tiles, then Start (Done when reopened from Settings), which
+ * never waits: a refusal shows on its own tile. Laid out as SetupScreen: header, steps, the one button.
  * [onFinish] receives true when the reader asks to go to Accounts.
  * Ported from WelcomeScreen of
  * https://github.com/213YaZ786/Language/blob/main/app/src/main/java/com/yaz/language/feature/welcome/WelcomeScreen.kt#WelcomeScreen
@@ -288,53 +338,50 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
 /**
  * What the guide draws from the tiles it is given: the layout of SetupScreen (header, steps, footer with the one
  * button), split from [WelcomeScreen] so that a picture can be taken with fixed tiles, without the system checks.
- * Ported from WelcomeContent of
- * https://github.com/213YaZ786/Language/blob/main/app/src/main/java/com/yaz/language/feature/welcome/WelcomeScreen.kt#WelcomeContent
+ * The block is centred in the window's height, as WhatsNewKit's WhatsNewView does, and Start is the cookie of
+ * [StartCookie] 40 dp under the tiles, with nothing under it. Ported from WelcomeContent of MTGA's guide
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/welcome/WelcomeScreen.kt#WelcomeContent
+ * with the centred content block of
+ * https://github.com/SvenTiigi/WhatsNewKit/blob/main/Sources/View/WhatsNewView.swift#body
+ * not ported: WhatsNewView's footer band, secondary action sheet, version store, title and feature helper views (the
+ * app's title and SetupTileGrid take their place), the pinned footer (Start ends the block).
  */
 @Composable
 internal fun WelcomeContent(tiles: List<SetupTile>, reopened: Boolean, onStart: () -> Unit, onExplain: (SetupTile) -> Unit = {}) {
     val steps = tiles
-    // Drawn over the whole window, so it keeps clear of the system bars itself.
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-    ) {
+    // WhatsNewView's body: the scrolling content is a block centred in the window when shorter than it (the viewport is
+    // the minimum height of the block). Drawn over the whole window, so it keeps clear of the system bars itself.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val screen = maxHeight
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(horizontal = 8.dp)
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         ) {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-            Spacer(Modifier.height(40.dp))
-            // The icon's own animation, as the guide played it before the tiles (the user, 2026-11-07).
-            LoadingMark(size = 160.dp)
-            Spacer(Modifier.height(20.dp))
-            // The app's function in one line, no name and no count (point 21), the order of Language's WelcomeContent
-            // https://github.com/213YaZ786/Language/blob/main/app/src/main/java/com/yaz/language/feature/welcome/WelcomeScreen.kt#WelcomeContent
-            Text(
-                "LinkedIn reader",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-            Spacer(Modifier.height(24.dp))
-            SetupTileGrid(steps, onExplain)
-
-            Spacer(Modifier.height(32.dp))
-            val ready = steps.requiredDone()
-            BoldButton(filled = true, enabled = ready, onClick = onStart) { Text(if (reopened) "Done" else "Start") }
-            if (!ready) {
-                Spacer(Modifier.height(12.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .widthIn(max = 720.dp).fillMaxWidth().heightIn(min = screen)
+                    .windowInsetsPadding(WindowInsets.statusBars).padding(horizontal = 8.dp)
+            ) {
+                // The icon's own animation, as the guide played it before the tiles (the user, 2026-11-07).
+                LoadingMark(size = 160.dp)
+                Spacer(Modifier.height(16.dp))
+                // The mark, one line saying what the app is, the tiles, Start: no title, no "Welcome", no "N left",
+                // each tile shows its own check and its own refusal, none is required.
                 Text(
-                    "Still needed: " + steps.requiredLeft().joinToString(", ") { it.name },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    "LinkedIn reader",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+                Spacer(Modifier.height(24.dp))
+                SetupTileGrid(steps, onExplain)
+                Spacer(Modifier.height(40.dp))
+                StartCookie(description = if (reopened) "Done" else "Start", onClick = onStart)
+                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
-            Spacer(Modifier.height(24.dp))
-            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
         }
     }
 }
