@@ -290,8 +290,15 @@ class CompanyPageParser {
      */
     private fun String.age(): String? = textAfter("<time", "</time>")
 
+    // The counts are looked for in the whole card, no distance limit, as the reader of
+    // https://github.com/rgueldenpfennig/Squidlr/blob/main/src/Squidlr/LinkedIn/LinkedInContentProvider.cs#GetContentAsync
+    // does (lines 98-110: the first node carrying data-num-reactions, then data-num-comments, anywhere in the
+    // document). A fixed 12 000 character window lost them in a long card with five photos (the counts sat at
+    // 13 800), https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/data/linkedin/CompanyPageParser.kt#number
+    // The chunk is one card already (split at its marker), so its own length is the window.
+    // not ported: GetContentAsync's HtmlAgilityPack nodes, its datePublished and creator reading (the app has its own parsers)
     private fun String.number(attribute: String): Int? =
-        attributeAfter(0, attribute, window = 12_000)?.let(DIGITS::find)?.value?.toIntOrNull()
+        attributeAfter(0, attribute, window = length)?.let(DIGITS::find)?.value?.toIntOrNull()
 
     // ---- media -------------------------------------------------------------
 
