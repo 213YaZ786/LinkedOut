@@ -16,7 +16,10 @@ import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.EmptyZone
 import com.linkedout.app.ui.component.DropdownMenuGroup
 import com.linkedout.app.ui.component.GlassMenu
-import com.linkedout.app.ui.component.MenuPill
+import com.linkedout.app.ui.component.AppBarWithSearch
+import com.linkedout.app.ui.component.FolderSwitch
+import com.linkedout.app.ui.component.SearchCapsuleHint
+import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.ui.component.SelectableDropdownMenuItem
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
@@ -85,7 +88,6 @@ import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.feature.media.MediaViewer
 import com.linkedout.app.ui.component.PostCard
-import com.linkedout.app.ui.component.relativeTime
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -211,16 +213,16 @@ fun TimelineScreen(
         }
     }
 
-    // The feed choice, in the banner's middle (requests.md points 10 and 11): one pill with the folder icon, the feed's name and a
+    // The feed choice, the capsule's folder switch (requests.md points 10, 11 and 23): the folder icon, the feed's name and a
     // chevron, which opens a menu under it: All and the folders, then Liked and Archived, the shown one checked
     // (Material 3 Expressive's grouped menu in glass, GlassMenu). Picking does what a tap on a chip did.
-    // The pill is an item of the list that records listBackdrop: floating on it, it would draw the recording that holds
-    // it, a layer inside itself, and Android's renderer overflows its stack at the first frame. So MenuPill draws it with
-    // no backdrop, as a zone, and the menu lives in a window of its own. SMS's FloatingFrame provides its backdrop only
+    // The capsule is an item of the list that records listBackdrop: floating on it, it would draw the recording that holds
+    // it, a layer inside itself, and Android's renderer overflows its stack at the first frame. So AppBarWithSearch draws it
+    // with no backdrop, and the menu lives in a window of its own. SMS's FloatingFrame provides its backdrop only
     // outside what records it:
     // https://github.com/213YaZ786/SMS/blob/main/app/src/main/java/com/yaz/sms/ui/component/FloatingPane.kt#FloatingFrame
     // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/timeline/TimelineScreen.kt#TimelineScreen
-    // not ported: FloatingFrame (SMS's frame; here the pill draws itself with no backdrop)
+    // not ported: FloatingFrame (SMS's frame; here the capsule draws itself with no backdrop)
     // not ported: onPostScroll (SMS's nested scroll of the frame; Home's list has its own)
     // not ported: TimelineScreen (the screen itself is this file's, only the feed choice is rebuilt here)
     var feedsOpen by remember { mutableStateOf(false) }
@@ -233,43 +235,75 @@ fun TimelineScreen(
             viewModel.showFolder(name)
         }
     }
-    val feedPill: @Composable () -> Unit = {
-        // The screen keeps its heading for TalkBack: this wrapper is a heading named "Home", and the pill inside it
-        // stays its own node, a button that says the feed and whether its menu is open.
-        Box(Modifier.semantics { heading(); contentDescription = "Home" }) {
-            Box {
-                MenuPill(
-                    icon = LinkedOutIcons.Folder,
-                    label = state.folder ?: "All",
-                    expanded = feedsOpen,
-                    trailingIcon = LinkedOutIcons.ExpandMore,
-                    onClick = { feedsOpen = true }
-                )
-                GlassMenu(expanded = feedsOpen, onDismissRequest = { feedsOpen = false }) {
-                    // No Clear row: a feed is chosen, not cleared.
-                    DropdownMenuGroup(index = 0, count = 2) {
-                        SelectableDropdownMenuItem(selected = state.folder == null, onClick = { showFeed(null) }, text = "All")
-                        state.folders.forEach { name ->
-                            SelectableDropdownMenuItem(selected = state.folder == name, onClick = { showFeed(name) }, text = name)
-                        }
-                    }
-                    DropdownMenuGroup(index = 1, count = 2) {
-                        listOf(LIKED, ARCHIVED).forEach { name ->
-                            SelectableDropdownMenuItem(selected = state.folder == name, onClick = { showFeed(name) }, text = name)
-                        }
-                    }
+    // The menu with its counts, MTGA's feedMenu: each folder row carries its count of accounts as the badge of
+    // NavigationDrawerItem (GlassMenu's SelectableDropdownMenuItem `count`).
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/timeline/TimelineScreen.kt#banner
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/SearchBar.kt#AppBarWithSearch
+    // not ported: feedPill (MTGA's pill with its banner probe; the nobody followed banner here has only the "Home" title)
+    // not ported: AppBarWithSearch (the app's AppBarWithSearch in ui/component/FeedBanner.kt is its port, used as it is)
+    // not ported: the alert's AnimatedVisibility (MTGA's pop in and out; here the alert is drawn only while something is wrong)
+    val followed by koinInject<AccountStore>().accounts.collectAsState()
+    val feedMenu: @Composable () -> Unit = {
+        GlassMenu(expanded = feedsOpen, onDismissRequest = { feedsOpen = false }) {
+            // No Clear row: a feed is chosen, not cleared.
+            DropdownMenuGroup(index = 0, count = 2) {
+                SelectableDropdownMenuItem(selected = state.folder == null, onClick = { showFeed(null) }, text = "All", count = followed.size)
+                state.folders.forEach { name ->
+                    SelectableDropdownMenuItem(
+                        selected = state.folder == name,
+                        onClick = { showFeed(name) },
+                        text = name,
+                        count = followed.count { it.folder == name }
+                    )
+                }
+            }
+            DropdownMenuGroup(index = 1, count = 2) {
+                listOf(LIKED, ARCHIVED).forEach { name ->
+                    SelectableDropdownMenuItem(selected = state.folder == name, onClick = { showFeed(name) }, text = name)
                 }
             }
         }
     }
+    // The capsule's navigation icon: the screen keeps its heading for TalkBack, this wrapper is a heading named "Home", and
+    // the switch inside it stays its own node, a button that says the feed and whether its menu is open.
+    val feedSwitch: @Composable () -> Unit = {
+        Box(Modifier.semantics { heading(); contentDescription = "Home" }) {
+            Box {
+                FolderSwitch(
+                    icon = LinkedOutIcons.Folder,
+                    trailingIcon = LinkedOutIcons.ExpandMore,
+                    label = state.folder ?: "All",
+                    expanded = feedsOpen,
+                    onClick = { feedsOpen = true }
+                )
+                feedMenu()
+            }
+        }
+    }
+    val alert: @Composable () -> Unit = {
+        BannerAction(
+            icon = LinkedOutIcons.Warning,
+            label = "What went wrong",
+            onClick = { showFailures = true },
+            container = MaterialTheme.colorScheme.errorContainer,
+            tint = MaterialTheme.colorScheme.error
+        )
+    }
 
     val banner: @Composable () -> Unit = {
-        FeedBanner(
+        if (state.followedCount > 0) {
+            // One glass capsule, nothing under it: the folder switch, "Search saved posts", the alert on a failure only.
+            Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                AppBarWithSearch(
+                    inputField = { SearchCapsuleHint(LinkedOutIcons.Search, listOf("Search saved posts"), onOpenSearch) },
+                    navigationIcon = feedSwitch,
+                    actions = if (somethingWrong) ({ alert() }) else null
+                )
+            }
+        } else {
             // Nobody followed: no feed to choose, the plain title keeps the row from being empty.
-            centre = if (state.followedCount > 0) {
-                feedPill
-            } else {
-                {
+            FeedBanner(
+                centre = {
                     Text(
                         "Home",
                         style = MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.primary),
@@ -277,34 +311,10 @@ fun TimelineScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.semantics { heading() }
                     )
-                }
-            },
-            subtitle = subtitle(state),
-            leading = if (somethingWrong) {
-                {
-                    BannerAction(
-                        icon = LinkedOutIcons.Warning,
-                        label = "What went wrong",
-                        onClick = { showFailures = true },
-                        container = MaterialTheme.colorScheme.errorContainer,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-            } else {
-                null
-            },
-            trailing = if (state.followedCount > 0) {
-                {
-                    BannerAction(
-                        icon = LinkedOutIcons.Search,
-                        label = "Search saved posts",
-                        onClick = onOpenSearch
-                    )
-                }
-            } else {
-                null
-            }
-        )
+                },
+                leading = if (somethingWrong) alert else null
+            )
+        }
     }
 
     val pull = rememberPullToRefreshState()
@@ -452,15 +462,6 @@ fun TimelineScreen(
             )
         } }
     }
-}
-
-private fun subtitle(state: TimelineUiState): String? = when {
-    state.followedCount == 0 -> null
-    state.loading -> "Updating"
-    state.lastUpdatedMillis != null -> relativeTime(state.lastUpdatedMillis).let { age ->
-        if (age.isEmpty() || age == "now") "Updated just now" else "Updated $age ago"
-    }
-    else -> null
 }
 
 @Composable

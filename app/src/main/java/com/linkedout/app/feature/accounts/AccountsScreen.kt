@@ -5,8 +5,6 @@ import com.linkedout.app.core.link.LinkCleaner
 import com.linkedout.app.ui.component.CleanLinkEffect
 import com.linkedout.app.ui.component.rememberHaptics
 import com.linkedout.app.ui.component.statusBarTop
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.layout.layout
 import com.linkedout.app.ui.component.EmptyZone
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.theme.zone
@@ -60,8 +58,10 @@ import androidx.compose.ui.semantics.semantics
 import com.linkedout.app.ui.component.DropdownMenuGroup
 import com.linkedout.app.ui.component.DropdownMenuItem
 import com.linkedout.app.ui.component.GlassMenu
-import com.linkedout.app.ui.component.FeedBanner
-import com.linkedout.app.ui.component.MenuPill
+import com.linkedout.app.ui.component.AppBarWithSearch
+import com.linkedout.app.ui.component.BoldIconButton
+import com.linkedout.app.ui.component.FolderSwitch
+import com.linkedout.app.ui.component.SearchCapsuleField
 import com.linkedout.app.ui.component.SelectableDropdownMenuItem
 import com.linkedout.app.ui.component.FolderDialog
 import com.linkedout.app.ui.component.Zone
@@ -234,6 +234,33 @@ fun AccountsScreen(
         }
     }
 
+    // The field's keyboard action and its two buttons, shared by the capsule's field and the lone field.
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/accounts/AccountsScreen.kt#AccountsScreen
+    // not ported: AccountsScreen (the screen is this file; only the field's pieces are gathered here)
+    // not ported: paste, open (above, unchanged: the buttons call them)
+    val searchActions = KeyboardActions(onSearch = {
+        when {
+            candidate != null && !alreadyFollowed -> open(candidate, candidateKind)
+            visible.size == 1 -> open(visible.first().handle, visible.first().kind)
+            else -> focus.clearFocus()
+        }
+    })
+    val fieldActions: @Composable () -> Unit = {
+        if (query.isNotEmpty()) {
+            BoldIconButton(onClick = {
+                query = ""
+                notice = null
+            }) {
+                Icon(LinkedOutIcons.Close, contentDescription = "Clear")
+            }
+        }
+        // Always there, and the clipboard is read only on a tap: reading it to decide whether to show the button would be
+        // a read too, and Android raises its notice on every one.
+        BoldIconButton(onClick = { paste() }) {
+            Icon(LinkedOutIcons.Paste, contentDescription = "Paste a profile address")
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -245,32 +272,43 @@ fun AccountsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // The banner, the field and the line under it are the first row of
-            // the list, so the whole screen scrolls, under the status bar too.
-            // The row undoes the list's side padding and keeps its own margins.
-            item(key = "header") {
-                Column(Modifier.fullBleed(16.dp + LocalReadableInset.current).padding(bottom = 8.dp)) {
-                Box(Modifier.padding(horizontal = LocalReadableInset.current)) {
-                // The folder choice in the banner's middle as Home's feed pill: one pill, a menu under it with the folders,
-                // then Manage folders last (Gmail's Manage labels), the shown folder checked.
-                // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/timeline/TimelineScreen.kt#TimelineScreen
-                // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Menu.kt#DropdownMenuGroup
-                // not ported: TimelineScreen (the screen itself, only its feed pill and menu are rebuilt here, without Liked and Archived)
-                // not ported: DropdownMenuGroup (the app's ui/component/GlassMenu.kt is its port, used as it is)
-                FeedBanner(
-                    // Nobody followed: no pill, no count, the row stays empty above the field (requests.md point 12).
-                    centre = if (rows.isNotEmpty()) {
-                        {
-                            // The pill is an item of the list that records the backdrop: MenuPill draws it with none and
-                            // the menu lives in a window of its own (TimelineScreen's feedPill, same pitfall).
-                            // The wrapper is the screen's heading for TalkBack, the pill inside stays its own button.
+            // The capsule is the first row of the list, so the whole screen scrolls, under the status bar too. Nobody
+            // followed: the field alone is the first row, 8 dp under the status bar as the capsule is.
+            // The folder choice is the capsule's navigation icon: a menu under it with the folders and their counts, then
+            // Manage folders last (Gmail's Manage labels), the shown folder checked; the real search field in its middle.
+            // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/accounts/AccountsScreen.kt#AccountsScreen
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/SearchBar.kt#AppBarWithSearch
+            // not ported: AccountsScreen (the screen itself is this file's, only its capsule with the folder switch and menu is rebuilt here)
+            // not ported: paste (MTGA's reads the clipboard for X handles; this file's own paste() above reads LinkedIn addresses and stays)
+            // not ported: open (MTGA's takes a handle only, X has one kind of account; this file's open() takes a kind too)
+            // not ported: AppBarWithSearch (the app's AppBarWithSearch in ui/component/FeedBanner.kt is its port, used as it is)
+            // not ported: DropdownMenuGroup (the app's ui/component/GlassMenu.kt is its port, used as it is)
+            if (rows.isNotEmpty()) item(key = "header") {
+                Box(Modifier.padding(top = 8.dp)) {
+                    AppBarWithSearch(
+                        inputField = {
+                            SearchCapsuleField(
+                                searchIcon = LinkedOutIcons.Search,
+                                value = query,
+                                onValueChange = {
+                                    query = it
+                                    notice = null
+                                },
+                                hints = listOf("Search ${rows.size} accounts or open an address", "Search ${rows.size} accounts"),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = searchActions
+                            )
+                        },
+                        actions = { fieldActions() },
+                        navigationIcon = {
+                            // The wrapper is the screen's heading for TalkBack, the switch inside stays its own button.
                             Box(Modifier.semantics { heading(); contentDescription = "Accounts" }) {
                                 Box {
-                                    MenuPill(
+                                    FolderSwitch(
                                         icon = LinkedOutIcons.Folder,
+                                        trailingIcon = LinkedOutIcons.ExpandMore,
                                         label = folder ?: "All",
                                         expanded = foldersOpen,
-                                        trailingIcon = LinkedOutIcons.ExpandMore,
                                         onClick = { foldersOpen = true }
                                     )
                                     GlassMenu(expanded = foldersOpen, onDismissRequest = { foldersOpen = false }) {
@@ -278,13 +316,15 @@ fun AccountsScreen(
                                             SelectableDropdownMenuItem(
                                                 selected = folder == null,
                                                 onClick = { chosenFolder = null; foldersOpen = false },
-                                                text = "All"
+                                                text = "All",
+                                                count = rows.size
                                             )
                                             folders.forEach { name ->
                                                 SelectableDropdownMenuItem(
                                                     selected = folder == name,
                                                     onClick = { chosenFolder = name; foldersOpen = false },
-                                                    text = name
+                                                    text = name,
+                                                    count = rows.count { it.folder == name }
                                                 )
                                             }
                                         }
@@ -309,14 +349,13 @@ fun AccountsScreen(
                                 }
                             }
                         }
-                    } else {
-                        // Nothing to see, but TalkBack still finds the screen's name.
-                        { Box(Modifier.size(1.dp).semantics { heading(); contentDescription = "Accounts" }) }
-                    },
-                    subtitle = if (rows.isEmpty()) null else "${rows.size} followed"
-                )
+                    )
                 }
-
+            }
+            if (rows.isEmpty()) item(key = "search") {
+                // Nothing to see, but TalkBack still finds the screen's name (the old empty banner row's Box).
+                // Port of AccountsScreen's heading Box: 1 dp here, 7 dp of padding below, so the field stays 8 dp down.
+                Box(Modifier.size(1.dp).semantics { heading(); contentDescription = "Accounts" })
                 GlassSearchField(
                     value = query,
                     onValueChange = {
@@ -325,49 +364,11 @@ fun AccountsScreen(
                     },
                     placeholder = "Profile address",
                     leadingIcon = { Icon(LinkedOutIcons.Search, contentDescription = null) },
-                    trailingIcon = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (query.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    query = ""
-                                    notice = null
-                                }) {
-                                    Icon(LinkedOutIcons.Close, contentDescription = "Clear")
-                                }
-                            }
-                            // The paste action of MTGA's field, always there and the clipboard read only on a tap
-                            // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/accounts/AccountsScreen.kt#L209-L226),
-                            // as a word instead of its icon: a transparent tap target in the field's own glass,
-                            // never a second pane.
-                            Surface(
-                                onClick = { paste() },
-                                shape = ButtonDefaults.textShape,
-                                color = Color.Transparent,
-                                contentColor = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(end = 8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .heightIn(min = ButtonDefaults.MinHeight)
-                                        .padding(horizontal = 12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("Paste", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    },
+                    trailingIcon = { Row(verticalAlignment = Alignment.CenterVertically) { fieldActions() } },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {
-                        when {
-                            candidate != null && !alreadyFollowed -> open(candidate, candidateKind)
-                            visible.size == 1 -> open(visible.first().handle, visible.first().kind)
-                            else -> focus.clearFocus()
-                        }
-                    }),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp + LocalReadableInset.current)
+                    keyboardActions = searchActions,
+                    modifier = Modifier.fillMaxWidth().padding(top = 7.dp)
                 )
-                }
             }
             notice?.let { message ->
                 item(key = "notice") { Hint(message) }
@@ -579,17 +580,5 @@ private fun EmptyState(modifier: Modifier = Modifier) {
         iconShape = CircleShape,
         modifier = modifier
     )
-}
-
-/**
- * Undoes the list's side padding for a row that brings its own margins, so the
- * header keeps exactly the layout it had above the list.
- */
-private fun Modifier.fullBleed(side: Dp) = layout { measurable, constraints ->
-    val extra = side.roundToPx()
-    val placeable = measurable.measure(
-        constraints.copy(minWidth = constraints.minWidth + 2 * extra, maxWidth = constraints.maxWidth + 2 * extra)
-    )
-    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra, 0) }
 }
 
