@@ -196,11 +196,16 @@ fun FeedScreen(
     // Ported from MTGA's FeedScreen: the Scaffold whose topBar is the FloatingTopBar, the list full screen with no
     // fade under it, the bar folding by enterAlwaysScrollBehavior
     // (https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen).
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     // LinkedOut's change: the profile card is the list's first item. While it is on screen it carries Back and
     // Refresh itself and no bar is drawn, so the room the bar took goes to the profile. Once it has left, the bar
     // comes in with the name as title (MTGA's headerGone).
     val headerGone by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
+    // Material's behaviour consumes every upward drag until its bar exists, so with no bar drawn the list never
+    // scrolled and the bar never came. canScroll lets it handle scroll only once the bar is on screen.
+    // Ported from https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AppBar.kt#enterAlwaysScrollBehavior
+    // and https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/AppBar.kt#EnterAlwaysScrollBehavior
+    // not ported: flingAnimationSpec, snapAnimationSpec, isScrollingContentAtStart (the app keeps Material's defaults)
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(canScroll = { headerGone })
     CompositionLocalProvider(LocalInlinePlaying provides inline) {
         Scaffold(
             // The page's ground is painted under the whole app, see MainActivity.
