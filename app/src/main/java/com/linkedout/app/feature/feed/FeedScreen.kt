@@ -11,6 +11,23 @@ import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.BoldButton
+import com.linkedout.app.ui.component.GlassTarget
+import com.linkedout.app.ui.glass.glassZone
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.PaddingValues
 import com.linkedout.app.navigation.LocalReadableInset
 import androidx.compose.foundation.clickable
@@ -258,7 +275,7 @@ fun FeedScreen(
                 state.error?.let {
                     item(key = "error") {
                         ErrorPanel(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = ZoneGap),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = ZoneGap).animateItem(),
                             error = it,
                             onRetry = viewModel::refresh
                         )
@@ -268,7 +285,7 @@ fun FeedScreen(
                 if (shown.isEmpty()) {
                     if (feed == null && state.loading) {
                         item(key = "loading") {
-                            Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxWidth().padding(48.dp).animateItem(), contentAlignment = Alignment.Center) {
                                 LoadingMark(size = 96.dp)
                             }
                         }
@@ -283,25 +300,49 @@ fun FeedScreen(
                         onOpenLink = { uriHandler.openUri(it) },
                         onDownload = { downloader.download(it, post.authorHandle, post.permalink) },
                         showStats = settings.showCounts,
-                        onOpenMedia = { index -> viewing = post.media to index }
+                        onOpenMedia = { index -> viewing = post.media to index },
+                        // Posts arrive and merge while the list is on screen: a card slides into its row, as MTGA's.
+                        modifier = Modifier.animateItem()
                     )
                 }
 
                 item(key = "footer") {
+                    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/FeedScreen.kt#FeedScreen
+                    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+                    // The footer's states (mark, button, text) cross through nothing, as the draft shows (MTGA's Crossfade, here
+                    // the fade through of the other swaps): animateContentSize is the one animator of the height, so
+                    // AnimatedContent's own size change snaps.
+                    // not ported: FeedScreen (the screen is this file's own, only the footer and the animated items are taken)
+                    // not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used here, inline)
+                    // not ported: foo, bar, baz (the sample's own demo functions)
+                    val footer = when {
+                        state.loadingMore -> FeedFooter.Loading
+                        state.canLoadMore -> if (state.pagingFailed) FeedFooter.Retry else FeedFooter.More
+                        else -> FeedFooter.End
+                    }
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        modifier = Modifier.animateItem().fillMaxWidth().animateContentSize().padding(24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        when {
-                            state.loadingMore -> LoadingMark(size = 28.dp)
-                            state.canLoadMore -> BoldButton(onClick = { viewModel.loadMore(manual = true) }) {
-                                Text(if (state.pagingFailed) "Try again" else "Load older posts")
+                        AnimatedContent(
+                            targetState = footer,
+                            transitionSpec = {
+                                (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90)))
+                                    .using(SizeTransform(clip = false) { _, _ -> snap() })
+                            },
+                            label = "feedFooter"
+                        ) { shown ->
+                            when (shown) {
+                                FeedFooter.Loading -> LoadingMark(size = 28.dp)
+                                FeedFooter.Retry, FeedFooter.More -> BoldButton(onClick = { viewModel.loadMore(manual = true) }) {
+                                    Text(if (shown == FeedFooter.Retry) "Try again" else "Load older posts")
+                                }
+                                FeedFooter.End -> Text(
+                                    "No older posts available.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                            else -> Text(
-                                "No older posts available.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
                     }
                 }
@@ -449,16 +490,68 @@ private fun ProfileZone(
                 }
             }
 
-            if (isFollowing) {
-                BoldButton(onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
-                    Text("Following")
-                }
-            } else {
-                BoldButton(filled = true, onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp)) {
-                    Text("Follow")
-                }
-            }
+            FollowButton(following = isFollowing, onClick = onToggleFollow, modifier = Modifier.padding(top = 8.dp))
         }
+        }
+    }
+}
+
+private enum class FeedFooter { Loading, Retry, More, End }
+
+// Follow and Following are one button: the accent fill goes in and out by alpha only (a fade to Color.Transparent
+// would pass through grey), the label crosses through nothing and the width follows without clipping. In glass it is
+// BoldButton's own zone (GlassTarget, glassZone, the outlined shape) drawn here because BoldButton cannot animate its
+// fill; with no glass, BoldButton as before.
+// https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/feed/ProfileHeader.kt#FollowButton
+// https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+// not ported: ContainerShapeRound's press morph (the corner spring of Material 3 Expressive's medium button; LinkedOut's button is BoldButton's glass pane, its shape and sizes)
+// not ported: the leading icon and the outline (the glass pane has neither)
+// not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used here, inline)
+// not ported: foo, bar, baz (the sample's own demo functions)
+@Composable
+private fun FollowButton(following: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val glass = LocalGlass.current
+    if (glass == null) {
+        BoldButton(onClick = onClick, modifier = modifier, filled = !following) {
+            Text(if (following) "Following" else "Follow")
+        }
+        return
+    }
+    val shape = ButtonDefaults.outlinedShape
+    // The fill is read in the draw block: no recomposition per frame.
+    val fill = animateFloatAsState(if (following) 0f else 0.45f, tween(200), label = "followFill")
+    val filledContent = if (glass.dark) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onPrimaryContainer
+    val contentColor by animateColorAsState(
+        if (following) MaterialTheme.colorScheme.primary else filledContent, tween(200), label = "followContent"
+    )
+    GlassTarget(modifier) {
+        Box(
+            Modifier
+                .glassZone(shape, glass, lens = 1f)
+                .drawBehind {
+                    drawOutline(shape.createOutline(size, layoutDirection, this), glass.accentTint, alpha = fill.value)
+                }
+                .clip(shape)
+                .clickable(role = Role.Button, onClick = onClick)
+                .widthIn(min = ButtonDefaults.MinWidth)
+                .heightIn(min = ButtonDefaults.MinHeight)
+                .padding(ButtonDefaults.ContentPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedContent(
+                targetState = following,
+                transitionSpec = {
+                    (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90)))
+                        .using(SizeTransform(clip = false))
+                },
+                label = "followLabel"
+            ) { isFollowing ->
+                Text(
+                    if (isFollowing) "Following" else "Follow",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = contentColor
+                )
+            }
         }
     }
 }

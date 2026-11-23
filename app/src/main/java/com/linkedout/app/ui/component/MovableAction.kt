@@ -3,7 +3,6 @@ package com.linkedout.app.ui.component
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.draggable2D
 import androidx.compose.foundation.gestures.rememberDraggable2DState
@@ -22,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -112,7 +110,16 @@ fun MovableAction(
         }
     }
 
-    val lift by animateFloatAsState(if (lifted) 1.12f else 1f, spring(dampingRatio = 0.5f, stiffness = 500f), label = "lift")
+    // The lift and its shadow are Animatables moved by animateTo, as the sample's animatedOffset is, here by the
+    // lifted flag; both are read in the layer while drawing, never in composition.
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation-core/samples/src/main/java/androidx/compose/animation/core/samples/AnimatableSamples.kt#AnimatableAnimateToGenericsType
+    // not ported: AnimatableAnimateToGenericsType's pointerInput, awaitFirstDown, Offset and Text (the flag is the drag, not a tap)
+    val lift = remember { Animatable(1f) }
+    val shadow = remember { Animatable(0f) }
+    LaunchedEffect(lifted) {
+        launch { lift.animateTo(if (lifted) 1.12f else 1f, spring(dampingRatio = 0.5f, stiffness = 500f)) }
+        shadow.animateTo(if (lifted) 10f else 0f, spring(dampingRatio = 0.5f, stiffness = 500f))
+    }
     Box(Modifier.fillMaxSize().onSizeChanged { container = it }) {
         if (container != IntSize.Zero) {
             Box(
@@ -132,10 +139,11 @@ fun MovableAction(
                     )
                     // Lifted: a little larger, a soft shadow.
                     .graphicsLayer {
-                        scaleX = lift
-                        scaleY = lift
+                        scaleX = lift.value
+                        scaleY = lift.value
+                        shadowElevation = shadow.value.coerceAtLeast(0f).dp.toPx()
+                        shape = CircleShape
                     }
-                    .shadow(if (lifted) 10.dp else 0.dp, CircleShape)
                     .semantics(mergeDescendants = true) {
                         customActions = listOf(
                             CustomAccessibilityAction(moveLabel) {

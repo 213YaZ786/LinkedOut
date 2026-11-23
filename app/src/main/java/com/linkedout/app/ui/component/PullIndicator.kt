@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import com.linkedout.app.ui.glass.glassFloating
 import com.linkedout.app.ui.glass.LocalGlassBackdrop
 import com.linkedout.app.ui.glass.LocalGlass
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
+import kotlin.math.max
 
 /**
  * The pull to refresh indicator, with the app's own loading mark in place of
@@ -39,7 +41,6 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun PullIndicator(state: PullToRefreshState, isRefreshing: Boolean, modifier: Modifier = Modifier) {
     val threshold = PullToRefreshDefaults.PositionalThreshold
-    val fraction = state.distanceFraction
     val haptics = rememberHaptics()
     val refreshing by rememberUpdatedState(isRefreshing)
     LaunchedEffect(state) {
@@ -50,10 +51,18 @@ fun PullIndicator(state: PullToRefreshState, isRefreshing: Boolean, modifier: Mo
                 reached = over
             }
     }
+    // The pull is read in the layer and in the mark's draw, never in composition: a drag frame redraws, it does not
+    // recompose. One alpha: the pull's own fade-in, or the refresh holding it at 1 (animated, so it never snaps).
+    // Ported from MTGA's PullIndicator, whose layer reads state.distanceFraction:
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/ui/component/PullIndicator.kt#PullIndicator
+    // not ported: FeatherRing, PullRing, PullRevealBox, Scrim, animateRing, animateIn, MBBackgroundView, MBProgressHUDAnimation
+    // (the user keeps LinkedOut's own pull animation, 2026-11-22), countLabel
+    val held = animateFloatAsState(if (isRefreshing) 1f else 0f, label = "pull held")
     Box(
         modifier.graphicsLayer {
+            val fraction = state.distanceFraction
             translationY = fraction * threshold.toPx() - this.size.height
-            alpha = if (isRefreshing) 1f else (fraction * 2f).coerceIn(0f, 1f)
+            alpha = max((fraction * 2f).coerceIn(0f, 1f), held.value)
         }
     ) {
         // In glass, the disc bends the list under it, with no shadow.
@@ -67,7 +76,7 @@ fun PullIndicator(state: PullToRefreshState, isRefreshing: Boolean, modifier: Mo
             modifier = if (glass) Modifier.size(56.dp).glassFloating(backdrop!!, CircleShape, look!!) else Modifier.size(56.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                LoadingMark(size = 44.dp, running = isRefreshing, progress = fraction.coerceIn(0f, 1f))
+                LoadingMark(size = 44.dp, running = isRefreshing, progress = { state.distanceFraction.coerceIn(0f, 1f) })
             }
         }
     }

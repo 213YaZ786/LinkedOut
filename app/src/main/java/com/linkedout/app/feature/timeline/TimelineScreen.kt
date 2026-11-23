@@ -1,6 +1,19 @@
 package com.linkedout.app.feature.timeline
 
 import com.linkedout.app.data.marks.PostMarks
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.linkedout.app.ui.glass.LocalGlassBackdrop
 import com.linkedout.app.ui.glass.LocalGlass
@@ -241,7 +254,6 @@ fun TimelineScreen(
     // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/SearchBar.kt#AppBarWithSearch
     // not ported: feedPill (MTGA's pill with its banner probe; the nobody followed banner here has only the "Home" title)
     // not ported: AppBarWithSearch (the app's AppBarWithSearch in ui/component/FeedBanner.kt is its port, used as it is)
-    // not ported: the alert's AnimatedVisibility (MTGA's pop in and out; here the alert is drawn only while something is wrong)
     val followed by koinInject<AccountStore>().accounts.collectAsState()
     val feedMenu: @Composable () -> Unit = {
         GlassMenu(expanded = feedsOpen, onDismissRequest = { feedsOpen = false }) {
@@ -280,14 +292,27 @@ fun TimelineScreen(
             }
         }
     }
+    // The alert pops in and out (scale and fade) as the failures come and go, the room it takes opening and closing with it
+    // so the capsule's hint does not jump (the draft's expandHorizontally and shrinkHorizontally).
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/timeline/TimelineScreen.kt#TimelineScreen
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedVisibilitySamples.kt#AnimatedVisibilityWithBooleanVisibleParamNoReceiver
+    // not ported: the sample's Box, its fixed size, background and the toggle button around the visible flag
+    // not ported: AnimatedVisibilityWithBooleanVisibleParamNoReceiver (the sample's function; its AnimatedVisibility is used here, inline)
+    // not ported: TimelineScreen (the screen is this file's own, only the alert and the list's animated items are taken)
     val alert: @Composable () -> Unit = {
-        BannerAction(
-            icon = LinkedOutIcons.Warning,
-            label = "What went wrong",
-            onClick = { showFailures = true },
-            container = MaterialTheme.colorScheme.errorContainer,
-            tint = MaterialTheme.colorScheme.error
-        )
+        AnimatedVisibility(
+            visible = somethingWrong,
+            enter = fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.6f) + expandHorizontally(tween(200)),
+            exit = fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.6f) + shrinkHorizontally(tween(200))
+        ) {
+            BannerAction(
+                icon = LinkedOutIcons.Warning,
+                label = "What went wrong",
+                onClick = { showFailures = true },
+                container = MaterialTheme.colorScheme.errorContainer,
+                tint = MaterialTheme.colorScheme.error
+            )
+        }
     }
 
     val banner: @Composable () -> Unit = {
@@ -297,7 +322,7 @@ fun TimelineScreen(
                 AppBarWithSearch(
                     inputField = { SearchCapsuleHint(LinkedOutIcons.Search, listOf("Search saved posts"), onOpenSearch) },
                     navigationIcon = feedSwitch,
-                    actions = if (somethingWrong) ({ alert() }) else null
+                    actions = { alert() }
                 )
             }
         } else {
@@ -312,7 +337,7 @@ fun TimelineScreen(
                         modifier = Modifier.semantics { heading() }
                     )
                 },
-                leading = if (somethingWrong) alert else null
+                leading = alert
             )
         }
     }
@@ -375,7 +400,7 @@ fun TimelineScreen(
                         message = "None of the profiles you follow could be read just now. " +
                             "Pull down to try again.",
                         // Centred in what is left under the banner.
-                        modifier = Modifier.fillParentMaxHeight(0.7f)
+                        modifier = Modifier.fillParentMaxHeight(0.7f).animateItem()
                     )
                 }
             }
@@ -440,12 +465,19 @@ fun TimelineScreen(
                             onDownload = { downloader.download(it, post.authorHandle, post.permalink) },
                             showStats = settings.showCounts,
                             unread = read.isUnread(post.id),
-                            onOpenMedia = { index -> viewing = post to index }
+                            onOpenMedia = { index -> viewing = post to index },
+                            // Posts arrive and merge while the list is on screen. Animating placement means a card
+                            // slides into its row instead of teleporting (MTGA's TimelineScreen).
+                            modifier = Modifier.animateItem()
                         )
                     }
 
                     item(key = "footer") {
-                        TimelineFooter(state = state, onLoadMore = { viewModel.loadMore(manual = true) })
+                        TimelineFooter(
+                            state = state,
+                            onLoadMore = { viewModel.loadMore(manual = true) },
+                            modifier = Modifier.animateItem()
+                        )
                     }
                 }
             }
@@ -464,30 +496,55 @@ fun TimelineScreen(
     }
 }
 
+private enum class FooterKind { Loading, Failed, More, End }
+
+// The footer's states (mark, failure, button, text) cross through nothing, as the draft shows (MTGA's footer Crossfade, here
+// the fade through of the other swaps): animateContentSize is the one animator of the height, so AnimatedContent's own size
+// change snaps. The footer is an item of the list: LazyItemScope.animateItem places it.
+// https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/timeline/TimelineScreen.kt#TimelineScreen
+// https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+// not ported: TimelineScreen (the screen is this file's own, only the footer's states are taken)
+// not ported: simpleAnimatedContentSample (the sample's function; its AnimatedContent is used here, inline)
+// not ported: foo, bar, baz (the sample's own demo functions)
 @Composable
-private fun TimelineFooter(state: TimelineUiState, onLoadMore: () -> Unit) {
+private fun TimelineFooter(state: TimelineUiState, onLoadMore: () -> Unit, modifier: Modifier = Modifier) {
+    val kind = when {
+        state.loadingMore -> FooterKind.Loading
+        state.pagingFailed -> FooterKind.Failed
+        state.canLoadMore -> FooterKind.More
+        else -> FooterKind.End
+    }
     Box(
-        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        modifier = modifier.fillMaxWidth().animateContentSize().padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
-        when {
-            state.loadingMore -> LoadingMark(size = 28.dp)
-            state.pagingFailed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "Couldn't load older posts. The server is busy, " +
-                        "which usually clears in a minute.",
+        AnimatedContent(
+            targetState = kind,
+            transitionSpec = {
+                (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90)))
+                    .using(SizeTransform(clip = false) { _, _ -> snap() })
+            },
+            label = "timelineFooter"
+        ) { shown ->
+            when (shown) {
+                FooterKind.Loading -> LoadingMark(size = 28.dp)
+                FooterKind.Failed -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Couldn't load older posts. The server is busy, " +
+                            "which usually clears in a minute.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    BoldButton(onClick = onLoadMore) { Text("Try again") }
+                }
+                FooterKind.More -> BoldButton(onClick = onLoadMore) { Text("Load older posts") }
+                FooterKind.End -> Text(
+                    "No older posts available.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                BoldButton(onClick = onLoadMore) { Text("Try again") }
             }
-            state.canLoadMore -> BoldButton(onClick = onLoadMore) { Text("Load older posts") }
-            else -> Text(
-                "No older posts available.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

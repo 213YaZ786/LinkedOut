@@ -1,17 +1,18 @@
 package com.linkedout.app.ui.component
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.linkedout.app.R
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
 /**
@@ -56,6 +58,22 @@ fun LoadingMark(
     size: Dp = 32.dp,
     running: Boolean = true,
     progress: Float = 0f
+) = LoadingMark(modifier, size, running) { progress }
+
+/**
+ * The same mark with [progress] read while drawing, so a gesture moving it does not recompose its caller.
+ *
+ * Ported from MTGA's LoadingMark, which keeps one Animatable clock (its feathers' fall; the pen's loop here):
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/ui/component/LoadingMark.kt#LoadingMark
+ * not ported: FEATHERS, FeatherInk, FeatherArt, drawFeather, FALL_MILLIS (LinkedOut keeps its own handwritten "out",
+ * drawn as it was); its gesture clock is a third of a fall, here the written part of the loop
+ */
+@Composable
+fun LoadingMark(
+    modifier: Modifier = Modifier,
+    size: Dp = 32.dp,
+    running: Boolean = true,
+    progress: () -> Float
 ) {
     val body = ImageBitmap.imageResource(R.drawable.lo_mark_body)
     val shine = ImageBitmap.imageResource(R.drawable.lo_mark_shine)
@@ -66,19 +84,36 @@ fun LoadingMark(
     val strokes = remember { STROKES.map { PathParser().parsePathString(it).toPath() } }
     val lengths = remember { strokes.map { PathMeasure().apply { setPath(it, false) }.length } }
 
-    val transition = rememberInfiniteTransition(label = "written out")
-    val clock by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(LOOP_MILLIS, easing = LinearEasing), RepeatMode.Restart),
-        label = "pen"
-    )
-    // Writing takes the first two thirds of the loop, then the word rests
-    // and fades. A gesture only writes, it never fades.
-    val time = if (running) clock else progress * WRITTEN
-    val fade = if (running && time > FADE_FROM) 1f - (time - FADE_FROM) / (1f - FADE_FROM) else 1f
+    // One time source for both ways: the clock continues from where it stands, and a gesture's progress glides from
+    // there, so the pen never jumps when `running` changes. Nothing runs at rest.
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/ui/component/LoadingMark.kt#LoadingMark
+    // and the Animatable remembered and moved by animateTo in a coroutine:
+    // https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation-core/samples/src/main/java/androidx/compose/animation/core/samples/AnimatableSamples.kt#AnimatableAnimateToGenericsType
+    // not ported: AnimatableAnimateToGenericsType's tap detection and Offset (the target is the loop's time or the pull, not a touch)
+    // not ported: LoadingMark's feathers (FEATHERS, FeatherInk, FeatherArt, drawFeather: LinkedOut keeps its own handwritten "out")
+    val currentProgress by rememberUpdatedState(progress)
+    val clock = remember { Animatable(if (running) 0f else currentProgress() * WRITTEN) }
+    LaunchedEffect(running) {
+        if (running) {
+            // The infinite frame clock, as InfiniteTransition runs on: a test waiting for idle does not wait for it.
+            var last = withInfiniteAnimationFrameMillis { it }
+            while (true) {
+                val now = withInfiniteAnimationFrameMillis { it }
+                val next = clock.value + (now - last).toFloat() / LOOP_MILLIS
+                clock.snapTo(if (next >= 1f) next - 1f else next)
+                last = now
+            }
+        } else {
+            // A gesture only writes: the pen goes as far as the pull, never past the written word.
+            snapshotFlow { currentProgress() * WRITTEN }.collectLatest { clock.animateTo(it, tween(90, easing = LinearEasing)) }
+        }
+    }
 
+    // Writing takes the first two thirds of the loop, then the word rests and fades. A gesture only writes, it
+    // never fades. The clock is read while drawing, never in composition.
     Canvas(modifier.size(size)) {
+        val time = clock.value
+        val fade = if (running && time > FADE_FROM) 1f - (time - FADE_FROM) / (1f - FADE_FROM) else 1f
         val side = this.size.minDimension
         val box = IntSize(side.roundToInt(), side.roundToInt())
         val unit = side / FRAME

@@ -5,7 +5,15 @@ import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.navigation.LocalReadableInset
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -178,6 +186,7 @@ fun FoldersScreen(
             val count = rows.count { it.folder == name }
             Zone(
                 modifier = Modifier
+                    .animateItem()
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = ZoneGap)
             ) {
@@ -197,15 +206,17 @@ fun FoldersScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            Text(
-                                when (count) {
-                                    0 -> "Empty"
-                                    1 -> "1 account"
-                                    else -> "$count accounts"
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            AnimatedContent(targetState = count, transitionSpec = fadeThrough(), label = "folderCount") { shown ->
+                                Text(
+                                    when (shown) {
+                                        0 -> "Empty"
+                                        1 -> "1 account"
+                                        else -> "$shown accounts"
+                                    },
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                         if (name != FollowedAccount.MAIN) {
                             BoldButton(onClick = { renaming = name }) { Text("Rename") }
@@ -218,7 +229,9 @@ fun FoldersScreen(
                             }
                         }
                         BoldButton(onClick = { open = if (open == name) null else name }) {
-                            Text(if (open == name) "Close" else "Open")
+                            AnimatedContent(targetState = open == name, transitionSpec = fadeThrough(), label = "folderOpen") { opened ->
+                                Text(if (opened) "Close" else "Open")
+                            }
                         }
                     }
 
@@ -279,19 +292,21 @@ fun FoldersScreen(
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.weight(1f).padding(start = 10.dp)
                                             )
-                                            if (here) {
-                                                Icon(
-                                                    LinkedOutIcons.Check,
-                                                    contentDescription = "Filed here",
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            } else {
-                                                Text(
-                                                    row.folder,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    maxLines = 1
-                                                )
+                                            AnimatedContent(targetState = here, transitionSpec = fadeThrough(), label = "folderCheck") { filed ->
+                                                if (filed) {
+                                                    Icon(
+                                                        LinkedOutIcons.Check,
+                                                        contentDescription = "Filed here",
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                } else {
+                                                    Text(
+                                                        row.folder,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -311,6 +326,14 @@ fun FoldersScreen(
         onClick = { creating = true }
     )
     }
+}
+
+// A swap through nothing: the old content out first (90 ms), the new one in after it (110 ms, 90 ms later), never
+// clipped while the size changes (SizeTransform). Material 3's fade through, as AnimatedContent's sample swaps its states:
+// https://github.com/androidx/androidx/blob/androidx-main/compose/animation/animation/samples/src/main/java/androidx/compose/animation/samples/AnimatedContentSamples.kt#SimpleAnimatedContentSample
+// not ported: SimpleAnimatedContentSample's ContentState, Foo, Bar, Baz and their boxes (the states are the count, open and filed)
+private fun <S> fadeThrough(): AnimatedContentTransitionScope<S>.() -> ContentTransform = {
+    (fadeIn(tween(110, delayMillis = 90)) togetherWith fadeOut(tween(90))).using(SizeTransform(clip = false))
 }
 
 // Ported from MTGA's NameDialog, which takes Android Files' New folder field:
