@@ -302,6 +302,21 @@ fun FeedScreen(
                 }
 
                 if (shown.isEmpty()) {
+                    // https://github.com/213YaZ786/LinkedOut/blob/main/app/src/main/java/com/linkedout/app/feature/feed/FeedScreen.kt#FeedScreen
+                    // not ported: FeedScreen (the screen is this file's own, only the empty branch is changed)
+                    // The page was read and LinkedIn shows a visitor no post: one line on the page, no zone (it does
+                    // nothing). Not while loading, not with an error, as the draft shows.
+                    if (feed != null && !state.loading && state.error == null) {
+                        item(key = "noPosts") {
+                            Text(
+                                "LinkedIn shows no posts to visitors who are not signed in",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp).animateItem()
+                            )
+                        }
+                    }
                     return@LazyColumn
                 }
 
