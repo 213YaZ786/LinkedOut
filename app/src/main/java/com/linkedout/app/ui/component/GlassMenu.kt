@@ -83,18 +83,23 @@ private val MenuContentOffset = DpOffset(0.dp, 8.dp)
 // not ported: DropdownMenu (the expect function with its shape, colour, elevation and border: the groups draw those here)
 // not ported: the transform origin and the scale and fade in and out (the pictures show the open menu only), the expanded
 // mutable transition state, MenuAnchorPosition (always Below, centred), the shape morph on hover
+// [contentOffset] is DropdownMenu's `offset: DpOffset`, the gap kept under the anchor (a menu composed beside a pill that sits
+// inside a taller pane passes the pane's extra height as well, see CapsuleMenuOffset).
+// https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Menu.kt#DropdownMenu
+// not ported: DropdownMenu (the expect function: the glass popup is GlassMenu's own; only its `offset` parameter comes over)
 @Composable
 fun GlassMenu(
     expanded: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = onDismissRequest,
+    contentOffset: DpOffset = MenuContentOffset,
     content: @Composable ColumnScope.() -> Unit
 ) {
     if (!expanded) return
     val density = LocalDensity.current
     val anchor = remember { AnchorPositionProvider() }
-    val popupPositionProvider = remember(density) { DropdownMenuPositionProvider(MenuContentOffset, density) }
+    val popupPositionProvider = remember(density, contentOffset) { DropdownMenuPositionProvider(contentOffset, density) }
     val scrim = MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)
     // Window-wide, so the scrim covers the screen and the status bar; the menu is placed inside it by the position
     // provider below, not by the window.

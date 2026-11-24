@@ -460,11 +460,15 @@ internal fun TileFace(
                 style = nameStyle.copy(color = LocalContentColor.current, textAlign = TextAlign.Center, fontSize = nameSize),
                 modifier = Modifier.padding(top = 6.dp)
             )
-            Text(
+            // The state in the name's style and size (labelLarge), told apart by colour only,
+            // https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Typography.kt#Typography
+            BasicText(
                 state,
-                style = MaterialTheme.typography.labelSmall,
-                color = stateColor ?: if (on) LocalContentColor.current else quiet,
-                textAlign = TextAlign.Center,
+                style = nameStyle.copy(
+                    color = stateColor ?: quiet,
+                    textAlign = TextAlign.Center,
+                    fontSize = nameSize
+                ),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 2.dp).clearAndSetSemantics {}

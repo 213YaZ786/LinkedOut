@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -267,6 +268,29 @@ private val SearchBarAsTopBarPadding = 8.dp
 private val AppBarWithSearchHorizontalPadding = 4.dp
 private val AppBarWithSearchVerticalPadding = 4.dp
 
+/** The input field's least height (SearchCapsuleHint, SearchCapsuleField) and the FolderSwitch's own height. */
+private val SearchCapsuleFieldHeight = 48.dp
+private val FolderSwitchVerticalPadding = 10.dp
+private val FolderSwitchContentHeight = 20.dp
+
+/**
+ * Where a menu opens when it is composed beside the FolderSwitch (GlassMenu's `contentOffset`): 8 dp under the capsule, as
+ * the menu of an expanded AppBarWithSearch or DockedSearchBar sits under the bar, not on its edge. GlassMenu anchors on the
+ * pill, which is centred in the capsule's row, so the offset is the pill's bottom to the capsule's bottom plus the gap:
+ *   row height   = AppBarWithSearchVerticalPadding 4 + SearchCapsuleFieldHeight 48 + AppBarWithSearchVerticalPadding 4 = 56 dp
+ *   pill height  = FolderSwitchVerticalPadding 10 + FolderSwitchContentHeight 20 + FolderSwitchVerticalPadding 10      = 40 dp
+ *   below the pill = (56 - 40) / 2 = 8 dp (4 of field padding + 4 of the field's own room)
+ *   offset       = 8 + 8 dp gap = 16 dp
+ * Valid while the capsule's contentPadding is 0 (its default) and no action of the capsule is taller than the field.
+ * https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/SearchBar.kt#AppBarWithSearch
+ * not ported: AppBarWithSearch's other paddings (here AppBarWithSearch, above, carries them)
+ */
+val CapsuleMenuOffset: DpOffset = run {
+    val row = AppBarWithSearchVerticalPadding + SearchCapsuleFieldHeight + AppBarWithSearchVerticalPadding
+    val pill = FolderSwitchVerticalPadding + FolderSwitchContentHeight + FolderSwitchVerticalPadding
+    DpOffset(0.dp, (row - pill) / 2 + 8.dp)
+}
+
 /**
  * Home's and Accounts' top (requests.md point 41): one glass capsule the width of the page, nothing under it.
  * AppBarWithSearch's layout: a Row of the navigation icon, the input field taking the rest and centred, the actions at
@@ -336,13 +360,13 @@ fun FolderSwitch(
                 contentDescription = label
                 stateDescription = if (expanded) "Expanded" else "Collapsed"
             }
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = FolderSwitchVerticalPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = null, modifier = Modifier.size(FolderSwitchContentHeight))
         Text(label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+        Icon(trailingIcon, contentDescription = null, modifier = Modifier.size(FolderSwitchContentHeight))
     }
 }
 
