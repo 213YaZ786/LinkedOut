@@ -57,6 +57,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.linkedout.app.ui.component.DropdownMenuGroup
 import com.linkedout.app.ui.component.DropdownMenuItem
+import com.linkedout.app.ui.component.CapsuleMenuOffset
 import com.linkedout.app.ui.component.GlassMenu
 import com.linkedout.app.ui.component.AppBarWithSearch
 import com.linkedout.app.ui.component.BoldIconButton
@@ -332,7 +333,7 @@ fun AccountsScreen(
                                         expanded = foldersOpen,
                                         onClick = { foldersOpen = true }
                                     )
-                                    GlassMenu(expanded = foldersOpen, onDismissRequest = { foldersOpen = false }) {
+                                    GlassMenu(expanded = foldersOpen, onDismissRequest = { foldersOpen = false }, contentOffset = CapsuleMenuOffset) {
                                         DropdownMenuGroup(index = 0, count = 2) {
                                             SelectableDropdownMenuItem(
                                                 selected = folder == null,

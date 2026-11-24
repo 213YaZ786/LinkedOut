@@ -3,6 +3,8 @@ package com.linkedout.app.data.settings
 import com.linkedout.app.core.update.UpdateMode
 import com.linkedout.app.core.common.writeTextAtomically
 import android.content.Context
+import com.linkedout.app.ui.component.SyncFrequency
+import com.linkedout.app.ui.component.defaultSyncFrequency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -105,7 +107,13 @@ data class Settings(
      * (see ui/component/MovableAction), or null until it is moved (then bottom right).
      * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/settings/SettingsStore.kt#foldersButtonSnap
      */
-    val foldersButtonSnap: Float? = null
+    val foldersButtonSnap: Float? = null,
+    /**
+     * How old an account's last read may be at launch before it is read again (reader kit LaunchRefresh), saved by
+     * name. An unknown name in the file falls back to the default with the rest of the settings (see load).
+     * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/data/settings/SettingsStore.kt#Settings
+     */
+    val launchRefresh: SyncFrequency = defaultSyncFrequency
 )
 
 /**

@@ -54,6 +54,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -63,10 +64,10 @@ import com.linkedout.app.core.system.BatteryExemption
 import com.linkedout.app.core.update.StoreLink
 import com.linkedout.app.core.update.UpdateMode
 import com.linkedout.app.core.update.Updates
-import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.settings.AutoDownload
 import com.linkedout.app.data.settings.Settings
 import com.linkedout.app.data.settings.SettingsStore
+import com.linkedout.app.feature.settings.RefreshDialog
 import com.linkedout.app.feature.settings.SettingsIcons
 import com.linkedout.app.feature.settings.SettingsViewModel
 import com.linkedout.app.feature.settings.openNotificationSettings
@@ -76,12 +77,13 @@ import com.linkedout.app.ui.component.LoadingMark
 import com.linkedout.app.ui.component.SetupTile
 import com.linkedout.app.ui.component.SetupTileDialog
 import com.linkedout.app.ui.component.SetupTileGrid
+import com.linkedout.app.ui.component.SyncFrequency
 import com.linkedout.app.ui.icon.LinkedOutIcons
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
 /** The choice dialog the screen has open, as Settings' OpenDialog does. */
-private enum class OpenDialog { NONE, MEDIA, UPDATES, NOTIFY }
+private enum class OpenDialog { NONE, MEDIA, UPDATES, NOTIFY, LAUNCH_REFRESH }
 
 /**
  * What the tiles and the screen share: the tiles, the dialog a tile opened, and the picks that dialog sends back.
@@ -94,6 +96,7 @@ private class Setup(
     val chooseMedia: (AutoDownload) -> Unit,
     val chooseUpdates: (UpdateMode) -> Unit,
     val chooseNotify: (Boolean) -> Unit,
+    val chooseRefresh: (SyncFrequency) -> Unit,
     val notifyOn: Boolean
 )
 
@@ -210,6 +213,16 @@ private fun rememberSetup(): Setup {
             error = mediaBlocked,
             onClick = { if (mediaBlocked) openNotificationSettings(context) else dialog.value = OpenDialog.MEDIA }
         ),
+        // The tile of MTGA's guide, its dialog Settings' own RefreshDialog and its setter Settings' setSyncFrequency, so the
+        // value is shared: a preset (1 h), never required.
+        // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/welcome/WelcomeScreen.kt#rememberSetupTiles
+        SetupTile(
+            id = "refresh", name = "Refresh at launch", title = "Refresh at launch", icon = SettingsIcons.Timer,
+            state = current.launchRefresh.tile,
+            summary = "When the app opens, a feed is read again once its last read is older than this. Tap to choose.",
+            done = true, required = false,
+            onClick = { dialog.value = OpenDialog.LAUNCH_REFRESH }
+        ),
         SetupTile(
             id = "updates", name = "Updates", title = "Updates", icon = SettingsIcons.Update,
             state = when {
@@ -262,7 +275,7 @@ private fun rememberSetup(): Setup {
             onClick = { openLinkSettings(context) }
         )
     )
-    return Setup(tiles, dialog, current, chooseMedia, chooseUpdates, chooseNotify, notifyOn)
+    return Setup(tiles, dialog, current, chooseMedia, chooseUpdates, chooseNotify, sync::setSyncFrequency, notifyOn)
 }
 
 /** The labels of Settings' own dialogs, so a choice reads the same here. */
@@ -288,9 +301,13 @@ private fun updatesLabel(mode: UpdateMode): String = when (mode) {
  * https://github.com/florisboard/florisboard/blob/main/app/src/main/kotlin/dev/patrickgold/florisboard/app/setup/SetupScreen.kt#SetupScreen
  */
 @Composable
-fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
+fun WelcomeScreen(
+    onFinish: (openAccounts: Boolean) -> Unit,
+    // Start (Done) with the button's centre in root coordinates, for the reveal. Without a reveal it finishes as before.
+    // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/welcome/WelcomeScreen.kt#WelcomeScreen
+    onStart: (origin: Offset) -> Unit = { onFinish(false) }
+) {
     val store: SettingsStore = koinInject()
-    val followed: AccountStore = koinInject()
     // Read once: closing the guide sets welcomeSeen, and the button must not turn to Done while it leaves.
     val reopened = remember { store.current.welcomeSeen }
     val setup = rememberSetup()
@@ -299,8 +316,9 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
     var explained by rememberSaveable { mutableStateOf("") }
     val close = { setup.dialog.value = OpenDialog.NONE }
 
-    // Start lands on Accounts while nobody is followed, where an address is pasted (the old guide's last Next).
-    WelcomeContent(steps, reopened, onStart = { onFinish(followed.accounts.value.isEmpty()) }) { explained = it.id }
+    // Start lands on Accounts while nobody is followed, where an address is pasted (the old guide's last Next): MainTabs'
+    // onStart decides, it holds the account list and closes the guide with the reveal.
+    WelcomeContent(steps, reopened, onStart = onStart) { explained = it.id }
 
     steps.firstOrNull { it.id == explained }?.let { tile ->
         SetupTileDialog(tile, onDismiss = { explained = "" })
@@ -308,6 +326,11 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
 
     when (setup.dialog.value) {
         OpenDialog.NONE -> Unit
+        OpenDialog.LAUNCH_REFRESH -> RefreshDialog(
+            selected = setup.settings.launchRefresh,
+            onPick = setup.chooseRefresh,
+            onDismiss = close
+        )
         OpenDialog.MEDIA -> ChoiceDialog(
             title = "Save media",
             options = AutoDownload.entries.map { it to autoDownloadLabel(it) },
@@ -347,7 +370,7 @@ fun WelcomeScreen(onFinish: (openAccounts: Boolean) -> Unit) {
  * app's title and SetupTileGrid take their place), the pinned footer (Start ends the block).
  */
 @Composable
-internal fun WelcomeContent(tiles: List<SetupTile>, reopened: Boolean, onStart: () -> Unit, onExplain: (SetupTile) -> Unit = {}) {
+internal fun WelcomeContent(tiles: List<SetupTile>, reopened: Boolean, onStart: (origin: Offset) -> Unit, onExplain: (SetupTile) -> Unit = {}) {
     val steps = tiles
     // WhatsNewView's body: the scrolling content is a block centred in the window when shorter than it (the viewport is
     // the minimum height of the block). Drawn over the whole window, so it keeps clear of the system bars itself.

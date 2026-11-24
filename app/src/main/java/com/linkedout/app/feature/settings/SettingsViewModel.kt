@@ -19,6 +19,7 @@ import com.linkedout.app.data.settings.SettingsStore
 import com.linkedout.app.data.settings.StartTab
 import com.linkedout.app.data.settings.ThemeMode
 import com.linkedout.app.sync.SyncWorker
+import com.linkedout.app.ui.component.SyncFrequency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -157,6 +158,10 @@ class SettingsViewModel(
     fun setStartMuted(enabled: Boolean) = store.update { it.copy(startMuted = enabled) }
 
     fun setStartTab(tab: StartTab) = store.update { it.copy(startTab = tab) }
+
+    // As Feeder's setSyncFrequency stores the choice (not ported: its schedulePeriodicRssSync, nothing runs in the background):
+    // https://github.com/spacecowboy/Feeder/blob/master/app/src/main/java/com/nononsenseapps/feeder/archmodel/SettingsStore.kt#setSyncFrequency
+    fun setSyncFrequency(value: SyncFrequency) = store.update { it.copy(launchRefresh = value) }
 
     fun setBackgroundSync(enabled: Boolean) {
         store.update { it.copy(backgroundSync = enabled) }

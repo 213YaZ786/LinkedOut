@@ -6,7 +6,9 @@ import com.linkedout.app.core.common.AppError
 import com.linkedout.app.core.model.Post
 import com.linkedout.app.data.accounts.AccountStore
 import com.linkedout.app.data.read.ReadPosts
+import com.linkedout.app.data.cache.FeedCache
 import com.linkedout.app.data.settings.SettingsStore
+import com.linkedout.app.ui.component.feedsToSync
 import com.linkedout.app.data.repository.TimelineRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -47,7 +49,8 @@ class TimelineViewModel(
     private val repository: TimelineRepository,
     private val accounts: AccountStore,
     private val readPosts: ReadPosts,
-    private val settings: SettingsStore
+    private val settings: SettingsStore,
+    private val feedCache: FeedCache
 ) : ViewModel() {
 
     /** The folder Home is showing, or null for everything. */
@@ -89,7 +92,7 @@ class TimelineViewModel(
         viewModelScope.launch {
             // Paint from disk first so the timeline is readable before any
             // request goes out, then refresh over the top.
-            work.withLock {
+            val due = work.withLock {
                 known = followedKeys()
                 filed = filedIn()
                 val cached = repository.cached(folder)
@@ -104,8 +107,22 @@ class TimelineViewModel(
                     lastUpdatedMillis = cached.oldestFetchedAtMillis,
                     canLoadMore = cached.canLoadMore
                 )
+                // Feeder's feedsToSync with a staleTime: only the accounts whose last read is older than the chosen
+                // age are read, an account never read always. Each read time comes from the account's cached feed.
+                // https://github.com/spacecowboy/Feeder/blob/master/app/src/main/java/com/nononsenseapps/feeder/model/RssLocalSync.kt#feedsToSync
+                // not ported: the feedId and tag branches, syncLoadFeedsIfStale (see ui/component/LaunchRefresh.kt)
+                feedsToSync(
+                    fetchedAt = known.associateWith { feedCache.read(it)?.fetchedAtMillis },
+                    frequency = settings.current.launchRefresh,
+                    now = System.currentTimeMillis()
+                )
             }
-            refresh(everything = true)
+            if (due.isEmpty()) {
+                // Nothing is due: no request goes out, and a folder switch reads nothing, as after a full pass.
+                work.withLock { everythingFetched = true }
+            } else {
+                refresh(everything = true, only = due)
+            }
         }
 
         // Home follows the list live. Before 1.3.1 it read the list once at
@@ -160,7 +177,7 @@ class TimelineViewModel(
      * the reader asked for, and LinkedIn refuses a guest who asks for too many
      * profiles in a row.
      */
-    fun refresh(everything: Boolean = false) {
+    fun refresh(everything: Boolean = false, only: Set<String>? = null) {
         if (_state.value.loading || fullRefreshQueued) return
         fullRefreshQueued = true
         viewModelScope.launch {
@@ -168,7 +185,7 @@ class TimelineViewModel(
                 fullRefreshQueued = false
                 known = followedKeys()
                 filed = filedIn()
-                fetch(only = null, everything = everything)
+                fetch(only = only, everything = everything)
             }
         }
     }
@@ -232,7 +249,9 @@ class TimelineViewModel(
         } else {
             repository.refresh(only, if (everything) null else asked)
         }
-        if (everything && only == null) everythingFetched = true
+        // The launch's pass reads only the accounts that are due, the others are fresh enough: it still counts as the
+        // pass over everything, so a folder switch reads nothing.
+        if (everything) everythingFetched = true
         // A profile read again can bring posts published before the previous
         // visit: they fill a gap, they are not new.
         readPosts.markReadIfOld(network.posts.map { it.id to it.publishedAtMillis })

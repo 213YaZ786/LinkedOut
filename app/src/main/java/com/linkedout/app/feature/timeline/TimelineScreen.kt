@@ -28,6 +28,7 @@ import com.linkedout.app.ui.component.navigationBarBottom
 import com.linkedout.app.ui.component.statusBarTop
 import com.linkedout.app.ui.component.EmptyZone
 import com.linkedout.app.ui.component.DropdownMenuGroup
+import com.linkedout.app.ui.component.CapsuleMenuOffset
 import com.linkedout.app.ui.component.GlassMenu
 import com.linkedout.app.ui.component.AppBarWithSearch
 import com.linkedout.app.ui.component.FolderSwitch
@@ -254,7 +255,7 @@ fun TimelineScreen(
     // not ported: AppBarWithSearch (the app's AppBarWithSearch in ui/component/FeedBanner.kt is its port, used as it is)
     val followed by koinInject<AccountStore>().accounts.collectAsState()
     val feedMenu: @Composable () -> Unit = {
-        GlassMenu(expanded = feedsOpen, onDismissRequest = { feedsOpen = false }) {
+        GlassMenu(expanded = feedsOpen, onDismissRequest = { feedsOpen = false }, contentOffset = CapsuleMenuOffset) {
             // No Clear row: a feed is chosen, not cleared.
             DropdownMenuGroup(index = 0, count = 2) {
                 SelectableDropdownMenuItem(selected = state.folder == null, onClick = { showFeed(null) }, text = "All", count = followed.size)

@@ -56,6 +56,7 @@ import com.linkedout.app.core.model.AccountKind
 import org.koin.compose.koinInject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -85,6 +86,9 @@ import com.linkedout.app.ui.component.LocalDockPadding
 import androidx.compose.animation.EnterExitState
 import com.linkedout.app.ui.component.LocalInlinePlaybackAllowed
 import com.linkedout.app.ui.component.SideDockClearance
+import com.linkedout.app.ui.component.StartRevealOverlay
+import com.linkedout.app.ui.component.StartRevealState
+import com.linkedout.app.ui.component.startRevealHole
 import com.linkedout.app.ui.component.rememberHaptics
 import kotlinx.coroutines.launch
 
@@ -468,10 +472,24 @@ private fun MainTabs(
             }
         }
 
-        fun closeWelcome(openAccounts: Boolean) {
+        // The guide stays drawn while the app opens from the Start button outward. Not saved: a turn of the screen ends it.
+        // https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/navigation/MtgaApp.kt#MainTabs
+        val startReveal = remember { StartRevealState() }
+        var revealing by remember { mutableStateOf(false) }
+        LaunchedEffect(revealing) {
+            if (revealing) startReveal.startRipple { revealing = false }
+        }
+
+        // [origin] is the Start button's centre, null when the guide closes any other way (back).
+        fun closeWelcome(openAccounts: Boolean, origin: Offset? = null) {
             showWelcome = false
             if (!store.current.welcomeSeen) store.update { it.copy(welcomeSeen = true) }
             if (openAccounts) go(TopDestination.ACCOUNTS.ordinal)
+            if (origin != null && origin != Offset.Unspecified) {
+                startReveal.origin = origin
+                startReveal.currentPlayTime = 0f
+                revealing = true
+            }
         }
         // Declared after the tab one, so back closes the guide first.
         PredictiveBackHandler(enabled = showWelcome) { progress ->
@@ -569,15 +587,26 @@ private fun MainTabs(
 
         // Above the tabs and the dock. A Surface also stops touches from
         // reaching the screen underneath.
-        if (showWelcome) {
-            // Opaque over the app, with the page's ground and its ambient light.
+        if (showWelcome || revealing) {
+            // Opaque over the app, with the page's ground and its ambient light. While the reveal runs, a hole opens in it.
             Surface(
-                Modifier.fillMaxSize().glassGround(LocalGlass.current, MaterialTheme.colorScheme.background),
+                Modifier
+                    .fillMaxSize()
+                    .then(if (revealing) Modifier.startRevealHole(startReveal) else Modifier)
+                    .glassGround(LocalGlass.current, MaterialTheme.colorScheme.background),
                 color = Color.Transparent,
                 contentColor = MaterialTheme.colorScheme.onBackground
             ) {
-                Readable { WelcomeScreen(onFinish = ::closeWelcome) }
+                Readable {
+                    WelcomeScreen(
+                        onFinish = { closeWelcome(it) },
+                        // Start lands on Accounts while nobody is followed, as before.
+                        onStart = { origin -> closeWelcome(openAccounts = accounts.accounts.value.isEmpty(), origin = origin) }
+                    )
+                }
             }
         }
+        // The sparkle ripple over the guide and the app, gone with the reveal.
+        if (revealing) StartRevealOverlay(startReveal)
     }
 }

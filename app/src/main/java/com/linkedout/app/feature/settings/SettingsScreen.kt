@@ -30,11 +30,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -71,6 +75,7 @@ import com.linkedout.app.ui.component.BoldButton
 import com.linkedout.app.ui.component.ChoiceDialog
 import com.linkedout.app.ui.component.FloatingFrame
 import com.linkedout.app.ui.component.FloatingTop
+import com.linkedout.app.ui.component.GlassSlider
 import com.linkedout.app.ui.component.LocalDockPadding
 import com.linkedout.app.ui.component.QuietButton
 import com.linkedout.app.ui.component.SettingsActionTile
@@ -84,6 +89,7 @@ import com.linkedout.app.ui.component.SettingsTile
 import com.linkedout.app.ui.component.SettingsTileDialogs
 import com.linkedout.app.ui.component.SettingsTileGrid
 import com.linkedout.app.ui.component.SideDockClearance
+import com.linkedout.app.ui.component.SyncFrequency
 import com.linkedout.app.ui.component.ZoneAlertDialog
 import com.linkedout.app.ui.component.leftText
 import com.linkedout.app.ui.component.rememberHaptics
@@ -92,7 +98,7 @@ import com.linkedout.app.ui.theme.TEXT_SCALES
 import com.linkedout.app.ui.theme.textScaleLabel
 import org.koin.androidx.compose.koinViewModel
 
-private enum class OpenDialog { NONE, THEME, TEXT_SIZE, KEEP, FREQUENCY, CLEAR, START_TAB, COOKIES, AUTO_DOWNLOAD, UPDATES }
+private enum class OpenDialog { NONE, THEME, TEXT_SIZE, KEEP, FREQUENCY, CLEAR, START_TAB, COOKIES, AUTO_DOWNLOAD, UPDATES, LAUNCH_REFRESH }
 
 /** The groups of settings: one page after another on a phone, a list and the chosen one's page on a wide window. */
 private val APPEARANCE = SettingsSection("appearance", "Appearance", SettingsIcons.Palette)
@@ -420,6 +426,11 @@ fun SettingsScreen(
                 onClick = { dialog = OpenDialog.START_TAB }
             ),
             SettingsActionTile(
+                id = "refreshLaunch", name = "Refresh at launch", title = "Refresh at launch", icon = SettingsIcons.Timer,
+                value = settings.launchRefresh.tile, summary = settings.launchRefresh.line,
+                onClick = { dialog = OpenDialog.LAUNCH_REFRESH }
+            ),
+            SettingsActionTile(
                 id = "linkedInLinks", name = "LinkedIn links", title = "Open LinkedIn links in LinkedOut", icon = SettingsIcons.Link,
                 value = if (linkedInLinksOn) "On" else "Off",
                 summary = if (linkedInLinksOn) {
@@ -601,6 +612,11 @@ fun SettingsScreen(
     }
 
     when (dialog) {
+        OpenDialog.LAUNCH_REFRESH -> RefreshDialog(
+            selected = settings.launchRefresh,
+            onPick = viewModel::setSyncFrequency,
+            onDismiss = { dialog = OpenDialog.NONE }
+        )
         OpenDialog.START_TAB -> ChoiceDialog(
             title = "Start on",
             options = StartTab.entries.map { it to startTabLabel(it) },
@@ -696,6 +712,40 @@ fun SettingsScreen(
         )
         OpenDialog.NONE -> Unit
     }
+}
+
+/**
+ * The choice dialog of Refresh at launch, as ChoiceDialog draws its frame (ZoneAlertDialog, title, a centred line, one
+ * button): the line says the stop, the glass slider moves over the nine stops and the value is saved as it moves.
+ * https://github.com/213YaZ786/MTGA/blob/main/app/src/main/java/com/mtga/app/feature/settings/SettingsScreen.kt#RefreshDialog
+ * not ported: ChoiceDialog's option capsules, Tick, danger and icon (a slider takes their place), its Cancel button
+ * (nothing is pending, Done closes)
+ */
+@Composable
+internal fun RefreshDialog(selected: SyncFrequency, onPick: (SyncFrequency) -> Unit, onDismiss: () -> Unit) {
+    val options = SyncFrequency.entries
+    ZoneAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Refresh at launch") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    selected.line,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                GlassSlider(
+                    value = selected.ordinal.toFloat(),
+                    onValueChange = { onPick(options[it.toInt().coerceIn(0, options.lastIndex)]) },
+                    valueRange = 0f..options.lastIndex.toFloat(),
+                    steps = options.size - 2,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+                )
+            }
+        },
+        confirmButton = { QuietButton(onClick = onDismiss) { Text("Done") } }
+    )
 }
 
 private fun startTabLabel(tab: StartTab): String = when (tab) {
